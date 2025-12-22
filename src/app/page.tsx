@@ -3,22 +3,66 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 
 // Firebase configuration - Replace with your Firebase project credentials
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "your-api-key",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "your-auth-domain",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "your-project-id",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "your-storage-bucket",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "your-sender-id",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "your-app-id"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Check if Firebase is properly configured
+const isFirebaseConfigured = () => {
+  const isConfigured = !!(
+    firebaseConfig.apiKey &&
+    firebaseConfig.projectId &&
+    firebaseConfig.apiKey !== 'your-api-key' &&
+    firebaseConfig.projectId !== 'your-project-id'
+  );
+
+  if (!isConfigured) {
+    console.error('❌ Firebase is not properly configured!');
+    console.error('Please set up your Firebase environment variables in Vercel:');
+    console.error('- NEXT_PUBLIC_FIREBASE_API_KEY');
+    console.error('- NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
+    console.error('- NEXT_PUBLIC_FIREBASE_PROJECT_ID');
+    console.error('- NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET');
+    console.error('- NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID');
+    console.error('- NEXT_PUBLIC_FIREBASE_APP_ID');
+  } else {
+    console.log('✅ Firebase configuration detected');
+    console.log('Project ID:', firebaseConfig.projectId);
+  }
+
+  return isConfigured;
+};
+
+// Initialize Firebase (only if not already initialized)
+let app;
+let db;
+
+try {
+  if (isFirebaseConfigured()) {
+    if (!getApps().length) {
+      app = initializeApp(firebaseConfig);
+      console.log('✅ Firebase initialized successfully');
+    } else {
+      app = getApps()[0];
+      console.log('✅ Using existing Firebase app');
+    }
+    db = getFirestore(app);
+    console.log('✅ Firestore connected');
+  } else {
+    console.warn('⚠️ Firebase not configured - app will not save data to cloud');
+  }
+} catch (error) {
+  console.error('❌ Firebase initialization error:', error);
+}
 
 const ClientPortal = () => {
   const [view, setView] = useState('login');
@@ -31,42 +75,72 @@ const ClientPortal = () => {
   }, []);
 
   const loadData = async () => {
+    if (!db) {
+      console.warn('⚠️ Firestore not available - skipping data load');
+      return;
+    }
+
     try {
+      console.log('📥 Loading data from Firestore...');
+
       // Load users from Firestore
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const usersData = usersSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`✅ Loaded ${usersData.length} users from Firestore`);
       setUsers(usersData);
 
       // Load content from Firestore
       const contentSnapshot = await getDocs(collection(db, 'content'));
       const contentData = contentSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`✅ Loaded ${contentData.length} content items from Firestore`);
       setContent(contentData);
     } catch (e) {
-      console.error('Error loading data from cloud:', e);
+      console.error('❌ Error loading data from cloud:', e);
+      console.error('Error details:', e.message);
     }
   };
 
   const saveUsers = async (u) => {
     setUsers(u);
+
+    if (!db) {
+      console.warn('⚠️ Firestore not available - users not saved to cloud');
+      return;
+    }
+
     try {
+      console.log(`💾 Saving ${u.length} users to Firestore...`);
       // Save each user to Firestore
       for (const user of u) {
         await setDoc(doc(db, 'users', user.id), user);
+        console.log(`✅ Saved user: ${user.email} (ID: ${user.id})`);
       }
+      console.log('✅ All users saved successfully');
     } catch (e) {
-      console.error('Error saving users to cloud:', e);
+      console.error('❌ Error saving users to cloud:', e);
+      console.error('Error details:', e.message);
     }
   };
 
   const saveContent = async (c) => {
     setContent(c);
+
+    if (!db) {
+      console.warn('⚠️ Firestore not available - content not saved to cloud');
+      return;
+    }
+
     try {
+      console.log(`💾 Saving ${c.length} content items to Firestore...`);
       // Save each content item to Firestore
       for (const item of c) {
         await setDoc(doc(db, 'content', item.id), item);
+        console.log(`✅ Saved content: ${item.title} (ID: ${item.id})`);
       }
+      console.log('✅ All content saved successfully');
     } catch (e) {
-      console.error('Error saving content to cloud:', e);
+      console.error('❌ Error saving content to cloud:', e);
+      console.error('Error details:', e.message);
     }
   };
 
@@ -419,13 +493,22 @@ const ClientPortal = () => {
                         submittedAt: new Date().toISOString()
                       };
                       try {
+                        if (!db) {
+                          alert('⚠️ Cloud storage not configured. Video not saved.');
+                          console.error('❌ Firestore not available');
+                          return;
+                        }
+
                         // Save video to Firestore
+                        console.log('💾 Submitting video to Firestore...');
                         await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+                        console.log('✅ Video submitted successfully:', newVideo.id);
                         setVideoLink('');
                         setVideoDescription('');
                         alert('Video submitted successfully!');
                       } catch (error) {
-                        console.error('Error submitting video:', error);
+                        console.error('❌ Error submitting video:', error);
+                        console.error('Error details:', error.message);
                         alert('Error submitting video. Please try again.');
                       }
                     }
@@ -516,12 +599,22 @@ const ClientPortal = () => {
                       </div>
                       <button onClick={async () => {
                         try {
+                          if (!db) {
+                            console.error('❌ Firestore not available');
+                            alert('⚠️ Cloud storage not configured. Cannot remove team member.');
+                            return;
+                          }
+
+                          console.log(`🗑️ Removing team member: ${member.email}`);
                           // Delete user from Firestore
                           await deleteDoc(doc(db, 'users', member.id));
+                          console.log('✅ Team member deleted from Firestore');
+
                           // Update local state
                           await saveUsers(users.filter(u => u.id !== member.id));
                         } catch (e) {
-                          console.error('Error removing team member:', e);
+                          console.error('❌ Error removing team member:', e);
+                          console.error('Error details:', e.message);
                         }
                       }} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
                     </div>
@@ -744,26 +837,45 @@ const ClientPortal = () => {
     }, []);
 
     const loadVideos = async () => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available - skipping videos load');
+        setVideos([]);
+        return;
+      }
+
       try {
+        console.log('📥 Loading videos from Firestore...');
         // Load videos from Firestore
         const videosSnapshot = await getDocs(collection(db, 'videos'));
         const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`✅ Loaded ${videosData.length} videos from Firestore`);
         setVideos(videosData);
       } catch (e) {
-        console.error('Error loading videos from cloud:', e);
+        console.error('❌ Error loading videos from cloud:', e);
+        console.error('Error details:', e.message);
         setVideos([]);
       }
     };
 
     const saveVideos = async (v) => {
       setVideos(v);
+
+      if (!db) {
+        console.warn('⚠️ Firestore not available - videos not saved to cloud');
+        return;
+      }
+
       try {
+        console.log(`💾 Saving ${v.length} videos to Firestore...`);
         // Save each video to Firestore
         for (const video of v) {
           await setDoc(doc(db, 'videos', video.id), video);
+          console.log(`✅ Saved video: ${video.id}`);
         }
+        console.log('✅ All videos saved successfully');
       } catch (e) {
-        console.error('Error saving videos to cloud:', e);
+        console.error('❌ Error saving videos to cloud:', e);
+        console.error('Error details:', e.message);
       }
     };
 

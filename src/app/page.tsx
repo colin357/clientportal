@@ -347,23 +347,45 @@ const ClientPortal = () => {
   function OnboardingView() {
     const [currentStep, setCurrentStep] = useState(0);
     const [answers, setAnswers] = useState({
-      industry: '', targetAudience: '', goals: '', brandVoice: '', competitors: ''
+      industry: [], targetAudience: [], goals: [], brandVoice: [], competitors: ''
+    });
+    const [otherInputs, setOtherInputs] = useState({
+      industry: '', targetAudience: '', goals: '', brandVoice: ''
     });
 
-    const industries = ['E-commerce', 'SaaS', 'Healthcare', 'Finance', 'Real Estate', 'Education', 'Food & Beverage', 'Technology', 'Consulting', 'Other'];
-    const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs', 'Other'];
-    const goalOptions = ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product', 'Other'];
+    const industries = ['Realtor', 'Loan Officer'];
+    const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'];
+    const goalOptions = ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'];
     const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
 
     const questions = [
       { type: 'buttons', key: 'industry', label: 'What industry are you in?', options: industries },
-      { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience?', options: audiences },
-      { type: 'buttons', key: 'goals', label: 'What are your main marketing goals?', options: goalOptions },
-      { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice?', options: voiceOptions },
+      { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
+      { type: 'buttons', key: 'goals', label: 'What are your main marketing goals? (Select all that apply)', options: goalOptions },
+      { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },
       { type: 'text', key: 'competitors', label: 'Who are your main competitors?', placeholder: 'e.g., Company A, Company B' }
     ];
 
     const currentQuestion = questions[currentStep];
+
+    const toggleOption = (key, option) => {
+      const current = answers[key] || [];
+      if (current.includes(option)) {
+        setAnswers({ ...answers, [key]: current.filter(item => item !== option) });
+      } else {
+        setAnswers({ ...answers, [key]: [...current, option] });
+      }
+    };
+
+    const isAnswerValid = () => {
+      if (currentQuestion.type === 'text') {
+        return answers[currentQuestion.key]?.trim();
+      } else {
+        const hasSelection = answers[currentQuestion.key]?.length > 0;
+        const hasOtherText = answers[currentQuestion.key]?.includes('Other') ? otherInputs[currentQuestion.key]?.trim() : true;
+        return hasSelection && hasOtherText;
+      }
+    };
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4 flex items-center justify-center">
@@ -379,17 +401,25 @@ const ClientPortal = () => {
 
           <div className="mb-2 text-sm text-purple-600 font-medium">Question {currentStep + 1} of {questions.length}</div>
           <label className="block text-xl font-semibold text-gray-800 mb-4">{currentQuestion.label}</label>
-          
+
           {currentQuestion.type === 'text' ? (
             <textarea value={answers[currentQuestion.key]} onChange={(e) => setAnswers({ ...answers, [currentQuestion.key]: e.target.value })} placeholder={currentQuestion.placeholder} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-6" rows="4" />
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-              {currentQuestion.options.map(opt => (
-                <button key={opt} onClick={() => setAnswers({ ...answers, [currentQuestion.key]: opt })} className={`px-4 py-3 rounded-lg border-2 transition ${answers[currentQuestion.key] === opt ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
-                  {opt}
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {currentQuestion.options.map(opt => (
+                  <button key={opt} onClick={() => toggleOption(currentQuestion.key, opt)} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes(opt) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                    {opt}
+                  </button>
+                ))}
+                <button onClick={() => toggleOption(currentQuestion.key, 'Other')} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes('Other') ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                  Other
                 </button>
-              ))}
-            </div>
+              </div>
+              {(answers[currentQuestion.key] || []).includes('Other') && (
+                <input type="text" value={otherInputs[currentQuestion.key] || ''} onChange={(e) => setOtherInputs({ ...otherInputs, [currentQuestion.key]: e.target.value })} placeholder="Please specify..." className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6" />
+              )}
+            </>
           )}
 
           <div className="flex gap-3">
@@ -399,11 +429,15 @@ const ClientPortal = () => {
               </button>
             )}
             <button onClick={() => {
-              if (answers[currentQuestion.key].trim()) {
-                if (currentStep < questions.length - 1) setCurrentStep(currentStep + 1);
-                else handleOnboarding(answers);
+              if (isAnswerValid()) {
+                if (currentStep < questions.length - 1) {
+                  setCurrentStep(currentStep + 1);
+                } else {
+                  const finalAnswers = { ...answers, otherInputs };
+                  handleOnboarding(finalAnswers);
+                }
               }
-            }} disabled={!answers[currentQuestion.key].trim()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
+            }} disabled={!isAnswerValid()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
               {currentStep < questions.length - 1 ? <><span>Next</span><ChevronRight className="w-5 h-5" /></> : 'Complete Setup'}
             </button>
           </div>
@@ -667,25 +701,37 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Settings</h3>
               <div className="space-y-3 mb-8">
-                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => (
-                  <div key={key} className="border rounded">
-                    <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
-                      <span className="font-medium capitalize">{key}</span>
-                      <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
-                    </button>
-                    {expanded === key && (
-                      <div className="px-4 pb-4">
-                        <textarea value={editedAnswers[key] || ''} onChange={(e) => setEditedAnswers({ ...editedAnswers, [key]: e.target.value })} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
-                        <button onClick={async () => {
-                          const updated = { ...currentUser, onboardingAnswers: editedAnswers };
-                          setCurrentUser(updated);
-                          await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-                          setExpanded(null);
-                        }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => {
+                  const value = editedAnswers[key];
+                  const displayValue = Array.isArray(value) ? value.join(', ') : (value || '');
+                  const isArrayField = key !== 'competitors';
+
+                  return (
+                    <div key={key} className="border rounded">
+                      <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
+                        <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                        <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
+                      </button>
+                      {expanded === key && (
+                        <div className="px-4 pb-4">
+                          <div className="text-sm text-gray-600 mb-2">Current: {displayValue || 'Not set'}</div>
+                          <textarea value={displayValue} onChange={(e) => {
+                            const newValue = isArrayField ? e.target.value.split(',').map(s => s.trim()).filter(s => s) : e.target.value;
+                            setEditedAnswers({ ...editedAnswers, [key]: newValue });
+                          }} placeholder={isArrayField ? 'Enter comma-separated values' : 'Enter text...'} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
+                          {isArrayField && <p className="text-xs text-gray-500 mb-3">Separate multiple values with commas</p>}
+                          <button onClick={async () => {
+                            const updated = { ...currentUser, onboardingAnswers: editedAnswers };
+                            setCurrentUser(updated);
+                            await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                            saveSession(updated, 'dashboard');
+                            setExpanded(null);
+                          }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <h4 className="font-semibold mb-4">Social Media Logins</h4>

@@ -500,7 +500,6 @@ const ClientPortal = () => {
     const navItems = [
       { id: 'social', label: 'Social Media', icon: Share2 },
       { id: 'crm', label: 'CRM', icon: Users },
-      { id: 'ai-generator', label: 'AI Content Generator', icon: Sparkles },
       { id: 'ai', label: 'AI Optimization', icon: Sparkles },
       { id: 'team', label: 'Team Members', icon: UserPlus },
       { id: 'settings', label: 'Settings', icon: Settings }

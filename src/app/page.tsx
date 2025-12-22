@@ -2,6 +2,24 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings } from 'lucide-react';
 
+// Firebase imports - Make sure to install: npm install firebase
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+
+// Firebase configuration - Replace with your Firebase project credentials
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "your-api-key",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "your-auth-domain",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "your-project-id",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "your-storage-bucket",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "your-sender-id",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "your-app-id"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 const ClientPortal = () => {
   const [view, setView] = useState('login');
   const [currentUser, setCurrentUser] = useState(null);
@@ -14,21 +32,42 @@ const ClientPortal = () => {
 
   const loadData = async () => {
     try {
-      const u = await window.storage.get('users');
-      const c = await window.storage.get('content');
-      if (u) setUsers(JSON.parse(u.value));
-      if (c) setContent(JSON.parse(c.value));
-    } catch (e) {}
+      // Load users from Firestore
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      const usersData = usersSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setUsers(usersData);
+
+      // Load content from Firestore
+      const contentSnapshot = await getDocs(collection(db, 'content'));
+      const contentData = contentSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setContent(contentData);
+    } catch (e) {
+      console.error('Error loading data from cloud:', e);
+    }
   };
 
   const saveUsers = async (u) => {
     setUsers(u);
-    await window.storage.set('users', JSON.stringify(u));
+    try {
+      // Save each user to Firestore
+      for (const user of u) {
+        await setDoc(doc(db, 'users', user.id), user);
+      }
+    } catch (e) {
+      console.error('Error saving users to cloud:', e);
+    }
   };
 
   const saveContent = async (c) => {
     setContent(c);
-    await window.storage.set('content', JSON.stringify(c));
+    try {
+      // Save each content item to Firestore
+      for (const item of c) {
+        await setDoc(doc(db, 'content', item.id), item);
+      }
+    } catch (e) {
+      console.error('Error saving content to cloud:', e);
+    }
   };
 
   const handleLogin = (email, password) => {
@@ -380,17 +419,14 @@ const ClientPortal = () => {
                         submittedAt: new Date().toISOString()
                       };
                       try {
-                        const videosData = await window.storage.get('videos');
-                        const videos = videosData ? JSON.parse(videosData.value) : [];
-                        await window.storage.set('videos', JSON.stringify([...videos, newVideo]));
+                        // Save video to Firestore
+                        await setDoc(doc(db, 'videos', newVideo.id), newVideo);
                         setVideoLink('');
                         setVideoDescription('');
                         alert('Video submitted successfully!');
                       } catch (error) {
-                        await window.storage.set('videos', JSON.stringify([newVideo]));
-                        setVideoLink('');
-                        setVideoDescription('');
-                        alert('Video submitted successfully!');
+                        console.error('Error submitting video:', error);
+                        alert('Error submitting video. Please try again.');
                       }
                     }
                   }} disabled={!videoLink.trim()} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
@@ -479,7 +515,14 @@ const ClientPortal = () => {
                         <span className="text-xs text-gray-500 ml-3">Added {new Date(member.createdAt).toLocaleDateString()}</span>
                       </div>
                       <button onClick={async () => {
-                        await saveUsers(users.filter(u => u.id !== member.id));
+                        try {
+                          // Delete user from Firestore
+                          await deleteDoc(doc(db, 'users', member.id));
+                          // Update local state
+                          await saveUsers(users.filter(u => u.id !== member.id));
+                        } catch (e) {
+                          console.error('Error removing team member:', e);
+                        }
                       }} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
                     </div>
                   ))}
@@ -702,16 +745,26 @@ const ClientPortal = () => {
 
     const loadVideos = async () => {
       try {
-        const videosData = await window.storage.get('videos');
-        if (videosData) setVideos(JSON.parse(videosData.value));
+        // Load videos from Firestore
+        const videosSnapshot = await getDocs(collection(db, 'videos'));
+        const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setVideos(videosData);
       } catch (e) {
+        console.error('Error loading videos from cloud:', e);
         setVideos([]);
       }
     };
 
     const saveVideos = async (v) => {
       setVideos(v);
-      await window.storage.set('videos', JSON.stringify(v));
+      try {
+        // Save each video to Firestore
+        for (const video of v) {
+          await setDoc(doc(db, 'videos', video.id), video);
+        }
+      } catch (e) {
+        console.error('Error saving videos to cloud:', e);
+      }
     };
 
     const updateVideoStatus = async (videoId, status, completedLink = '') => {

@@ -453,7 +453,9 @@ const ClientPortal = () => {
   }
 
   function DashboardView() {
-    const clientContent = content.filter(c => c.clientId === currentUser.id);
+    // Team members should see content for their parent client
+    const effectiveClientId = currentUser.parentClientId || currentUser.id;
+    const clientContent = content.filter(c => c.clientId === effectiveClientId);
     const [selectedContent, setSelectedContent] = useState(null);
     const [feedback, setFeedback] = useState('');
     const [activePage, setActivePage] = useState('content');
@@ -484,7 +486,8 @@ const ClientPortal = () => {
         console.log('📥 Loading user videos from Firestore...');
         const videosSnapshot = await getDocs(collection(db, 'videos'));
         const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        const clientVideos = videosData.filter(v => v.clientId === currentUser.id);
+        // Team members should see videos for their parent client
+        const clientVideos = videosData.filter(v => v.clientId === effectiveClientId);
         console.log(`✅ Loaded ${clientVideos.length} videos for current user`);
         setUserVideos(clientVideos);
       } catch (e) {
@@ -589,7 +592,7 @@ const ClientPortal = () => {
                     if (videoLink.trim()) {
                       const newVideo = {
                         id: Date.now().toString(),
-                        clientId: currentUser.id,
+                        clientId: effectiveClientId,
                         videoLink,
                         description: videoDescription,
                         status: 'pending',
@@ -737,7 +740,7 @@ const ClientPortal = () => {
                       companyName: currentUser.companyName,
                       firstName: teamName,
                       onboarded: true,
-                      parentClientId: currentUser.id,
+                      parentClientId: effectiveClientId,
                       createdAt: new Date().toISOString()
                     }]);
                     setTeamName('');
@@ -750,7 +753,7 @@ const ClientPortal = () => {
               <div className="border-t pt-6">
                 <h4 className="font-semibold text-gray-800 mb-4">Current Team Members</h4>
                 <div className="space-y-2">
-                  {users.filter(u => u.parentClientId === currentUser.id).map(member => (
+                  {users.filter(u => u.parentClientId === effectiveClientId).map(member => (
                     <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
                         <div className="text-gray-700 font-medium">{member.firstName}</div>
@@ -779,7 +782,7 @@ const ClientPortal = () => {
                       }} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
                     </div>
                   ))}
-                  {users.filter(u => u.parentClientId === currentUser.id).length === 0 && (
+                  {users.filter(u => u.parentClientId === effectiveClientId).length === 0 && (
                     <p className="text-gray-500 text-sm">No team members added yet</p>
                   )}
                 </div>
@@ -1211,7 +1214,7 @@ const ClientPortal = () => {
               <div className="space-y-4">
                 <select value={newContent.clientId} onChange={(e) => setNewContent({ ...newContent, clientId: e.target.value })} className="w-full px-4 py-2 border rounded">
                   <option value="">Select Client</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
+                  {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
                 </select>
                 <select value={newContent.type} onChange={(e) => setNewContent({ ...newContent, type: e.target.value })} className="w-full px-4 py-2 border rounded">
                   <option value="content-idea">Content Idea</option>

@@ -55,35 +55,47 @@ Run the following command to install Firebase:
 npm install firebase
 ```
 
-## Step 6: Set Up Firestore Security Rules (Recommended)
+## Step 6: Set Up Firestore Security Rules (Required)
+
+**Quick Start:** See **`QUICK_START_RULES.md`** for a simple copy-paste solution.
+
+**Detailed Guide:** See **`FIREBASE_RULES.md`** for complete security rules documentation.
+
+### For Testing (Right Now)
+
+Use test mode rules to get started quickly:
 
 1. In Firebase Console, go to **Firestore Database**
 2. Click on the **"Rules"** tab
-3. Update the rules for better security:
+3. Paste these rules:
 
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Users collection
-    match /users/{userId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Content collection
-    match /content/{contentId} {
-      allow read, write: if request.auth != null;
-    }
-
-    // Videos collection
-    match /videos/{videoId} {
-      allow read, write: if request.auth != null;
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
 ```
 
-**Note:** The above rules require authentication. For now, you can keep test mode enabled, but for production, you should implement Firebase Authentication and use these secure rules.
+4. Click **Publish**
+
+⚠️ **These rules allow anyone to access your data - perfect for testing, but change before production!**
+
+### For Production (Before Launch)
+
+See `FIREBASE_RULES.md` for:
+- Production-ready security rules
+- Firebase Authentication implementation guide
+- Role-based access control
+- Data validation rules
+
+**Reference Files:**
+- `QUICK_START_RULES.md` - Fast setup (copy-paste rules)
+- `FIREBASE_RULES.md` - Complete security guide
+- `firestore.rules` - Rules file for your project
 
 ## Step 7: Test Your Setup
 

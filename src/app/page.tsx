@@ -186,13 +186,14 @@ const ClientPortal = () => {
     return false;
   };
 
-  const handleSignup = async (email, password, companyName, firstName) => {
+  const handleSignup = async (email, password, companyName, firstName, lastName) => {
     const newUser = {
       id: Date.now().toString(),
       email,
       password,
       companyName,
       firstName,
+      lastName,
       onboarded: false,
       createdAt: new Date().toISOString()
     };
@@ -234,17 +235,18 @@ const ClientPortal = () => {
     const [password, setPassword] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async () => {
       setError('');
       if (isSignup) {
-        if (!companyName.trim() || !firstName.trim()) {
+        if (!companyName.trim() || !firstName.trim() || !lastName.trim()) {
           setError('All fields required');
           return;
         }
-        await handleSignup(email, password, companyName, firstName);
+        await handleSignup(email, password, companyName, firstName, lastName);
       } else {
         if (!handleLogin(email, password)) setError('Invalid credentials');
       }
@@ -262,6 +264,10 @@ const ClientPortal = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                   <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
@@ -347,23 +353,45 @@ const ClientPortal = () => {
   function OnboardingView() {
     const [currentStep, setCurrentStep] = useState(0);
     const [answers, setAnswers] = useState({
-      industry: '', targetAudience: '', goals: '', brandVoice: '', competitors: ''
+      industry: [], targetAudience: [], goals: [], brandVoice: [], competitors: ''
+    });
+    const [otherInputs, setOtherInputs] = useState({
+      industry: '', targetAudience: '', goals: '', brandVoice: ''
     });
 
-    const industries = ['E-commerce', 'SaaS', 'Healthcare', 'Finance', 'Real Estate', 'Education', 'Food & Beverage', 'Technology', 'Consulting', 'Other'];
-    const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs', 'Other'];
-    const goalOptions = ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product', 'Other'];
+    const industries = ['Realtor', 'Loan Officer'];
+    const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'];
+    const goalOptions = ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'];
     const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
 
     const questions = [
       { type: 'buttons', key: 'industry', label: 'What industry are you in?', options: industries },
-      { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience?', options: audiences },
-      { type: 'buttons', key: 'goals', label: 'What are your main marketing goals?', options: goalOptions },
-      { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice?', options: voiceOptions },
+      { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
+      { type: 'buttons', key: 'goals', label: 'What are your main marketing goals? (Select all that apply)', options: goalOptions },
+      { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },
       { type: 'text', key: 'competitors', label: 'Who are your main competitors?', placeholder: 'e.g., Company A, Company B' }
     ];
 
     const currentQuestion = questions[currentStep];
+
+    const toggleOption = (key, option) => {
+      const current = answers[key] || [];
+      if (current.includes(option)) {
+        setAnswers({ ...answers, [key]: current.filter(item => item !== option) });
+      } else {
+        setAnswers({ ...answers, [key]: [...current, option] });
+      }
+    };
+
+    const isAnswerValid = () => {
+      if (currentQuestion.type === 'text') {
+        return answers[currentQuestion.key]?.trim();
+      } else {
+        const hasSelection = answers[currentQuestion.key]?.length > 0;
+        const hasOtherText = answers[currentQuestion.key]?.includes('Other') ? otherInputs[currentQuestion.key]?.trim() : true;
+        return hasSelection && hasOtherText;
+      }
+    };
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4 flex items-center justify-center">
@@ -379,17 +407,25 @@ const ClientPortal = () => {
 
           <div className="mb-2 text-sm text-purple-600 font-medium">Question {currentStep + 1} of {questions.length}</div>
           <label className="block text-xl font-semibold text-gray-800 mb-4">{currentQuestion.label}</label>
-          
+
           {currentQuestion.type === 'text' ? (
             <textarea value={answers[currentQuestion.key]} onChange={(e) => setAnswers({ ...answers, [currentQuestion.key]: e.target.value })} placeholder={currentQuestion.placeholder} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-6" rows="4" />
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-              {currentQuestion.options.map(opt => (
-                <button key={opt} onClick={() => setAnswers({ ...answers, [currentQuestion.key]: opt })} className={`px-4 py-3 rounded-lg border-2 transition ${answers[currentQuestion.key] === opt ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
-                  {opt}
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {currentQuestion.options.map(opt => (
+                  <button key={opt} onClick={() => toggleOption(currentQuestion.key, opt)} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes(opt) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                    {opt}
+                  </button>
+                ))}
+                <button onClick={() => toggleOption(currentQuestion.key, 'Other')} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes('Other') ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                  Other
                 </button>
-              ))}
-            </div>
+              </div>
+              {(answers[currentQuestion.key] || []).includes('Other') && (
+                <input type="text" value={otherInputs[currentQuestion.key] || ''} onChange={(e) => setOtherInputs({ ...otherInputs, [currentQuestion.key]: e.target.value })} placeholder="Please specify..." className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6" />
+              )}
+            </>
           )}
 
           <div className="flex gap-3">
@@ -399,11 +435,15 @@ const ClientPortal = () => {
               </button>
             )}
             <button onClick={() => {
-              if (answers[currentQuestion.key].trim()) {
-                if (currentStep < questions.length - 1) setCurrentStep(currentStep + 1);
-                else handleOnboarding(answers);
+              if (isAnswerValid()) {
+                if (currentStep < questions.length - 1) {
+                  setCurrentStep(currentStep + 1);
+                } else {
+                  const finalAnswers = { ...answers, otherInputs };
+                  handleOnboarding(finalAnswers);
+                }
               }
-            }} disabled={!answers[currentQuestion.key].trim()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
+            }} disabled={!isAnswerValid()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
               {currentStep < questions.length - 1 ? <><span>Next</span><ChevronRight className="w-5 h-5" /></> : 'Complete Setup'}
             </button>
           </div>
@@ -413,12 +453,15 @@ const ClientPortal = () => {
   }
 
   function DashboardView() {
-    const clientContent = content.filter(c => c.clientId === currentUser.id);
+    // Team members should see content for their parent client
+    const effectiveClientId = currentUser.parentClientId || currentUser.id;
+    const clientContent = content.filter(c => c.clientId === effectiveClientId);
     const [selectedContent, setSelectedContent] = useState(null);
     const [feedback, setFeedback] = useState('');
     const [activePage, setActivePage] = useState('content');
     const [teamEmail, setTeamEmail] = useState('');
     const [teamPass, setTeamPass] = useState('');
+    const [teamName, setTeamName] = useState('');
     const [expanded, setExpanded] = useState(null);
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
@@ -426,6 +469,33 @@ const ClientPortal = () => {
     });
     const [videoLink, setVideoLink] = useState('');
     const [videoDescription, setVideoDescription] = useState('');
+    const [userVideos, setUserVideos] = useState([]);
+
+    useEffect(() => {
+      loadUserVideos();
+    }, []);
+
+    const loadUserVideos = async () => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available - skipping videos load');
+        setUserVideos([]);
+        return;
+      }
+
+      try {
+        console.log('📥 Loading user videos from Firestore...');
+        const videosSnapshot = await getDocs(collection(db, 'videos'));
+        const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        // Team members should see videos for their parent client
+        const clientVideos = videosData.filter(v => v.clientId === effectiveClientId);
+        console.log(`✅ Loaded ${clientVideos.length} videos for current user`);
+        setUserVideos(clientVideos);
+      } catch (e) {
+        console.error('❌ Error loading videos from cloud:', e);
+        console.error('Error details:', e.message);
+        setUserVideos([]);
+      }
+    };
 
     const navItems = [
       { id: 'social', label: 'Social Media', icon: Share2 },
@@ -522,7 +592,7 @@ const ClientPortal = () => {
                     if (videoLink.trim()) {
                       const newVideo = {
                         id: Date.now().toString(),
-                        clientId: currentUser.id,
+                        clientId: effectiveClientId,
                         videoLink,
                         description: videoDescription,
                         status: 'pending',
@@ -541,6 +611,7 @@ const ClientPortal = () => {
                         console.log('✅ Video submitted successfully:', newVideo.id);
                         setVideoLink('');
                         setVideoDescription('');
+                        await loadUserVideos(); // Reload videos to show the new submission
                         alert('Video submitted successfully!');
                       } catch (error) {
                         console.error('❌ Error submitting video:', error);
@@ -552,6 +623,59 @@ const ClientPortal = () => {
                     Submit Video
                   </button>
                 </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Video Submissions</h3>
+                {userVideos.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">No videos submitted yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {userVideos.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)).map(video => (
+                      <div key={video.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold text-gray-800">
+                                {video.description || 'Video Submission'}
+                              </h4>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                video.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                video.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                                {video.status === 'in-progress' ? 'In Progress' : video.status.charAt(0).toUpperCase() + video.status.slice(1)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              Submitted {new Date(video.submittedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
+                              <FileText className="w-4 h-4" />Raw Video File
+                            </a>
+                          </div>
+
+                          {video.status === 'completed' && video.completedLink && (
+                            <div className="mt-2 p-3 bg-green-50 rounded">
+                              <p className="text-sm font-medium text-green-800 mb-1">Completed!</p>
+                              <a href={video.completedLink} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline text-sm flex items-center gap-2">
+                                <FileText className="w-4 h-4" />Download Edited Video
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="bg-white rounded-lg shadow p-6">
@@ -602,36 +726,39 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Team Members</h3>
               <p className="text-gray-600 mb-6">Add team members to collaborate on your marketing</p>
-              
+
               <div className="space-y-4 max-w-md mb-8">
+                <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="Full Name" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <input type="email" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="Email" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <input type="password" value={teamPass} onChange={(e) => setTeamPass(e.target.value)} placeholder="Password" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <button onClick={async () => {
-                  if (teamEmail.trim() && teamPass.trim()) {
+                  if (teamName.trim() && teamEmail.trim() && teamPass.trim()) {
                     await saveUsers([...users, {
                       id: Date.now().toString(),
                       email: teamEmail,
                       password: teamPass,
                       companyName: currentUser.companyName,
-                      firstName: 'Team Member',
+                      firstName: teamName,
                       onboarded: true,
-                      parentClientId: currentUser.id,
+                      parentClientId: effectiveClientId,
                       createdAt: new Date().toISOString()
                     }]);
+                    setTeamName('');
                     setTeamEmail('');
                     setTeamPass('');
                   }
-                }} disabled={!teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
+                }} disabled={!teamName.trim() || !teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
               </div>
 
               <div className="border-t pt-6">
                 <h4 className="font-semibold text-gray-800 mb-4">Current Team Members</h4>
                 <div className="space-y-2">
-                  {users.filter(u => u.parentClientId === currentUser.id).map(member => (
+                  {users.filter(u => u.parentClientId === effectiveClientId).map(member => (
                     <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
-                        <span className="text-gray-700">{member.email}</span>
-                        <span className="text-xs text-gray-500 ml-3">Added {new Date(member.createdAt).toLocaleDateString()}</span>
+                        <div className="text-gray-700 font-medium">{member.firstName}</div>
+                        <div className="text-sm text-gray-600">{member.email}</div>
+                        <span className="text-xs text-gray-500">Added {new Date(member.createdAt).toLocaleDateString()}</span>
                       </div>
                       <button onClick={async () => {
                         try {
@@ -655,7 +782,7 @@ const ClientPortal = () => {
                       }} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
                     </div>
                   ))}
-                  {users.filter(u => u.parentClientId === currentUser.id).length === 0 && (
+                  {users.filter(u => u.parentClientId === effectiveClientId).length === 0 && (
                     <p className="text-gray-500 text-sm">No team members added yet</p>
                   )}
                 </div>
@@ -667,25 +794,37 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Settings</h3>
               <div className="space-y-3 mb-8">
-                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => (
-                  <div key={key} className="border rounded">
-                    <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
-                      <span className="font-medium capitalize">{key}</span>
-                      <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
-                    </button>
-                    {expanded === key && (
-                      <div className="px-4 pb-4">
-                        <textarea value={editedAnswers[key] || ''} onChange={(e) => setEditedAnswers({ ...editedAnswers, [key]: e.target.value })} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
-                        <button onClick={async () => {
-                          const updated = { ...currentUser, onboardingAnswers: editedAnswers };
-                          setCurrentUser(updated);
-                          await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-                          setExpanded(null);
-                        }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => {
+                  const value = editedAnswers[key];
+                  const displayValue = Array.isArray(value) ? value.join(', ') : (value || '');
+                  const isArrayField = key !== 'competitors';
+
+                  return (
+                    <div key={key} className="border rounded">
+                      <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
+                        <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                        <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
+                      </button>
+                      {expanded === key && (
+                        <div className="px-4 pb-4">
+                          <div className="text-sm text-gray-600 mb-2">Current: {displayValue || 'Not set'}</div>
+                          <textarea value={displayValue} onChange={(e) => {
+                            const newValue = isArrayField ? e.target.value.split(',').map(s => s.trim()).filter(s => s) : e.target.value;
+                            setEditedAnswers({ ...editedAnswers, [key]: newValue });
+                          }} placeholder={isArrayField ? 'Enter comma-separated values' : 'Enter text...'} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
+                          {isArrayField && <p className="text-xs text-gray-500 mb-3">Separate multiple values with commas</p>}
+                          <button onClick={async () => {
+                            const updated = { ...currentUser, onboardingAnswers: editedAnswers };
+                            setCurrentUser(updated);
+                            await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                            saveSession(updated, 'dashboard');
+                            setExpanded(null);
+                          }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <h4 className="font-semibold mb-4">Social Media Logins</h4>
@@ -763,20 +902,26 @@ const ClientPortal = () => {
     const generateContent = async () => {
       setIsGenerating(true);
       try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch('/api/generate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [{ role: 'user', content: `Create a ${contentType} about ${topic} for ${audience}. The tone should be ${tone}. Please write compelling, engaging content that resonates with this audience.` }]
+            topic,
+            contentType,
+            audience,
+            tone
           })
         });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate content');
+        }
+
         const data = await response.json();
-        const content = data.content.map(item => item.text || '').join('\n');
-        setGeneratedContent(content);
+        setGeneratedContent(data.content || 'No content generated');
         setStep(4);
       } catch (error) {
+        console.error('Error generating content:', error);
         setGeneratedContent('Sorry, there was an error generating content. Please try again.');
         setStep(4);
       }
@@ -867,6 +1012,7 @@ const ClientPortal = () => {
     });
     const [videos, setVideos] = useState([]);
     const [activeTab, setActiveTab] = useState('clients');
+    const [selectedUser, setSelectedUser] = useState(null);
 
     useEffect(() => {
       loadVideos();
@@ -957,7 +1103,7 @@ const ClientPortal = () => {
                   return (
                     <div key={user.id} className="bg-white rounded-lg shadow p-6">
                       <h3 className="text-lg font-semibold">{user.companyName}</h3>
-                      <p className="text-sm text-gray-600">{user.firstName} • {user.email}</p>
+                      <p className="text-sm text-gray-600">{user.firstName} {user.lastName || ''} • {user.email}</p>
                       {teamMembers.length > 0 && (
                         <p className="text-xs text-gray-500 mt-1">{teamMembers.length} team member{teamMembers.length > 1 ? 's' : ''}</p>
                       )}
@@ -971,6 +1117,9 @@ const ClientPortal = () => {
                           <p className="text-xs text-green-600">Approved</p>
                         </div>
                       </div>
+                      <button onClick={() => setSelectedUser(user)} className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                        <Eye className="w-4 h-4" />View Details
+                      </button>
                     </div>
                   );
                 })}
@@ -1071,7 +1220,7 @@ const ClientPortal = () => {
               <div className="space-y-4">
                 <select value={newContent.clientId} onChange={(e) => setNewContent({ ...newContent, clientId: e.target.value })} className="w-full px-4 py-2 border rounded">
                   <option value="">Select Client</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
+                  {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
                 </select>
                 <select value={newContent.type} onChange={(e) => setNewContent({ ...newContent, type: e.target.value })} className="w-full px-4 py-2 border rounded">
                   <option value="content-idea">Content Idea</option>
@@ -1095,6 +1244,155 @@ const ClientPortal = () => {
                 }} className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700">Upload</button>
                 <button onClick={() => setShowForm(false)} className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300">Cancel</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">{selectedUser.companyName}</h2>
+                  <p className="text-gray-600">{selectedUser.firstName} {selectedUser.lastName || ''}</p>
+                </div>
+                <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Basic Information
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-600">First Name:</span>
+                      <span className="ml-2 font-medium">{selectedUser.firstName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Last Name:</span>
+                      <span className="ml-2 font-medium">{selectedUser.lastName || 'Not provided'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Email:</span>
+                      <span className="ml-2 font-medium">{selectedUser.email}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Company:</span>
+                      <span className="ml-2 font-medium">{selectedUser.companyName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Joined:</span>
+                      <span className="ml-2 font-medium">{new Date(selectedUser.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Onboarded:</span>
+                      <span className="ml-2 font-medium">{selectedUser.onboarded ? 'Yes' : 'No'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Onboarding Answers */}
+                {selectedUser.onboardingAnswers && (
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Onboarding Answers
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="text-gray-600 font-medium">Industry:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.industry)
+                            ? selectedUser.onboardingAnswers.industry.join(', ')
+                            : selectedUser.onboardingAnswers.industry || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Target Audience:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.targetAudience)
+                            ? selectedUser.onboardingAnswers.targetAudience.join(', ')
+                            : selectedUser.onboardingAnswers.targetAudience || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Goals:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.goals)
+                            ? selectedUser.onboardingAnswers.goals.join(', ')
+                            : selectedUser.onboardingAnswers.goals || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Brand Voice:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.brandVoice)
+                            ? selectedUser.onboardingAnswers.brandVoice.join(', ')
+                            : selectedUser.onboardingAnswers.brandVoice || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Competitors:</span>
+                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.competitors || 'Not provided'}</p>
+                      </div>
+                      {selectedUser.onboardingAnswers.otherInputs && Object.keys(selectedUser.onboardingAnswers.otherInputs).some(k => selectedUser.onboardingAnswers.otherInputs[k]) && (
+                        <div>
+                          <span className="text-gray-600 font-medium">Additional Details:</span>
+                          {Object.entries(selectedUser.onboardingAnswers.otherInputs).map(([key, value]) =>
+                            value ? (
+                              <p key={key} className="text-gray-800 mt-1">
+                                <span className="capitalize">{key}:</span> {value}
+                              </p>
+                            ) : null
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Social Media Logins */}
+                {selectedUser.socialLogins && Object.keys(selectedUser.socialLogins).some(k => selectedUser.socialLogins[k]) && (
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Share2 className="w-5 h-5" />
+                      Social Media Logins
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-3 text-sm">
+                      {Object.entries(selectedUser.socialLogins).map(([platform, login]) =>
+                        login ? (
+                          <div key={platform}>
+                            <span className="text-gray-600 capitalize">{platform}:</span>
+                            <span className="ml-2 font-medium">{login}</span>
+                          </div>
+                        ) : null
+                      )}
+                      {!Object.values(selectedUser.socialLogins).some(v => v) && (
+                        <p className="text-gray-600 col-span-2">No social media logins provided</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!selectedUser.socialLogins && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Share2 className="w-5 h-5" />
+                      Social Media Logins
+                    </h3>
+                    <p className="text-gray-600 text-sm">No social media logins provided</p>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => setSelectedUser(null)} className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">
+                Close
+              </button>
             </div>
           </div>
         )}

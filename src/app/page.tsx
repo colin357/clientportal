@@ -186,13 +186,14 @@ const ClientPortal = () => {
     return false;
   };
 
-  const handleSignup = async (email, password, companyName, firstName) => {
+  const handleSignup = async (email, password, companyName, firstName, lastName) => {
     const newUser = {
       id: Date.now().toString(),
       email,
       password,
       companyName,
       firstName,
+      lastName,
       onboarded: false,
       createdAt: new Date().toISOString()
     };
@@ -234,17 +235,18 @@ const ClientPortal = () => {
     const [password, setPassword] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async () => {
       setError('');
       if (isSignup) {
-        if (!companyName.trim() || !firstName.trim()) {
+        if (!companyName.trim() || !firstName.trim() || !lastName.trim()) {
           setError('All fields required');
           return;
         }
-        await handleSignup(email, password, companyName, firstName);
+        await handleSignup(email, password, companyName, firstName, lastName);
       } else {
         if (!handleLogin(email, password)) setError('Invalid credentials');
       }
@@ -262,6 +264,10 @@ const ClientPortal = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                   <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
@@ -913,6 +919,7 @@ const ClientPortal = () => {
     });
     const [videos, setVideos] = useState([]);
     const [activeTab, setActiveTab] = useState('clients');
+    const [selectedUser, setSelectedUser] = useState(null);
 
     useEffect(() => {
       loadVideos();
@@ -1003,7 +1010,7 @@ const ClientPortal = () => {
                   return (
                     <div key={user.id} className="bg-white rounded-lg shadow p-6">
                       <h3 className="text-lg font-semibold">{user.companyName}</h3>
-                      <p className="text-sm text-gray-600">{user.firstName} • {user.email}</p>
+                      <p className="text-sm text-gray-600">{user.firstName} {user.lastName || ''} • {user.email}</p>
                       {teamMembers.length > 0 && (
                         <p className="text-xs text-gray-500 mt-1">{teamMembers.length} team member{teamMembers.length > 1 ? 's' : ''}</p>
                       )}
@@ -1017,6 +1024,9 @@ const ClientPortal = () => {
                           <p className="text-xs text-green-600">Approved</p>
                         </div>
                       </div>
+                      <button onClick={() => setSelectedUser(user)} className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                        <Eye className="w-4 h-4" />View Details
+                      </button>
                     </div>
                   );
                 })}
@@ -1141,6 +1151,155 @@ const ClientPortal = () => {
                 }} className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700">Upload</button>
                 <button onClick={() => setShowForm(false)} className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300">Cancel</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">{selectedUser.companyName}</h2>
+                  <p className="text-gray-600">{selectedUser.firstName} {selectedUser.lastName || ''}</p>
+                </div>
+                <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Basic Information
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-600">First Name:</span>
+                      <span className="ml-2 font-medium">{selectedUser.firstName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Last Name:</span>
+                      <span className="ml-2 font-medium">{selectedUser.lastName || 'Not provided'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Email:</span>
+                      <span className="ml-2 font-medium">{selectedUser.email}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Company:</span>
+                      <span className="ml-2 font-medium">{selectedUser.companyName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Joined:</span>
+                      <span className="ml-2 font-medium">{new Date(selectedUser.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Onboarded:</span>
+                      <span className="ml-2 font-medium">{selectedUser.onboarded ? 'Yes' : 'No'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Onboarding Answers */}
+                {selectedUser.onboardingAnswers && (
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Onboarding Answers
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="text-gray-600 font-medium">Industry:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.industry)
+                            ? selectedUser.onboardingAnswers.industry.join(', ')
+                            : selectedUser.onboardingAnswers.industry || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Target Audience:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.targetAudience)
+                            ? selectedUser.onboardingAnswers.targetAudience.join(', ')
+                            : selectedUser.onboardingAnswers.targetAudience || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Goals:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.goals)
+                            ? selectedUser.onboardingAnswers.goals.join(', ')
+                            : selectedUser.onboardingAnswers.goals || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Brand Voice:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.brandVoice)
+                            ? selectedUser.onboardingAnswers.brandVoice.join(', ')
+                            : selectedUser.onboardingAnswers.brandVoice || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Competitors:</span>
+                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.competitors || 'Not provided'}</p>
+                      </div>
+                      {selectedUser.onboardingAnswers.otherInputs && Object.keys(selectedUser.onboardingAnswers.otherInputs).some(k => selectedUser.onboardingAnswers.otherInputs[k]) && (
+                        <div>
+                          <span className="text-gray-600 font-medium">Additional Details:</span>
+                          {Object.entries(selectedUser.onboardingAnswers.otherInputs).map(([key, value]) =>
+                            value ? (
+                              <p key={key} className="text-gray-800 mt-1">
+                                <span className="capitalize">{key}:</span> {value}
+                              </p>
+                            ) : null
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Social Media Logins */}
+                {selectedUser.socialLogins && Object.keys(selectedUser.socialLogins).some(k => selectedUser.socialLogins[k]) && (
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Share2 className="w-5 h-5" />
+                      Social Media Logins
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-3 text-sm">
+                      {Object.entries(selectedUser.socialLogins).map(([platform, login]) =>
+                        login ? (
+                          <div key={platform}>
+                            <span className="text-gray-600 capitalize">{platform}:</span>
+                            <span className="ml-2 font-medium">{login}</span>
+                          </div>
+                        ) : null
+                      )}
+                      {!Object.values(selectedUser.socialLogins).some(v => v) && (
+                        <p className="text-gray-600 col-span-2">No social media logins provided</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!selectedUser.socialLogins && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Share2 className="w-5 h-5" />
+                      Social Media Logins
+                    </h3>
+                    <p className="text-gray-600 text-sm">No social media logins provided</p>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => setSelectedUser(null)} className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">
+                Close
+              </button>
             </div>
           </div>
         )}

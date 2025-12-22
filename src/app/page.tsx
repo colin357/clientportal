@@ -902,20 +902,26 @@ const ClientPortal = () => {
     const generateContent = async () => {
       setIsGenerating(true);
       try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch('/api/generate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [{ role: 'user', content: `Create a ${contentType} about ${topic} for ${audience}. The tone should be ${tone}. Please write compelling, engaging content that resonates with this audience.` }]
+            topic,
+            contentType,
+            audience,
+            tone
           })
         });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate content');
+        }
+
         const data = await response.json();
-        const content = data.content.map(item => item.text || '').join('\n');
-        setGeneratedContent(content);
+        setGeneratedContent(data.content || 'No content generated');
         setStep(4);
       } catch (error) {
+        console.error('Error generating content:', error);
         setGeneratedContent('Sorry, there was an error generating content. Please try again.');
         setStep(4);
       }

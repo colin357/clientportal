@@ -459,6 +459,7 @@ const ClientPortal = () => {
     const [activePage, setActivePage] = useState('content');
     const [teamEmail, setTeamEmail] = useState('');
     const [teamPass, setTeamPass] = useState('');
+    const [teamName, setTeamName] = useState('');
     const [expanded, setExpanded] = useState(null);
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
@@ -722,26 +723,28 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Team Members</h3>
               <p className="text-gray-600 mb-6">Add team members to collaborate on your marketing</p>
-              
+
               <div className="space-y-4 max-w-md mb-8">
+                <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="Full Name" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <input type="email" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="Email" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <input type="password" value={teamPass} onChange={(e) => setTeamPass(e.target.value)} placeholder="Password" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <button onClick={async () => {
-                  if (teamEmail.trim() && teamPass.trim()) {
+                  if (teamName.trim() && teamEmail.trim() && teamPass.trim()) {
                     await saveUsers([...users, {
                       id: Date.now().toString(),
                       email: teamEmail,
                       password: teamPass,
                       companyName: currentUser.companyName,
-                      firstName: 'Team Member',
+                      firstName: teamName,
                       onboarded: true,
                       parentClientId: currentUser.id,
                       createdAt: new Date().toISOString()
                     }]);
+                    setTeamName('');
                     setTeamEmail('');
                     setTeamPass('');
                   }
-                }} disabled={!teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
+                }} disabled={!teamName.trim() || !teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
               </div>
 
               <div className="border-t pt-6">
@@ -750,8 +753,9 @@ const ClientPortal = () => {
                   {users.filter(u => u.parentClientId === currentUser.id).map(member => (
                     <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
-                        <span className="text-gray-700">{member.email}</span>
-                        <span className="text-xs text-gray-500 ml-3">Added {new Date(member.createdAt).toLocaleDateString()}</span>
+                        <div className="text-gray-700 font-medium">{member.firstName}</div>
+                        <div className="text-sm text-gray-600">{member.email}</div>
+                        <span className="text-xs text-gray-500">Added {new Date(member.createdAt).toLocaleDateString()}</span>
                       </div>
                       <button onClick={async () => {
                         try {

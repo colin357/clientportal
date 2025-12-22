@@ -466,6 +466,32 @@ const ClientPortal = () => {
     });
     const [videoLink, setVideoLink] = useState('');
     const [videoDescription, setVideoDescription] = useState('');
+    const [userVideos, setUserVideos] = useState([]);
+
+    useEffect(() => {
+      loadUserVideos();
+    }, []);
+
+    const loadUserVideos = async () => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available - skipping videos load');
+        setUserVideos([]);
+        return;
+      }
+
+      try {
+        console.log('📥 Loading user videos from Firestore...');
+        const videosSnapshot = await getDocs(collection(db, 'videos'));
+        const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        const clientVideos = videosData.filter(v => v.clientId === currentUser.id);
+        console.log(`✅ Loaded ${clientVideos.length} videos for current user`);
+        setUserVideos(clientVideos);
+      } catch (e) {
+        console.error('❌ Error loading videos from cloud:', e);
+        console.error('Error details:', e.message);
+        setUserVideos([]);
+      }
+    };
 
     const navItems = [
       { id: 'social', label: 'Social Media', icon: Share2 },
@@ -581,6 +607,7 @@ const ClientPortal = () => {
                         console.log('✅ Video submitted successfully:', newVideo.id);
                         setVideoLink('');
                         setVideoDescription('');
+                        await loadUserVideos(); // Reload videos to show the new submission
                         alert('Video submitted successfully!');
                       } catch (error) {
                         console.error('❌ Error submitting video:', error);
@@ -592,6 +619,59 @@ const ClientPortal = () => {
                     Submit Video
                   </button>
                 </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Video Submissions</h3>
+                {userVideos.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">No videos submitted yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {userVideos.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)).map(video => (
+                      <div key={video.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold text-gray-800">
+                                {video.description || 'Video Submission'}
+                              </h4>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                video.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                video.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                                {video.status === 'in-progress' ? 'In Progress' : video.status.charAt(0).toUpperCase() + video.status.slice(1)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              Submitted {new Date(video.submittedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
+                              <FileText className="w-4 h-4" />Raw Video File
+                            </a>
+                          </div>
+
+                          {video.status === 'completed' && video.completedLink && (
+                            <div className="mt-2 p-3 bg-green-50 rounded">
+                              <p className="text-sm font-medium text-green-800 mb-1">Completed!</p>
+                              <a href={video.completedLink} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline text-sm flex items-center gap-2">
+                                <FileText className="w-4 h-4" />Download Edited Video
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="bg-white rounded-lg shadow p-6">

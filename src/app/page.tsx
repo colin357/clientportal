@@ -72,7 +72,37 @@ const ClientPortal = () => {
 
   useEffect(() => {
     loadData();
+    restoreSession();
   }, []);
+
+  const restoreSession = () => {
+    try {
+      const savedSession = localStorage.getItem('userSession');
+      if (savedSession) {
+        const sessionData = JSON.parse(savedSession);
+        setCurrentUser(sessionData.user);
+        setView(sessionData.view);
+        console.log('✅ Session restored for:', sessionData.user.email || sessionData.user.role);
+      }
+    } catch (error) {
+      console.error('❌ Error restoring session:', error);
+      localStorage.removeItem('userSession');
+    }
+  };
+
+  const saveSession = (user, viewName) => {
+    try {
+      localStorage.setItem('userSession', JSON.stringify({ user, view: viewName }));
+      console.log('💾 Session saved');
+    } catch (error) {
+      console.error('❌ Error saving session:', error);
+    }
+  };
+
+  const clearSession = () => {
+    localStorage.removeItem('userSession');
+    console.log('🗑️ Session cleared');
+  };
 
   const loadData = async () => {
     if (!db) {
@@ -147,8 +177,10 @@ const ClientPortal = () => {
   const handleLogin = (email, password) => {
     const user = users.find(u => u.email === email && u.password === password);
     if (user) {
+      const targetView = user.onboarded ? 'dashboard' : 'onboarding';
       setCurrentUser(user);
-      setView(user.onboarded ? 'dashboard' : 'onboarding');
+      setView(targetView);
+      saveSession(user, targetView);
       return true;
     }
     return false;
@@ -166,6 +198,7 @@ const ClientPortal = () => {
     };
     setCurrentUser(newUser);
     setView('onboarding');
+    saveSession(newUser, 'onboarding');
     await saveUsers([...users, newUser]);
   };
 
@@ -173,6 +206,7 @@ const ClientPortal = () => {
     const updatedUser = { ...currentUser, onboarded: true, onboardingAnswers: answers };
     setCurrentUser(updatedUser);
     setView('dashboard');
+    saveSession(updatedUser, 'dashboard');
     await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
   };
 
@@ -274,8 +308,10 @@ const ClientPortal = () => {
 
     const handleSubmit = () => {
       if (password === 'admin123') {
-        setCurrentUser({ id: 'admin', email: 'admin', role: 'admin' });
+        const adminUser = { id: 'admin', email: 'admin', role: 'admin' };
+        setCurrentUser(adminUser);
         setView('admin');
+        saveSession(adminUser, 'admin');
       } else {
         setError('Invalid admin password');
       }
@@ -408,7 +444,7 @@ const ClientPortal = () => {
               <h1 className="text-2xl font-bold text-gray-800">{currentUser.companyName}</h1>
               <p className="text-sm text-gray-600">Content Review Portal</p>
             </div>
-            <button onClick={() => { setCurrentUser(null); setView('login'); }} className="text-gray-600 hover:text-gray-800">Logout</button>
+            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-600 hover:text-gray-800">Logout</button>
           </div>
         </nav>
 
@@ -891,7 +927,7 @@ const ClientPortal = () => {
         <nav className="bg-gray-800 text-white">
           <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between">
             <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-            <button onClick={() => { setCurrentUser(null); setView('login'); }} className="text-gray-300 hover:text-white">Logout</button>
+            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-300 hover:text-white">Logout</button>
           </div>
         </nav>
 

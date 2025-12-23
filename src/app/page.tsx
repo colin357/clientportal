@@ -365,7 +365,7 @@ const ClientPortal = () => {
     const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
 
     const questions = [
-      { type: 'buttons', key: 'industry', label: 'What industry are you in?', options: industries },
+      { type: 'buttons', key: 'industry', label: 'What do you do?', options: industries },
       { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
       { type: 'buttons', key: 'goals', label: 'What are your main marketing goals? (Select all that apply)', options: goalOptions },
       { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },

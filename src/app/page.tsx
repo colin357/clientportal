@@ -518,6 +518,8 @@ const ClientPortal = () => {
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', crm: ''
     });
+    const [headshot, setHeadshot] = useState(currentUser.headshot || '');
+    const [companyLogo, setCompanyLogo] = useState(currentUser.companyLogo || '');
     const [videoLink, setVideoLink] = useState('');
     const [videoDescription, setVideoDescription] = useState('');
     const [userVideos, setUserVideos] = useState([]);
@@ -981,7 +983,53 @@ const ClientPortal = () => {
                 const updated = { ...currentUser, socialLogins };
                 setCurrentUser(updated);
                 await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700">Save Social Logins</button>
+              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 mb-8">Save Social Logins</button>
+
+              <h4 className="font-semibold mb-4">Profile & Branding</h4>
+              <p className="text-sm text-gray-600 mb-4">Upload your headshot and company logo (enter image URL or upload to a service like Imgur)</p>
+
+              <div className="grid md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Your Headshot</label>
+                  <input
+                    type="text"
+                    value={headshot}
+                    onChange={(e) => setHeadshot(e.target.value)}
+                    placeholder="https://example.com/your-photo.jpg"
+                    className="w-full px-4 py-2 border rounded outline-none focus:ring-2 mb-3"
+                  />
+                  {headshot && (
+                    <div className="border rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs text-gray-600 mb-2">Preview:</p>
+                      <img src={headshot} alt="Headshot" className="w-32 h-32 object-cover rounded-full mx-auto" onError={(e) => e.target.style.display = 'none'} />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
+                  <input
+                    type="text"
+                    value={companyLogo}
+                    onChange={(e) => setCompanyLogo(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="w-full px-4 py-2 border rounded outline-none focus:ring-2 mb-3"
+                  />
+                  {companyLogo && (
+                    <div className="border rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs text-gray-600 mb-2">Preview:</p>
+                      <img src={companyLogo} alt="Company Logo" className="w-32 h-32 object-contain mx-auto" onError={(e) => e.target.style.display = 'none'} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button onClick={async () => {
+                const updated = { ...currentUser, headshot, companyLogo };
+                setCurrentUser(updated);
+                await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                saveSession(updated, 'dashboard');
+              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700">Save Profile & Branding</button>
             </div>
           )}
         </div>

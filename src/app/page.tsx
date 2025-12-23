@@ -1257,40 +1257,190 @@ const ClientPortal = () => {
           {activePage === 'settings' && (
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Settings</h3>
-              <div className="space-y-3 mb-8">
-                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => {
-                  const value = editedAnswers[key];
-                  const displayValue = Array.isArray(value) ? value.join(', ') : (value || '');
-                  const isArrayField = key !== 'competitors';
 
-                  return (
-                    <div key={key} className="border rounded">
-                      <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
-                        <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                        <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
-                      </button>
-                      {expanded === key && (
-                        <div className="px-4 pb-4">
-                          <div className="text-sm text-gray-600 mb-2">Current: {displayValue || 'Not set'}</div>
-                          <textarea value={displayValue} onChange={(e) => {
-                            const newValue = isArrayField ? e.target.value.split(',').map(s => s.trim()).filter(s => s) : e.target.value;
-                            setEditedAnswers({ ...editedAnswers, [key]: newValue });
-                          }} placeholder={isArrayField ? 'Enter comma-separated values' : 'Enter text...'} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
-                          {isArrayField && <p className="text-xs text-gray-500 mb-3">Separate multiple values with commas</p>}
-                          <button onClick={async () => {
-                            const updated = { ...currentUser, onboardingAnswers: editedAnswers };
-                            setCurrentUser(updated);
-                            await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-                            saveSession(updated, 'dashboard');
-                            setExpanded(null);
-                          }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              {/* Industry */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">What do you do?</label>
+                <select
+                  value={Array.isArray(editedAnswers.industry) ? editedAnswers.industry[0] || '' : editedAnswers.industry || ''}
+                  onChange={(e) => setEditedAnswers({ ...editedAnswers, industry: [e.target.value] })}
+                  className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select...</option>
+                  <option value="Realtor">Realtor</option>
+                  <option value="Loan Officer">Loan Officer</option>
+                </select>
               </div>
 
+              {/* Target Audience */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Who is your target audience?</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'].map(option => {
+                    const current = Array.isArray(editedAnswers.targetAudience) ? editedAnswers.targetAudience : [];
+                    const isSelected = current.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          if (isSelected) {
+                            setEditedAnswers({ ...editedAnswers, targetAudience: current.filter(a => a !== option) });
+                          } else {
+                            setEditedAnswers({ ...editedAnswers, targetAudience: [...current, option] });
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Marketing Goals */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">What are your main marketing goals?</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'].map(option => {
+                    const current = Array.isArray(editedAnswers.goals) ? editedAnswers.goals : [];
+                    const isSelected = current.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          if (isSelected) {
+                            setEditedAnswers({ ...editedAnswers, goals: current.filter(g => g !== option) });
+                          } else {
+                            setEditedAnswers({ ...editedAnswers, goals: [...current, option] });
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Brand Voice */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">How would you describe your brand voice?</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'].map(option => {
+                    const current = Array.isArray(editedAnswers.brandVoice) ? editedAnswers.brandVoice : [];
+                    const isSelected = current.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          if (isSelected) {
+                            setEditedAnswers({ ...editedAnswers, brandVoice: current.filter(v => v !== option) });
+                          } else {
+                            setEditedAnswers({ ...editedAnswers, brandVoice: [...current, option] });
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Text Fields */}
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Who are your main competitors?</label>
+                  <textarea
+                    value={editedAnswers.competitors || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, competitors: e.target.value })}
+                    placeholder="e.g., Company A, Company B"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">What separates you from your competitors?</label>
+                  <textarea
+                    value={editedAnswers.differentiators || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, differentiators: e.target.value })}
+                    placeholder="Describe what makes you unique..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">What are your primary markets? (locations)</label>
+                  <textarea
+                    value={editedAnswers.primaryMarkets || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, primaryMarkets: e.target.value })}
+                    placeholder="e.g., Los Angeles, Orange County, San Diego"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Average price point or loan size</label>
+                  <input
+                    type="text"
+                    value={editedAnswers.pricePoint || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, pricePoint: e.target.value })}
+                    placeholder="e.g., $500K-$1M, $300K loans"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Are there creators or competitors whose style you like?</label>
+                  <textarea
+                    value={editedAnswers.styleInspirations || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, styleInspirations: e.target.value })}
+                    placeholder="List any accounts or brands you admire..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">What does success look like in the next 30, 60, and 90 days?</label>
+                  <textarea
+                    value={editedAnswers.successMetrics || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, successMetrics: e.target.value })}
+                    placeholder="Describe your goals for each timeframe..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Have you worked with a marketing agency before? What did you like or dislike?</label>
+                  <textarea
+                    value={editedAnswers.agencyExperience || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, agencyExperience: e.target.value })}
+                    placeholder="Share your experience..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                </div>
+              </div>
+
+              <button onClick={async () => {
+                const updated = { ...currentUser, onboardingAnswers: editedAnswers };
+                setCurrentUser(updated);
+                await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                saveSession(updated, 'dashboard');
+                alert('Settings saved successfully!');
+              }} className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-medium">
+                Save All Settings
+              </button>
+
+              <div className="border-t mt-8 pt-8">
               <h4 className="font-semibold mb-4">Social Media Logins</h4>
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 {Object.keys(socialLogins).map(key => (

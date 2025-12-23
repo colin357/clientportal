@@ -272,6 +272,12 @@ const ClientPortal = () => {
     return `+1${digits.slice(-10)}`;
   };
 
+  // Helper to parse date string (YYYY-MM-DD) as local date, not UTC
+  const parseDateLocal = (dateStr) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
   // File upload helper function
   const uploadFileToStorage = async (file, path, onProgress) => {
     if (!storage) {
@@ -580,6 +586,10 @@ const ClientPortal = () => {
     const [uploadingVideo, setUploadingVideo] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [selectedVideoFile, setSelectedVideoFile] = useState(null);
+    const [uploadingHeadshot, setUploadingHeadshot] = useState(false);
+    const [headshotProgress, setHeadshotProgress] = useState(0);
+    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [logoProgress, setLogoProgress] = useState(0);
 
     useEffect(() => {
       loadUserVideos();
@@ -947,16 +957,30 @@ const ClientPortal = () => {
 
                       // If a file is selected, upload it to Firebase Storage
                       if (selectedVideoFile) {
+                        if (!storage) {
+                          alert('❌ Firebase Storage is not configured. Please contact support or use a link instead.');
+                          setUploadingVideo(false);
+                          return;
+                        }
+
                         console.log('📤 Uploading video file to storage...');
-                        finalVideoLink = await uploadFileToStorage(
-                          selectedVideoFile,
-                          'videos',
-                          (progress) => setUploadProgress(progress)
-                        );
-                        console.log('✅ Video uploaded successfully:', finalVideoLink);
+                        console.log('File name:', selectedVideoFile.name);
+                        console.log('File size:', selectedVideoFile.size, 'bytes');
+
+                        try {
+                          finalVideoLink = await uploadFileToStorage(
+                            selectedVideoFile,
+                            'videos',
+                            (progress) => setUploadProgress(progress)
+                          );
+                          console.log('✅ Video uploaded successfully:', finalVideoLink);
+                        } catch (uploadError) {
+                          console.error('❌ Upload error:', uploadError);
+                          throw new Error(`Upload failed: ${uploadError.message}`);
+                        }
                       }
 
-                    if (finalVideoLink.trim()) {
+                    if (finalVideoLink && finalVideoLink.trim()) {
                       const newVideo = {
                         id: Date.now().toString(),
                         clientId: effectiveClientId,
@@ -1184,12 +1208,12 @@ const ClientPortal = () => {
                 <div className="space-y-4">
                   {calendarEvents
                     .filter(e => e.clientId === effectiveClientId)
-                    .sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .sort((a, b) => parseDateLocal(a.date) - parseDateLocal(b.date))
                     .map(event => (
                       <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50">
                         <div className="flex justify-between items-start mb-2">
                           <h4 className="font-semibold text-lg">{event.title}</h4>
-                          <span className="text-sm text-gray-600">{new Date(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          <span className="text-sm text-gray-600">{parseDateLocal(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
                         </div>
                         <p className="text-gray-600 text-sm mb-2">{event.description}</p>
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
@@ -1257,11 +1281,68 @@ const ClientPortal = () => {
               }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 mb-8">Save Social Logins</button>
 
               <h4 className="font-semibold mb-4">Profile & Branding</h4>
-              <p className="text-sm text-gray-600 mb-4">Upload your headshot and company logo (enter image URL or upload to a service like Imgur)</p>
+              <p className="text-sm text-gray-600 mb-4">Upload your headshot and company logo directly or enter an image URL</p>
 
               <div className="grid md:grid-cols-2 gap-6 mb-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Your Headshot</label>
+
+                  {/* File Upload */}
+                  <div className="mb-3">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-blue-400 transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            if (!storage) {
+                              alert('❌ Storage not configured. Please use URL instead.');
+                              return;
+                            }
+
+                            setUploadingHeadshot(true);
+                            setHeadshotProgress(0);
+
+                            try {
+                              const url = await uploadFileToStorage(
+                                file,
+                                'headshots',
+                                (progress) => setHeadshotProgress(progress)
+                              );
+                              setHeadshot(url);
+                              alert('✅ Headshot uploaded successfully!');
+                            } catch (error) {
+                              console.error('Upload error:', error);
+                              alert('❌ Upload failed: ' + error.message);
+                            } finally {
+                              setUploadingHeadshot(false);
+                              setHeadshotProgress(0);
+                            }
+                          }
+                        }}
+                        className="text-sm"
+                        disabled={uploadingHeadshot}
+                      />
+                    </div>
+                    {uploadingHeadshot && (
+                      <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          style={{ width: `${headshotProgress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* OR divider */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex-1 border-t border-gray-300"></div>
+                    <span className="text-gray-400 text-xs">OR</span>
+                    <div className="flex-1 border-t border-gray-300"></div>
+                  </div>
+
+                  {/* URL Input */}
                   <input
                     type="text"
                     value={headshot}
@@ -1269,6 +1350,7 @@ const ClientPortal = () => {
                     placeholder="https://example.com/your-photo.jpg"
                     className="w-full px-4 py-2 border rounded outline-none focus:ring-2 mb-3"
                   />
+
                   {headshot && (
                     <div className="border rounded-lg p-3 bg-gray-50">
                       <p className="text-xs text-gray-600 mb-2">Preview:</p>
@@ -1279,6 +1361,63 @@ const ClientPortal = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
+
+                  {/* File Upload */}
+                  <div className="mb-3">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-blue-400 transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            if (!storage) {
+                              alert('❌ Storage not configured. Please use URL instead.');
+                              return;
+                            }
+
+                            setUploadingLogo(true);
+                            setLogoProgress(0);
+
+                            try {
+                              const url = await uploadFileToStorage(
+                                file,
+                                'logos',
+                                (progress) => setLogoProgress(progress)
+                              );
+                              setCompanyLogo(url);
+                              alert('✅ Logo uploaded successfully!');
+                            } catch (error) {
+                              console.error('Upload error:', error);
+                              alert('❌ Upload failed: ' + error.message);
+                            } finally {
+                              setUploadingLogo(false);
+                              setLogoProgress(0);
+                            }
+                          }
+                        }}
+                        className="text-sm"
+                        disabled={uploadingLogo}
+                      />
+                    </div>
+                    {uploadingLogo && (
+                      <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          style={{ width: `${logoProgress}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* OR divider */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex-1 border-t border-gray-300"></div>
+                    <span className="text-gray-400 text-xs">OR</span>
+                    <div className="flex-1 border-t border-gray-300"></div>
+                  </div>
+
+                  {/* URL Input */}
                   <input
                     type="text"
                     value={companyLogo}
@@ -1286,6 +1425,7 @@ const ClientPortal = () => {
                     placeholder="https://example.com/logo.png"
                     className="w-full px-4 py-2 border rounded outline-none focus:ring-2 mb-3"
                   />
+
                   {companyLogo && (
                     <div className="border rounded-lg p-3 bg-gray-50">
                       <p className="text-xs text-gray-600 mb-2">Preview:</p>
@@ -1533,13 +1673,23 @@ const ClientPortal = () => {
 
     const sendSMS = async (phoneNumber, message) => {
       try {
-        await fetch('/api/send-sms', {
+        console.log('📱 Sending SMS to:', phoneNumber);
+        const response = await fetch('/api/send-sms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ to: phoneNumber, message })
         });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error('❌ SMS failed:', result.error);
+          console.error('Check Twilio credentials in environment variables');
+        } else {
+          console.log('✅ SMS sent successfully:', result.messageSid);
+        }
       } catch (error) {
-        console.error('Failed to send SMS:', error);
+        console.error('❌ Failed to send SMS:', error);
       }
     };
 
@@ -1617,6 +1767,14 @@ const ClientPortal = () => {
     };
 
     // Calendar helper functions
+    // Helper to format date to YYYY-MM-DD in local timezone (not UTC)
+    const formatDateLocal = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
     const getDaysInMonth = (date) => {
       const year = date.getFullYear();
       const month = date.getMonth();
@@ -1639,7 +1797,7 @@ const ClientPortal = () => {
 
     const getEventsForDate = (date) => {
       if (!date) return [];
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = formatDateLocal(date);
       return calendarEvents.filter(event => event.date === dateStr);
     };
 
@@ -1678,7 +1836,7 @@ const ClientPortal = () => {
 
           {/* Today's Scheduled Content */}
           {(() => {
-            const today = new Date().toISOString().split('T')[0];
+            const today = formatDateLocal(new Date());
             const todaysEvents = calendarEvents.filter(event => event.date === today);
 
             if (todaysEvents.length > 0) {
@@ -2171,8 +2329,11 @@ const ClientPortal = () => {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Schedule Date</label>
                     <input
                       type="date"
-                      value={selectedDate ? selectedDate.toISOString().split('T')[0] : ''}
-                      onChange={(e) => setSelectedDate(new Date(e.target.value + 'T00:00:00'))}
+                      value={selectedDate ? formatDateLocal(selectedDate) : ''}
+                      onChange={(e) => {
+                        const [year, month, day] = e.target.value.split('-').map(Number);
+                        setSelectedDate(new Date(year, month - 1, day));
+                      }}
                       className="w-full px-4 py-2 border rounded"
                     />
                   </div>
@@ -2190,7 +2351,7 @@ const ClientPortal = () => {
                           clientId: selectedContent.clientId,
                           title: selectedContent.title,
                           description: selectedContent.description,
-                          date: selectedDate.toISOString().split('T')[0],
+                          date: formatDateLocal(selectedDate),
                           type: selectedContent.type,
                           contentId: selectedContent.id,
                           createdAt: new Date().toISOString()

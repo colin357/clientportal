@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const goals = Array.isArray(onboardingAnswers.goals) ? onboardingAnswers.goals.join(', ') : onboardingAnswers.goals || 'marketing';
     const brandVoice = Array.isArray(onboardingAnswers.brandVoice) ? onboardingAnswers.brandVoice.join(', ') : onboardingAnswers.brandVoice || 'professional';
 
-    const prompt = `You are a professional marketing content creator. Generate 20 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
+    const prompt = `You are a professional marketing content creator. Generate 15 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
 
 Target Audience: ${targetAudience}
 Goals: ${goals}
@@ -35,35 +35,33 @@ Brand Voice: ${brandVoice}
 ${onboardingAnswers.differentiators ? `What makes them unique: ${onboardingAnswers.differentiators}` : ''}
 ${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}
 
-Please create 5 pieces of each of the following types:
+Please create EXACTLY 5 pieces of each of the following types (15 total):
 
 **Social Media Posts (5 pieces):**
 - Engaging posts for platforms like Instagram, Facebook, LinkedIn
 - Include hooks, value propositions, and calls-to-action
 - Vary the style: educational, inspirational, promotional, storytelling, engagement-focused
-
-**Email Marketing Campaigns (5 pieces):**
-- Subject lines and full email body
-- Various purposes: nurture, promotion, newsletter, re-engagement, event invitation
-- Personalized and conversion-focused
+- Keep posts concise and platform-appropriate
 
 **Blog Posts (5 pieces):**
 - Full blog post with title, introduction, main points, and conclusion
 - Topics relevant to ${industry} and ${targetAudience}
 - SEO-friendly and valuable content
+- Aim for 300-500 words each
 
-**Content Ideas (5 pieces):**
-- Creative content concepts for various platforms
-- Video ideas, infographic topics, case studies, testimonials, FAQs
-- Actionable and unique to the business
+**Email Campaigns (5 pieces):**
+- Subject lines and full email body
+- Various purposes: nurture, promotion, newsletter, re-engagement, event invitation
+- Personalized and conversion-focused
+- Include clear CTAs
 
 For each piece, provide:
-- type: "social", "email", "blog", or "content-idea"
+- type: "social", "blog", or "email"
 - title: Catchy and relevant title
 - content: Complete, ready-to-use content
 - description: Brief summary of the piece
 
-Format as a JSON array with exactly 20 objects.`;
+Format as a JSON array with exactly 15 objects (5 social, 5 blog, 5 email).`;
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -77,7 +75,7 @@ Format as a JSON array with exactly 20 objects.`;
         messages: [
           {
             role: 'system',
-            content: 'You are a professional marketing content writer specializing in real estate and mortgage industries. Always respond with valid JSON arrays containing exactly 20 content pieces.'
+            content: 'You are a professional marketing content writer specializing in real estate and mortgage industries. Always respond with valid JSON arrays containing exactly 15 content pieces (5 social posts, 5 blog posts, 5 email campaigns).'
           },
           {
             role: 'user',

@@ -532,18 +532,28 @@ const ClientPortal = () => {
     const generatePersonalizedContent = async () => {
       // Check if we should generate content
       const lastGenerated = currentUser.lastContentGeneration;
-      const today = new Date().toDateString();
-      const dayOfWeek = new Date().getDay();
+      const today = new Date();
+      const todayString = today.toDateString();
+      const dayOfWeek = today.getDay();
 
-      // Generate on first login (no lastGenerated) or on Sundays if not generated today
-      const shouldGenerate = !lastGenerated || (dayOfWeek === 0 && lastGenerated !== today);
+      // Only generate on first time (no lastGenerated) OR on Sundays if not already generated today
+      const isFirstTime = !lastGenerated;
+      const isSundayAndNotGenerated = dayOfWeek === 0 && lastGenerated !== todayString;
+      const shouldGenerate = (isFirstTime || isSundayAndNotGenerated) && currentUser.onboardingAnswers;
 
-      if (!shouldGenerate || !currentUser.onboardingAnswers) {
+      if (!shouldGenerate) {
+        console.log('⏭️ Skipping content generation:', {
+          isFirstTime,
+          isSundayAndNotGenerated,
+          dayOfWeek,
+          lastGenerated,
+          todayString
+        });
         return;
       }
 
       try {
-        console.log('🤖 Generating personalized content...');
+        console.log('🤖 Generating personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
         const response = await fetch('/api/generate-personalized-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -558,7 +568,14 @@ const ClientPortal = () => {
         }
 
         const data = await response.json();
-        const newContent = data.contentPieces.map(piece => ({
+
+        // Map and limit to exactly 15 pieces (5 of each type)
+        const socialPosts = data.contentPieces.filter(p => p.type === 'social').slice(0, 5);
+        const blogPosts = data.contentPieces.filter(p => p.type === 'blog').slice(0, 5);
+        const emailCampaigns = data.contentPieces.filter(p => p.type === 'email').slice(0, 5);
+        const limitedPieces = [...socialPosts, ...blogPosts, ...emailCampaigns];
+
+        const newContent = limitedPieces.map(piece => ({
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           clientId: effectiveClientId,
           type: piece.type || 'content-idea',
@@ -572,14 +589,15 @@ const ClientPortal = () => {
         // Save the new content
         await saveContent([...content, ...newContent]);
 
-        // Update user's last generation date
-        const updatedUser = { ...currentUser, lastContentGeneration: today };
+        // Update user's last generation date - IMPORTANT: Save this immediately
+        const updatedUser = { ...currentUser, lastContentGeneration: todayString };
         setCurrentUser(updatedUser);
         await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+        saveSession(updatedUser, 'dashboard');
 
-        console.log(`✅ Generated ${newContent.length} personalized content pieces`);
+        console.log(`✅ Generated ${newContent.length} personalized content pieces (${socialPosts.length} social, ${blogPosts.length} blog, ${emailCampaigns.length} email)`);
       } catch (error) {
-        console.error('Error generating personalized content:', error);
+        console.error('❌ Error generating personalized content:', error);
       }
     };
 

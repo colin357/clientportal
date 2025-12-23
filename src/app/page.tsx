@@ -1,97 +1,234 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 
 // Firebase configuration - Replace with your Firebase project credentials
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "your-api-key",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "your-auth-domain",
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "your-project-id",
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "your-storage-bucket",
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "your-sender-id",
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "your-app-id"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Check if Firebase is properly configured
+const isFirebaseConfigured = () => {
+  const isConfigured = !!(
+    firebaseConfig.apiKey &&
+    firebaseConfig.projectId &&
+    firebaseConfig.apiKey !== 'your-api-key' &&
+    firebaseConfig.projectId !== 'your-project-id'
+  );
+
+  if (!isConfigured) {
+    console.error('❌ Firebase is not properly configured!');
+    console.error('Please set up your Firebase environment variables in Vercel:');
+    console.error('- NEXT_PUBLIC_FIREBASE_API_KEY');
+    console.error('- NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
+    console.error('- NEXT_PUBLIC_FIREBASE_PROJECT_ID');
+    console.error('- NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET');
+    console.error('- NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID');
+    console.error('- NEXT_PUBLIC_FIREBASE_APP_ID');
+  } else {
+    console.log('✅ Firebase configuration detected');
+    console.log('Project ID:', firebaseConfig.projectId);
+  }
+
+  return isConfigured;
+};
+
+// Initialize Firebase (only if not already initialized)
+let app;
+let db;
+
+try {
+  if (isFirebaseConfigured()) {
+    if (!getApps().length) {
+      app = initializeApp(firebaseConfig);
+      console.log('✅ Firebase initialized successfully');
+    } else {
+      app = getApps()[0];
+      console.log('✅ Using existing Firebase app');
+    }
+    db = getFirestore(app);
+    console.log('✅ Firestore connected');
+  } else {
+    console.warn('⚠️ Firebase not configured - app will not save data to cloud');
+  }
+} catch (error) {
+  console.error('❌ Firebase initialization error:', error);
+}
 
 const ClientPortal = () => {
   const [view, setView] = useState('login');
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [content, setContent] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
 
   useEffect(() => {
     loadData();
+    restoreSession();
   }, []);
 
-  const loadData = async () => {
+  const restoreSession = () => {
     try {
+      const savedSession = localStorage.getItem('userSession');
+      if (savedSession) {
+        const sessionData = JSON.parse(savedSession);
+        setCurrentUser(sessionData.user);
+        setView(sessionData.view);
+        console.log('✅ Session restored for:', sessionData.user.email || sessionData.user.role);
+      }
+    } catch (error) {
+      console.error('❌ Error restoring session:', error);
+      localStorage.removeItem('userSession');
+    }
+  };
+
+  const saveSession = (user, viewName) => {
+    try {
+      localStorage.setItem('userSession', JSON.stringify({ user, view: viewName }));
+      console.log('💾 Session saved');
+    } catch (error) {
+      console.error('❌ Error saving session:', error);
+    }
+  };
+
+  const clearSession = () => {
+    localStorage.removeItem('userSession');
+    console.log('🗑️ Session cleared');
+  };
+
+  const loadData = async () => {
+    if (!db) {
+      console.warn('⚠️ Firestore not available - skipping data load');
+      return;
+    }
+
+    try {
+      console.log('📥 Loading data from Firestore...');
+
       // Load users from Firestore
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const usersData = usersSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`✅ Loaded ${usersData.length} users from Firestore`);
       setUsers(usersData);
 
       // Load content from Firestore
       const contentSnapshot = await getDocs(collection(db, 'content'));
       const contentData = contentSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`✅ Loaded ${contentData.length} content items from Firestore`);
       setContent(contentData);
+
+      // Load calendar events from Firestore
+      const eventsSnapshot = await getDocs(collection(db, 'calendarEvents'));
+      const eventsData = eventsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`✅ Loaded ${eventsData.length} calendar events from Firestore`);
+      setCalendarEvents(eventsData);
     } catch (e) {
-      console.error('Error loading data from cloud:', e);
+      console.error('❌ Error loading data from cloud:', e);
+      console.error('Error details:', e.message);
     }
   };
 
   const saveUsers = async (u) => {
     setUsers(u);
+
+    if (!db) {
+      console.warn('⚠️ Firestore not available - users not saved to cloud');
+      return;
+    }
+
     try {
+      console.log(`💾 Saving ${u.length} users to Firestore...`);
       // Save each user to Firestore
       for (const user of u) {
         await setDoc(doc(db, 'users', user.id), user);
+        console.log(`✅ Saved user: ${user.email} (ID: ${user.id})`);
       }
+      console.log('✅ All users saved successfully');
     } catch (e) {
-      console.error('Error saving users to cloud:', e);
+      console.error('❌ Error saving users to cloud:', e);
+      console.error('Error details:', e.message);
     }
   };
 
   const saveContent = async (c) => {
     setContent(c);
+
+    if (!db) {
+      console.warn('⚠️ Firestore not available - content not saved to cloud');
+      return;
+    }
+
     try {
+      console.log(`💾 Saving ${c.length} content items to Firestore...`);
       // Save each content item to Firestore
       for (const item of c) {
         await setDoc(doc(db, 'content', item.id), item);
+        console.log(`✅ Saved content: ${item.title} (ID: ${item.id})`);
       }
+      console.log('✅ All content saved successfully');
     } catch (e) {
-      console.error('Error saving content to cloud:', e);
+      console.error('❌ Error saving content to cloud:', e);
+      console.error('Error details:', e.message);
+    }
+  };
+
+  const saveCalendarEvents = async (events) => {
+    setCalendarEvents(events);
+
+    if (!db) {
+      console.warn('⚠️ Firestore not available - calendar events not saved to cloud');
+      return;
+    }
+
+    try {
+      console.log(`💾 Saving ${events.length} calendar events to Firestore...`);
+      for (const event of events) {
+        await setDoc(doc(db, 'calendarEvents', event.id), event);
+        console.log(`✅ Saved event: ${event.title} (ID: ${event.id})`);
+      }
+      console.log('✅ All calendar events saved successfully');
+    } catch (e) {
+      console.error('❌ Error saving calendar events to cloud:', e);
+      console.error('Error details:', e.message);
     }
   };
 
   const handleLogin = (email, password) => {
     const user = users.find(u => u.email === email && u.password === password);
     if (user) {
+      const targetView = user.onboarded ? 'dashboard' : 'onboarding';
       setCurrentUser(user);
-      setView(user.onboarded ? 'dashboard' : 'onboarding');
+      setView(targetView);
+      saveSession(user, targetView);
       return true;
     }
     return false;
   };
 
-  const handleSignup = async (email, password, companyName, firstName) => {
+  const handleSignup = async (email, password, companyName, firstName, lastName, phoneNumber) => {
     const newUser = {
       id: Date.now().toString(),
       email,
       password,
       companyName,
       firstName,
+      lastName,
+      phoneNumber,
       onboarded: false,
       createdAt: new Date().toISOString()
     };
     setCurrentUser(newUser);
     setView('onboarding');
+    saveSession(newUser, 'onboarding');
     await saveUsers([...users, newUser]);
   };
 
@@ -99,6 +236,7 @@ const ClientPortal = () => {
     const updatedUser = { ...currentUser, onboarded: true, onboardingAnswers: answers };
     setCurrentUser(updatedUser);
     setView('dashboard');
+    saveSession(updatedUser, 'dashboard');
     await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
   };
 
@@ -126,17 +264,19 @@ const ClientPortal = () => {
     const [password, setPassword] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async () => {
       setError('');
       if (isSignup) {
-        if (!companyName.trim() || !firstName.trim()) {
+        if (!companyName.trim() || !firstName.trim() || !lastName.trim() || !phoneNumber.trim()) {
           setError('All fields required');
           return;
         }
-        await handleSignup(email, password, companyName, firstName);
+        await handleSignup(email, password, companyName, firstName, lastName, phoneNumber);
       } else {
         if (!handleLogin(email, password)) setError('Invalid credentials');
       }
@@ -154,6 +294,14 @@ const ClientPortal = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                   <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                  <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+1234567890" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
@@ -200,8 +348,10 @@ const ClientPortal = () => {
 
     const handleSubmit = () => {
       if (password === 'admin123') {
-        setCurrentUser({ id: 'admin', email: 'admin', role: 'admin' });
+        const adminUser = { id: 'admin', email: 'admin', role: 'admin' };
+        setCurrentUser(adminUser);
         setView('admin');
+        saveSession(adminUser, 'admin');
       } else {
         setError('Invalid admin password');
       }
@@ -237,23 +387,52 @@ const ClientPortal = () => {
   function OnboardingView() {
     const [currentStep, setCurrentStep] = useState(0);
     const [answers, setAnswers] = useState({
-      industry: '', targetAudience: '', goals: '', brandVoice: '', competitors: ''
+      industry: [], targetAudience: [], goals: [], brandVoice: [], competitors: '',
+      differentiators: '', primaryMarkets: '', pricePoint: '', styleInspirations: '', successMetrics: '', agencyExperience: ''
+    });
+    const [otherInputs, setOtherInputs] = useState({
+      industry: '', targetAudience: '', goals: '', brandVoice: ''
     });
 
-    const industries = ['E-commerce', 'SaaS', 'Healthcare', 'Finance', 'Real Estate', 'Education', 'Food & Beverage', 'Technology', 'Consulting', 'Other'];
-    const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs', 'Other'];
-    const goalOptions = ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product', 'Other'];
+    const industries = ['Realtor', 'Loan Officer'];
+    const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'];
+    const goalOptions = ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'];
     const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
 
     const questions = [
-      { type: 'buttons', key: 'industry', label: 'What industry are you in?', options: industries },
-      { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience?', options: audiences },
-      { type: 'buttons', key: 'goals', label: 'What are your main marketing goals?', options: goalOptions },
-      { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice?', options: voiceOptions },
-      { type: 'text', key: 'competitors', label: 'Who are your main competitors?', placeholder: 'e.g., Company A, Company B' }
+      { type: 'buttons', key: 'industry', label: 'What do you do?', options: industries },
+      { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
+      { type: 'buttons', key: 'goals', label: 'What are your main marketing goals? (Select all that apply)', options: goalOptions },
+      { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },
+      { type: 'text', key: 'competitors', label: 'Who are your main competitors?', placeholder: 'e.g., Company A, Company B' },
+      { type: 'text', key: 'differentiators', label: 'What separates you from your competitors?', placeholder: 'Describe what makes you unique...' },
+      { type: 'text', key: 'primaryMarkets', label: 'What are your primary markets? (locations)', placeholder: 'e.g., Los Angeles, Orange County, San Diego' },
+      { type: 'text', key: 'pricePoint', label: 'Average price point or loan size', placeholder: 'e.g., $500K-$1M, $300K loans' },
+      { type: 'text', key: 'styleInspirations', label: 'Are there creators or competitors whose style you like?', placeholder: 'List any accounts or brands you admire...' },
+      { type: 'text', key: 'successMetrics', label: 'What does success look like in the next 30, 60, and 90 days?', placeholder: 'Describe your goals for each timeframe...' },
+      { type: 'text', key: 'agencyExperience', label: 'Have you worked with a marketing agency before? What did you like or dislike?', placeholder: 'Share your experience...' }
     ];
 
     const currentQuestion = questions[currentStep];
+
+    const toggleOption = (key, option) => {
+      const current = answers[key] || [];
+      if (current.includes(option)) {
+        setAnswers({ ...answers, [key]: current.filter(item => item !== option) });
+      } else {
+        setAnswers({ ...answers, [key]: [...current, option] });
+      }
+    };
+
+    const isAnswerValid = () => {
+      if (currentQuestion.type === 'text') {
+        return answers[currentQuestion.key]?.trim();
+      } else {
+        const hasSelection = answers[currentQuestion.key]?.length > 0;
+        const hasOtherText = answers[currentQuestion.key]?.includes('Other') ? otherInputs[currentQuestion.key]?.trim() : true;
+        return hasSelection && hasOtherText;
+      }
+    };
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4 flex items-center justify-center">
@@ -269,17 +448,25 @@ const ClientPortal = () => {
 
           <div className="mb-2 text-sm text-purple-600 font-medium">Question {currentStep + 1} of {questions.length}</div>
           <label className="block text-xl font-semibold text-gray-800 mb-4">{currentQuestion.label}</label>
-          
+
           {currentQuestion.type === 'text' ? (
             <textarea value={answers[currentQuestion.key]} onChange={(e) => setAnswers({ ...answers, [currentQuestion.key]: e.target.value })} placeholder={currentQuestion.placeholder} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-6" rows="4" />
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-              {currentQuestion.options.map(opt => (
-                <button key={opt} onClick={() => setAnswers({ ...answers, [currentQuestion.key]: opt })} className={`px-4 py-3 rounded-lg border-2 transition ${answers[currentQuestion.key] === opt ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
-                  {opt}
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {currentQuestion.options.map(opt => (
+                  <button key={opt} onClick={() => toggleOption(currentQuestion.key, opt)} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes(opt) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                    {opt}
+                  </button>
+                ))}
+                <button onClick={() => toggleOption(currentQuestion.key, 'Other')} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes('Other') ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                  Other
                 </button>
-              ))}
-            </div>
+              </div>
+              {(answers[currentQuestion.key] || []).includes('Other') && (
+                <input type="text" value={otherInputs[currentQuestion.key] || ''} onChange={(e) => setOtherInputs({ ...otherInputs, [currentQuestion.key]: e.target.value })} placeholder="Please specify..." className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6" />
+              )}
+            </>
           )}
 
           <div className="flex gap-3">
@@ -289,11 +476,25 @@ const ClientPortal = () => {
               </button>
             )}
             <button onClick={() => {
-              if (answers[currentQuestion.key].trim()) {
-                if (currentStep < questions.length - 1) setCurrentStep(currentStep + 1);
-                else handleOnboarding(answers);
+              if (currentStep < questions.length - 1) {
+                setCurrentStep(currentStep + 1);
+              } else {
+                const finalAnswers = { ...answers, otherInputs };
+                handleOnboarding(finalAnswers);
               }
-            }} disabled={!answers[currentQuestion.key].trim()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
+            }} className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
+              Skip
+            </button>
+            <button onClick={() => {
+              if (isAnswerValid()) {
+                if (currentStep < questions.length - 1) {
+                  setCurrentStep(currentStep + 1);
+                } else {
+                  const finalAnswers = { ...answers, otherInputs };
+                  handleOnboarding(finalAnswers);
+                }
+              }
+            }} disabled={!isAnswerValid()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
               {currentStep < questions.length - 1 ? <><span>Next</span><ChevronRight className="w-5 h-5" /></> : 'Complete Setup'}
             </button>
           </div>
@@ -303,24 +504,111 @@ const ClientPortal = () => {
   }
 
   function DashboardView() {
-    const clientContent = content.filter(c => c.clientId === currentUser.id);
+    // Team members should see content for their parent client
+    const effectiveClientId = currentUser.parentClientId || currentUser.id;
+    const clientContent = content.filter(c => c.clientId === effectiveClientId);
     const [selectedContent, setSelectedContent] = useState(null);
     const [feedback, setFeedback] = useState('');
     const [activePage, setActivePage] = useState('content');
     const [teamEmail, setTeamEmail] = useState('');
     const [teamPass, setTeamPass] = useState('');
+    const [teamName, setTeamName] = useState('');
     const [expanded, setExpanded] = useState(null);
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', crm: ''
     });
+    const [headshot, setHeadshot] = useState(currentUser.headshot || '');
+    const [companyLogo, setCompanyLogo] = useState(currentUser.companyLogo || '');
     const [videoLink, setVideoLink] = useState('');
     const [videoDescription, setVideoDescription] = useState('');
+    const [userVideos, setUserVideos] = useState([]);
+
+    useEffect(() => {
+      loadUserVideos();
+      generatePersonalizedContent();
+    }, []);
+
+    const generatePersonalizedContent = async () => {
+      // Check if we should generate content
+      const lastGenerated = currentUser.lastContentGeneration;
+      const today = new Date().toDateString();
+      const dayOfWeek = new Date().getDay();
+
+      // Generate on first login (no lastGenerated) or on Sundays if not generated today
+      const shouldGenerate = !lastGenerated || (dayOfWeek === 0 && lastGenerated !== today);
+
+      if (!shouldGenerate || !currentUser.onboardingAnswers) {
+        return;
+      }
+
+      try {
+        console.log('🤖 Generating personalized content...');
+        const response = await fetch('/api/generate-personalized-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user: currentUser,
+            onboardingAnswers: currentUser.onboardingAnswers
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate content');
+        }
+
+        const data = await response.json();
+        const newContent = data.contentPieces.map(piece => ({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          clientId: effectiveClientId,
+          type: piece.type || 'content-idea',
+          title: piece.title || 'Generated Content',
+          description: piece.description || 'AI-generated personalized content',
+          content: piece.content || '',
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        }));
+
+        // Save the new content
+        await saveContent([...content, ...newContent]);
+
+        // Update user's last generation date
+        const updatedUser = { ...currentUser, lastContentGeneration: today };
+        setCurrentUser(updatedUser);
+        await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+
+        console.log(`✅ Generated ${newContent.length} personalized content pieces`);
+      } catch (error) {
+        console.error('Error generating personalized content:', error);
+      }
+    };
+
+    const loadUserVideos = async () => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available - skipping videos load');
+        setUserVideos([]);
+        return;
+      }
+
+      try {
+        console.log('📥 Loading user videos from Firestore...');
+        const videosSnapshot = await getDocs(collection(db, 'videos'));
+        const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        // Team members should see videos for their parent client
+        const clientVideos = videosData.filter(v => v.clientId === effectiveClientId);
+        console.log(`✅ Loaded ${clientVideos.length} videos for current user`);
+        setUserVideos(clientVideos);
+      } catch (e) {
+        console.error('❌ Error loading videos from cloud:', e);
+        console.error('Error details:', e.message);
+        setUserVideos([]);
+      }
+    };
 
     const navItems = [
       { id: 'social', label: 'Social Media', icon: Share2 },
+      { id: 'calendar', label: 'Content Calendar', icon: Calendar },
       { id: 'crm', label: 'CRM', icon: Users },
-      { id: 'ai-generator', label: 'AI Content Generator', icon: Sparkles },
       { id: 'ai', label: 'AI Optimization', icon: Sparkles },
       { id: 'team', label: 'Team Members', icon: UserPlus },
       { id: 'settings', label: 'Settings', icon: Settings }
@@ -334,7 +622,7 @@ const ClientPortal = () => {
               <h1 className="text-2xl font-bold text-gray-800">{currentUser.companyName}</h1>
               <p className="text-sm text-gray-600">Content Review Portal</p>
             </div>
-            <button onClick={() => { setCurrentUser(null); setView('login'); }} className="text-gray-600 hover:text-gray-800">Logout</button>
+            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-600 hover:text-gray-800">Logout</button>
           </div>
         </nav>
 
@@ -412,20 +700,30 @@ const ClientPortal = () => {
                     if (videoLink.trim()) {
                       const newVideo = {
                         id: Date.now().toString(),
-                        clientId: currentUser.id,
+                        clientId: effectiveClientId,
                         videoLink,
                         description: videoDescription,
                         status: 'pending',
                         submittedAt: new Date().toISOString()
                       };
                       try {
+                        if (!db) {
+                          alert('⚠️ Cloud storage not configured. Video not saved.');
+                          console.error('❌ Firestore not available');
+                          return;
+                        }
+
                         // Save video to Firestore
+                        console.log('💾 Submitting video to Firestore...');
                         await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+                        console.log('✅ Video submitted successfully:', newVideo.id);
                         setVideoLink('');
                         setVideoDescription('');
+                        await loadUserVideos(); // Reload videos to show the new submission
                         alert('Video submitted successfully!');
                       } catch (error) {
-                        console.error('Error submitting video:', error);
+                        console.error('❌ Error submitting video:', error);
+                        console.error('Error details:', error.message);
                         alert('Error submitting video. Please try again.');
                       }
                     }
@@ -433,6 +731,59 @@ const ClientPortal = () => {
                     Submit Video
                   </button>
                 </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Video Submissions</h3>
+                {userVideos.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">No videos submitted yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {userVideos.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)).map(video => (
+                      <div key={video.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold text-gray-800">
+                                {video.description || 'Video Submission'}
+                              </h4>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                video.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                video.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                                {video.status === 'in-progress' ? 'In Progress' : video.status.charAt(0).toUpperCase() + video.status.slice(1)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              Submitted {new Date(video.submittedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div>
+                            <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
+                              <FileText className="w-4 h-4" />Raw Video File
+                            </a>
+                          </div>
+
+                          {video.status === 'completed' && video.completedLink && (
+                            <div className="mt-2 p-3 bg-green-50 rounded">
+                              <p className="text-sm font-medium text-green-800 mb-1">Completed!</p>
+                              <a href={video.completedLink} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline text-sm flex items-center gap-2">
+                                <FileText className="w-4 h-4" />Download Edited Video
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="bg-white rounded-lg shadow p-6">
@@ -483,50 +834,63 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Team Members</h3>
               <p className="text-gray-600 mb-6">Add team members to collaborate on your marketing</p>
-              
+
               <div className="space-y-4 max-w-md mb-8">
+                <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="Full Name" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <input type="email" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="Email" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <input type="password" value={teamPass} onChange={(e) => setTeamPass(e.target.value)} placeholder="Password" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
                 <button onClick={async () => {
-                  if (teamEmail.trim() && teamPass.trim()) {
+                  if (teamName.trim() && teamEmail.trim() && teamPass.trim()) {
                     await saveUsers([...users, {
                       id: Date.now().toString(),
                       email: teamEmail,
                       password: teamPass,
                       companyName: currentUser.companyName,
-                      firstName: 'Team Member',
+                      firstName: teamName,
                       onboarded: true,
-                      parentClientId: currentUser.id,
+                      parentClientId: effectiveClientId,
                       createdAt: new Date().toISOString()
                     }]);
+                    setTeamName('');
                     setTeamEmail('');
                     setTeamPass('');
                   }
-                }} disabled={!teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
+                }} disabled={!teamName.trim() || !teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
               </div>
 
               <div className="border-t pt-6">
                 <h4 className="font-semibold text-gray-800 mb-4">Current Team Members</h4>
                 <div className="space-y-2">
-                  {users.filter(u => u.parentClientId === currentUser.id).map(member => (
+                  {users.filter(u => u.parentClientId === effectiveClientId).map(member => (
                     <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
-                        <span className="text-gray-700">{member.email}</span>
-                        <span className="text-xs text-gray-500 ml-3">Added {new Date(member.createdAt).toLocaleDateString()}</span>
+                        <div className="text-gray-700 font-medium">{member.firstName}</div>
+                        <div className="text-sm text-gray-600">{member.email}</div>
+                        <span className="text-xs text-gray-500">Added {new Date(member.createdAt).toLocaleDateString()}</span>
                       </div>
                       <button onClick={async () => {
                         try {
+                          if (!db) {
+                            console.error('❌ Firestore not available');
+                            alert('⚠️ Cloud storage not configured. Cannot remove team member.');
+                            return;
+                          }
+
+                          console.log(`🗑️ Removing team member: ${member.email}`);
                           // Delete user from Firestore
                           await deleteDoc(doc(db, 'users', member.id));
+                          console.log('✅ Team member deleted from Firestore');
+
                           // Update local state
                           await saveUsers(users.filter(u => u.id !== member.id));
                         } catch (e) {
-                          console.error('Error removing team member:', e);
+                          console.error('❌ Error removing team member:', e);
+                          console.error('Error details:', e.message);
                         }
                       }} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
                     </div>
                   ))}
-                  {users.filter(u => u.parentClientId === currentUser.id).length === 0 && (
+                  {users.filter(u => u.parentClientId === effectiveClientId).length === 0 && (
                     <p className="text-gray-500 text-sm">No team members added yet</p>
                   )}
                 </div>
@@ -534,29 +898,78 @@ const ClientPortal = () => {
             </div>
           )}
 
+          {activePage === 'calendar' && (
+            <div className="bg-white rounded-lg shadow p-8">
+              <h3 className="text-2xl font-semibold mb-6">Content Calendar</h3>
+              <p className="text-gray-600 mb-6">View your upcoming content schedule</p>
+
+              {calendarEvents.filter(e => e.clientId === effectiveClientId).length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No scheduled events yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {calendarEvents
+                    .filter(e => e.clientId === effectiveClientId)
+                    .sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .map(event => (
+                      <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-semibold text-lg">{event.title}</h4>
+                          <span className="text-sm text-gray-600">{new Date(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        </div>
+                        <p className="text-gray-600 text-sm mb-2">{event.description}</p>
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                          event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                          event.type === 'email' ? 'bg-green-100 text-green-800' :
+                          event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {event.type}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {activePage === 'settings' && (
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Settings</h3>
               <div className="space-y-3 mb-8">
-                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => (
-                  <div key={key} className="border rounded">
-                    <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
-                      <span className="font-medium capitalize">{key}</span>
-                      <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
-                    </button>
-                    {expanded === key && (
-                      <div className="px-4 pb-4">
-                        <textarea value={editedAnswers[key] || ''} onChange={(e) => setEditedAnswers({ ...editedAnswers, [key]: e.target.value })} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
-                        <button onClick={async () => {
-                          const updated = { ...currentUser, onboardingAnswers: editedAnswers };
-                          setCurrentUser(updated);
-                          await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-                          setExpanded(null);
-                        }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => {
+                  const value = editedAnswers[key];
+                  const displayValue = Array.isArray(value) ? value.join(', ') : (value || '');
+                  const isArrayField = key !== 'competitors';
+
+                  return (
+                    <div key={key} className="border rounded">
+                      <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
+                        <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                        <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
+                      </button>
+                      {expanded === key && (
+                        <div className="px-4 pb-4">
+                          <div className="text-sm text-gray-600 mb-2">Current: {displayValue || 'Not set'}</div>
+                          <textarea value={displayValue} onChange={(e) => {
+                            const newValue = isArrayField ? e.target.value.split(',').map(s => s.trim()).filter(s => s) : e.target.value;
+                            setEditedAnswers({ ...editedAnswers, [key]: newValue });
+                          }} placeholder={isArrayField ? 'Enter comma-separated values' : 'Enter text...'} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
+                          {isArrayField && <p className="text-xs text-gray-500 mb-3">Separate multiple values with commas</p>}
+                          <button onClick={async () => {
+                            const updated = { ...currentUser, onboardingAnswers: editedAnswers };
+                            setCurrentUser(updated);
+                            await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                            saveSession(updated, 'dashboard');
+                            setExpanded(null);
+                          }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <h4 className="font-semibold mb-4">Social Media Logins</h4>
@@ -569,7 +982,53 @@ const ClientPortal = () => {
                 const updated = { ...currentUser, socialLogins };
                 setCurrentUser(updated);
                 await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700">Save Social Logins</button>
+              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 mb-8">Save Social Logins</button>
+
+              <h4 className="font-semibold mb-4">Profile & Branding</h4>
+              <p className="text-sm text-gray-600 mb-4">Upload your headshot and company logo (enter image URL or upload to a service like Imgur)</p>
+
+              <div className="grid md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Your Headshot</label>
+                  <input
+                    type="text"
+                    value={headshot}
+                    onChange={(e) => setHeadshot(e.target.value)}
+                    placeholder="https://example.com/your-photo.jpg"
+                    className="w-full px-4 py-2 border rounded outline-none focus:ring-2 mb-3"
+                  />
+                  {headshot && (
+                    <div className="border rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs text-gray-600 mb-2">Preview:</p>
+                      <img src={headshot} alt="Headshot" className="w-32 h-32 object-cover rounded-full mx-auto" onError={(e) => e.target.style.display = 'none'} />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
+                  <input
+                    type="text"
+                    value={companyLogo}
+                    onChange={(e) => setCompanyLogo(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    className="w-full px-4 py-2 border rounded outline-none focus:ring-2 mb-3"
+                  />
+                  {companyLogo && (
+                    <div className="border rounded-lg p-3 bg-gray-50">
+                      <p className="text-xs text-gray-600 mb-2">Preview:</p>
+                      <img src={companyLogo} alt="Company Logo" className="w-32 h-32 object-contain mx-auto" onError={(e) => e.target.style.display = 'none'} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button onClick={async () => {
+                const updated = { ...currentUser, headshot, companyLogo };
+                setCurrentUser(updated);
+                await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                saveSession(updated, 'dashboard');
+              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700">Save Profile & Branding</button>
             </div>
           )}
         </div>
@@ -634,20 +1093,26 @@ const ClientPortal = () => {
     const generateContent = async () => {
       setIsGenerating(true);
       try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
+        const response = await fetch('/api/generate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [{ role: 'user', content: `Create a ${contentType} about ${topic} for ${audience}. The tone should be ${tone}. Please write compelling, engaging content that resonates with this audience.` }]
+            topic,
+            contentType,
+            audience,
+            tone
           })
         });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate content');
+        }
+
         const data = await response.json();
-        const content = data.content.map(item => item.text || '').join('\n');
-        setGeneratedContent(content);
+        setGeneratedContent(data.content || 'No content generated');
         setStep(4);
       } catch (error) {
+        console.error('Error generating content:', error);
         setGeneratedContent('Sorry, there was an error generating content. Please try again.');
         setStep(4);
       }
@@ -738,40 +1203,84 @@ const ClientPortal = () => {
     });
     const [videos, setVideos] = useState([]);
     const [activeTab, setActiveTab] = useState('clients');
+    const [selectedUser, setSelectedUser] = useState(null);
 
     useEffect(() => {
       loadVideos();
     }, []);
 
     const loadVideos = async () => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available - skipping videos load');
+        setVideos([]);
+        return;
+      }
+
       try {
+        console.log('📥 Loading videos from Firestore...');
         // Load videos from Firestore
         const videosSnapshot = await getDocs(collection(db, 'videos'));
         const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`✅ Loaded ${videosData.length} videos from Firestore`);
         setVideos(videosData);
       } catch (e) {
-        console.error('Error loading videos from cloud:', e);
+        console.error('❌ Error loading videos from cloud:', e);
+        console.error('Error details:', e.message);
         setVideos([]);
       }
     };
 
     const saveVideos = async (v) => {
       setVideos(v);
+
+      if (!db) {
+        console.warn('⚠️ Firestore not available - videos not saved to cloud');
+        return;
+      }
+
       try {
+        console.log(`💾 Saving ${v.length} videos to Firestore...`);
         // Save each video to Firestore
         for (const video of v) {
           await setDoc(doc(db, 'videos', video.id), video);
+          console.log(`✅ Saved video: ${video.id}`);
         }
+        console.log('✅ All videos saved successfully');
       } catch (e) {
-        console.error('Error saving videos to cloud:', e);
+        console.error('❌ Error saving videos to cloud:', e);
+        console.error('Error details:', e.message);
+      }
+    };
+
+    const sendSMS = async (phoneNumber, message) => {
+      try {
+        await fetch('/api/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: phoneNumber, message })
+        });
+      } catch (error) {
+        console.error('Failed to send SMS:', error);
       }
     };
 
     const updateVideoStatus = async (videoId, status, completedLink = '') => {
-      const updated = videos.map(v => 
+      const video = videos.find(v => v.id === videoId);
+      const updated = videos.map(v =>
         v.id === videoId ? { ...v, status, completedLink, completedAt: new Date().toISOString() } : v
       );
       await saveVideos(updated);
+
+      // Send SMS notification when video is completed
+      if (status === 'completed' && video) {
+        const client = users.find(u => u.id === video.clientId);
+        if (client?.phoneNumber) {
+          await sendSMS(
+            client.phoneNumber,
+            `🎥 Great news! Your video "${video.description || 'submission'}" is ready! Check your portal to view it.`
+          );
+        }
+      }
     };
 
     return (
@@ -779,7 +1288,7 @@ const ClientPortal = () => {
         <nav className="bg-gray-800 text-white">
           <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between">
             <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-            <button onClick={() => { setCurrentUser(null); setView('login'); }} className="text-gray-300 hover:text-white">Logout</button>
+            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-300 hover:text-white">Logout</button>
           </div>
         </nav>
 
@@ -795,6 +1304,9 @@ const ClientPortal = () => {
             <button onClick={() => setActiveTab('clients')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               Clients & Content
             </button>
+            <button onClick={() => setActiveTab('calendar')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'calendar' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
+              Content Calendar
+            </button>
             <button onClick={() => setActiveTab('videos')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'videos' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               Video Production Queue
             </button>
@@ -809,7 +1321,7 @@ const ClientPortal = () => {
                   return (
                     <div key={user.id} className="bg-white rounded-lg shadow p-6">
                       <h3 className="text-lg font-semibold">{user.companyName}</h3>
-                      <p className="text-sm text-gray-600">{user.firstName} • {user.email}</p>
+                      <p className="text-sm text-gray-600">{user.firstName} {user.lastName || ''} • {user.email}</p>
                       {teamMembers.length > 0 && (
                         <p className="text-xs text-gray-500 mt-1">{teamMembers.length} team member{teamMembers.length > 1 ? 's' : ''}</p>
                       )}
@@ -823,6 +1335,9 @@ const ClientPortal = () => {
                           <p className="text-xs text-green-600">Approved</p>
                         </div>
                       </div>
+                      <button onClick={() => setSelectedUser(user)} className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                        <Eye className="w-4 h-4" />View Details
+                      </button>
                     </div>
                   );
                 })}
@@ -848,6 +1363,78 @@ const ClientPortal = () => {
                       );
                     })}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'calendar' && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold">Content Calendar Management</h3>
+                <button onClick={async () => {
+                  const clientId = prompt('Enter client ID (or check Clients tab):');
+                  const title = prompt('Event title:');
+                  const description = prompt('Event description:');
+                  const date = prompt('Event date (YYYY-MM-DD):');
+                  const type = prompt('Content type (social/email/blog/other):');
+
+                  if (clientId && title && date && type) {
+                    await saveCalendarEvents([...calendarEvents, {
+                      id: Date.now().toString(),
+                      clientId,
+                      title,
+                      description: description || '',
+                      date,
+                      type,
+                      createdAt: new Date().toISOString()
+                    }]);
+                  }
+                }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />Add Event
+                </button>
+              </div>
+
+              {calendarEvents.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No calendar events yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {calendarEvents.sort((a, b) => new Date(a.date) - new Date(b.date)).map(event => {
+                    const client = users.find(u => u.id === event.clientId);
+                    return (
+                      <div key={event.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className="font-semibold">{event.title}</h4>
+                            <p className="text-sm text-gray-600">{client?.companyName || 'Unknown Client'}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium">{new Date(event.date).toLocaleDateString()}</p>
+                            <span className={`inline-block px-2 py-1 rounded text-xs mt-1 ${
+                              event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                              event.type === 'email' ? 'bg-green-100 text-green-800' :
+                              event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>{event.type}</span>
+                          </div>
+                        </div>
+                        {event.description && (
+                          <p className="text-sm text-gray-600 mb-2">{event.description}</p>
+                        )}
+                        <button onClick={async () => {
+                          if (confirm('Delete this event?')) {
+                            await saveCalendarEvents(calendarEvents.filter(e => e.id !== event.id));
+                            if (db) {
+                              await deleteDoc(doc(db, 'calendarEvents', event.id));
+                            }
+                          }
+                        }} className="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -923,7 +1510,7 @@ const ClientPortal = () => {
               <div className="space-y-4">
                 <select value={newContent.clientId} onChange={(e) => setNewContent({ ...newContent, clientId: e.target.value })} className="w-full px-4 py-2 border rounded">
                   <option value="">Select Client</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
+                  {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
                 </select>
                 <select value={newContent.type} onChange={(e) => setNewContent({ ...newContent, type: e.target.value })} className="w-full px-4 py-2 border rounded">
                   <option value="content-idea">Content Idea</option>
@@ -941,12 +1528,171 @@ const ClientPortal = () => {
                 <button onClick={async () => {
                   if (newContent.clientId && newContent.title && newContent.content) {
                     await saveContent([...content, { id: Date.now().toString(), ...newContent, status: 'pending', createdAt: new Date().toISOString() }]);
+
+                    // Send SMS notification to client
+                    const client = users.find(u => u.id === newContent.clientId);
+                    if (client?.phoneNumber) {
+                      await sendSMS(
+                        client.phoneNumber,
+                        `📝 New ${newContent.type} ready for review: "${newContent.title}". Check your portal to approve or provide feedback!`
+                      );
+                    }
+
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
                     setShowForm(false);
                   }
                 }} className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700">Upload</button>
                 <button onClick={() => setShowForm(false)} className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300">Cancel</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">{selectedUser.companyName}</h2>
+                  <p className="text-gray-600">{selectedUser.firstName} {selectedUser.lastName || ''}</p>
+                </div>
+                <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Basic Information
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-600">First Name:</span>
+                      <span className="ml-2 font-medium">{selectedUser.firstName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Last Name:</span>
+                      <span className="ml-2 font-medium">{selectedUser.lastName || 'Not provided'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Email:</span>
+                      <span className="ml-2 font-medium">{selectedUser.email}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Company:</span>
+                      <span className="ml-2 font-medium">{selectedUser.companyName}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Joined:</span>
+                      <span className="ml-2 font-medium">{new Date(selectedUser.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Onboarded:</span>
+                      <span className="ml-2 font-medium">{selectedUser.onboarded ? 'Yes' : 'No'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Onboarding Answers */}
+                {selectedUser.onboardingAnswers && (
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Onboarding Answers
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="text-gray-600 font-medium">Industry:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.industry)
+                            ? selectedUser.onboardingAnswers.industry.join(', ')
+                            : selectedUser.onboardingAnswers.industry || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Target Audience:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.targetAudience)
+                            ? selectedUser.onboardingAnswers.targetAudience.join(', ')
+                            : selectedUser.onboardingAnswers.targetAudience || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Goals:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.goals)
+                            ? selectedUser.onboardingAnswers.goals.join(', ')
+                            : selectedUser.onboardingAnswers.goals || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Brand Voice:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.brandVoice)
+                            ? selectedUser.onboardingAnswers.brandVoice.join(', ')
+                            : selectedUser.onboardingAnswers.brandVoice || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Competitors:</span>
+                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.competitors || 'Not provided'}</p>
+                      </div>
+                      {selectedUser.onboardingAnswers.otherInputs && Object.keys(selectedUser.onboardingAnswers.otherInputs).some(k => selectedUser.onboardingAnswers.otherInputs[k]) && (
+                        <div>
+                          <span className="text-gray-600 font-medium">Additional Details:</span>
+                          {Object.entries(selectedUser.onboardingAnswers.otherInputs).map(([key, value]) =>
+                            value ? (
+                              <p key={key} className="text-gray-800 mt-1">
+                                <span className="capitalize">{key}:</span> {value}
+                              </p>
+                            ) : null
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Social Media Logins */}
+                {selectedUser.socialLogins && Object.keys(selectedUser.socialLogins).some(k => selectedUser.socialLogins[k]) && (
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Share2 className="w-5 h-5" />
+                      Social Media Logins
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-3 text-sm">
+                      {Object.entries(selectedUser.socialLogins).map(([platform, login]) =>
+                        login ? (
+                          <div key={platform}>
+                            <span className="text-gray-600 capitalize">{platform}:</span>
+                            <span className="ml-2 font-medium">{login}</span>
+                          </div>
+                        ) : null
+                      )}
+                      {!Object.values(selectedUser.socialLogins).some(v => v) && (
+                        <p className="text-gray-600 col-span-2">No social media logins provided</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!selectedUser.socialLogins && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Share2 className="w-5 h-5" />
+                      Social Media Logins
+                    </h3>
+                    <p className="text-gray-600 text-sm">No social media logins provided</p>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => setSelectedUser(null)} className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">
+                Close
+              </button>
             </div>
           </div>
         )}

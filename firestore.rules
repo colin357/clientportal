@@ -1,0 +1,83 @@
+rules_version = '2';
+
+// ============================================================================
+// FIRESTORE SECURITY RULES FOR CLIENT PORTAL
+// ============================================================================
+//
+// CURRENT MODE: TEST MODE (Development)
+// ⚠️ WARNING: These rules allow ANYONE to read/write ALL data
+// ⚠️ CHANGE BEFORE PRODUCTION DEPLOYMENT
+//
+// To apply these rules:
+// 1. Go to Firebase Console → Firestore Database → Rules tab
+// 2. Copy and paste these rules
+// 3. Click "Publish"
+//
+// See FIREBASE_RULES.md for production-ready rules and authentication guide
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // TEST MODE: Allow all read/write operations
+    // This is perfect for development and testing
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+
+// ============================================================================
+// WHEN READY FOR PRODUCTION, REPLACE WITH THESE RULES:
+// ============================================================================
+//
+// rules_version = '2';
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//
+//     // Helper functions
+//     function isSignedIn() {
+//       return request.auth != null;
+//     }
+//
+//     function isOwner(userId) {
+//       return request.auth.uid == userId;
+//     }
+//
+//     function isAdmin() {
+//       return isSignedIn() &&
+//              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+//     }
+//
+//     // Users collection
+//     match /users/{userId} {
+//       allow create: if true;
+//       allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+//       allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+//       allow delete: if isAdmin();
+//     }
+//
+//     // Content collection
+//     match /content/{contentId} {
+//       allow create: if isSignedIn();
+//       allow read: if isSignedIn() &&
+//                      (resource.data.clientId == request.auth.uid || isAdmin());
+//       allow update: if isSignedIn() &&
+//                        (resource.data.clientId == request.auth.uid || isAdmin());
+//       allow delete: if isAdmin();
+//     }
+//
+//     // Videos collection
+//     match /videos/{videoId} {
+//       allow create: if isSignedIn();
+//       allow read: if isSignedIn() &&
+//                      (resource.data.clientId == request.auth.uid || isAdmin());
+//       allow update: if isSignedIn() &&
+//                        (resource.data.clientId == request.auth.uid || isAdmin());
+//       allow delete: if isAdmin();
+//     }
+//   }
+// }
+//
+// NOTE: Production rules require Firebase Authentication to be implemented
+// See FIREBASE_RULES.md for implementation guide

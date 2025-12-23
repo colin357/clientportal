@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow anyone to read files (for public images like headshots, logos)
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+
+    // Allow uploads to headshots folder
+    match /headshots/{fileName} {
+      allow write: if request.resource.size < 5 * 1024 * 1024 // 5MB limit
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Allow uploads to logos folder
+    match /logos/{fileName} {
+      allow write: if request.resource.size < 5 * 1024 * 1024 // 5MB limit
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Allow uploads to videos folder
+    match /videos/{fileName} {
+      allow write: if request.resource.size < 500 * 1024 * 1024 // 500MB limit
+                   && request.resource.contentType.matches('video/.*');
+    }
+  }
+}

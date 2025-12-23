@@ -530,30 +530,21 @@ const ClientPortal = () => {
     }, []);
 
     const generatePersonalizedContent = async () => {
-      // Check if we should generate content
+      // Only generate content if this is the first time (account creation)
       const lastGenerated = currentUser.lastContentGeneration;
-      const today = new Date();
-      const todayString = today.toDateString();
-      const dayOfWeek = today.getDay();
 
-      // Only generate on first time (no lastGenerated) OR on Sundays if not already generated today
-      const isFirstTime = !lastGenerated;
-      const isSundayAndNotGenerated = dayOfWeek === 0 && lastGenerated !== todayString;
-      const shouldGenerate = (isFirstTime || isSundayAndNotGenerated) && currentUser.onboardingAnswers;
+      if (lastGenerated) {
+        console.log('⏭️ Skipping content generation - already generated on:', lastGenerated);
+        return;
+      }
 
-      if (!shouldGenerate) {
-        console.log('⏭️ Skipping content generation:', {
-          isFirstTime,
-          isSundayAndNotGenerated,
-          dayOfWeek,
-          lastGenerated,
-          todayString
-        });
+      if (!currentUser.onboardingAnswers) {
+        console.log('⏭️ Skipping content generation - no onboarding answers');
         return;
       }
 
       try {
-        console.log('🤖 Generating personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
+        console.log('🤖 Generating initial personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
         const response = await fetch('/api/generate-personalized-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -589,7 +580,8 @@ const ClientPortal = () => {
         // Save the new content
         await saveContent([...content, ...newContent]);
 
-        // Update user's last generation date - IMPORTANT: Save this immediately
+        // Mark that content has been generated - this prevents future auto-generation
+        const todayString = new Date().toISOString();
         const updatedUser = { ...currentUser, lastContentGeneration: todayString };
         setCurrentUser(updatedUser);
         await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
@@ -1344,6 +1336,8 @@ const ClientPortal = () => {
     const [videos, setVideos] = useState([]);
     const [activeTab, setActiveTab] = useState('clients');
     const [selectedUser, setSelectedUser] = useState(null);
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [aiGenerationResult, setAiGenerationResult] = useState(null);
 
     useEffect(() => {
       loadVideos();
@@ -1423,6 +1417,60 @@ const ClientPortal = () => {
       }
     };
 
+    const handleAIGenerateContent = async () => {
+      if (!confirm('Generate AI content for all users? This will create 15 pieces of content for each client and send them SMS notifications.')) {
+        return;
+      }
+
+      setIsGeneratingAI(true);
+      setAiGenerationResult(null);
+
+      try {
+        console.log('🤖 Starting AI content generation for all users...');
+
+        // Call the admin API to generate content
+        const response = await fetch('/api/admin-generate-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ users: users.filter(u => !u.parentClientId) }) // Only generate for primary clients, not team members
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate content');
+        }
+
+        const result = await response.json();
+        console.log('✅ AI generation complete:', result);
+
+        // Save all generated content to Firestore
+        const allNewContent = [];
+        for (const userResult of result.results) {
+          const userContent = userResult.contentPieces.map(piece => ({
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            clientId: userResult.userId,
+            type: piece.type || 'content-idea',
+            title: piece.title || 'Generated Content',
+            description: piece.description || 'AI-generated personalized content',
+            content: piece.content || '',
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          }));
+          allNewContent.push(...userContent);
+        }
+
+        // Save all content at once
+        await saveContent([...content, ...allNewContent]);
+
+        setAiGenerationResult(result);
+        alert(`✅ Successfully generated content for ${result.generated} users!\n\nTotal pieces: ${allNewContent.length}\nFailed: ${result.failed}`);
+      } catch (error) {
+        console.error('❌ Error generating AI content:', error);
+        alert('Failed to generate AI content. Please check console for details.');
+      } finally {
+        setIsGeneratingAI(false);
+      }
+    };
+
     return (
       <div className="min-h-screen bg-gray-50">
         <nav className="bg-gray-800 text-white">
@@ -1433,11 +1481,21 @@ const ClientPortal = () => {
         </nav>
 
         <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="mb-8 flex justify-between">
+          <div className="mb-8 flex justify-between items-center">
             <h2 className="text-2xl font-semibold">Admin Dashboard</h2>
-            <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 flex items-center gap-2">
-              <Upload className="w-5 h-5" />Upload Content
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleAIGenerateContent}
+                disabled={isGeneratingAI}
+                className="bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 flex items-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                <Sparkles className="w-5 h-5" />
+                {isGeneratingAI ? 'Generating AI Content...' : 'AI Generate Content'}
+              </button>
+              <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 flex items-center gap-2">
+                <Upload className="w-5 h-5" />Upload Content
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-4 mb-8">

@@ -278,6 +278,29 @@ const ClientPortal = () => {
     return new Date(year, month - 1, day);
   };
 
+  // SMS notification helper function
+  const sendSMS = async (phoneNumber, message) => {
+    try {
+      console.log('📱 Sending SMS to:', phoneNumber);
+      const response = await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: phoneNumber, message })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error('❌ SMS failed:', result.error);
+        console.error('Check Twilio credentials in environment variables');
+      } else {
+        console.log('✅ SMS sent successfully:', result.messageSid);
+      }
+    } catch (error) {
+      console.error('❌ Failed to send SMS:', error);
+    }
+  };
+
   // File upload helper function
   const uploadFileToStorage = async (file, path, onProgress) => {
     if (!storage) {
@@ -1668,28 +1691,6 @@ const ClientPortal = () => {
       } catch (e) {
         console.error('❌ Error saving videos to cloud:', e);
         console.error('Error details:', e.message);
-      }
-    };
-
-    const sendSMS = async (phoneNumber, message) => {
-      try {
-        console.log('📱 Sending SMS to:', phoneNumber);
-        const response = await fetch('/api/send-sms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: phoneNumber, message })
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          console.error('❌ SMS failed:', result.error);
-          console.error('Check Twilio credentials in environment variables');
-        } else {
-          console.log('✅ SMS sent successfully:', result.messageSid);
-        }
-      } catch (error) {
-        console.error('❌ Failed to send SMS:', error);
       }
     };
 

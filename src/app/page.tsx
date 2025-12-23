@@ -5,6 +5,7 @@ import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, Che
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 // Firebase configuration - Replace with your Firebase project credentials
 const firebaseConfig = {
@@ -45,6 +46,7 @@ const isFirebaseConfigured = () => {
 // Initialize Firebase (only if not already initialized)
 let app;
 let db;
+let storage;
 
 try {
   if (isFirebaseConfigured()) {
@@ -56,7 +58,8 @@ try {
       console.log('✅ Using existing Firebase app');
     }
     db = getFirestore(app);
-    console.log('✅ Firestore connected');
+    storage = getStorage(app);
+    console.log('✅ Firestore and Storage connected');
   } else {
     console.warn('⚠️ Firebase not configured - app will not save data to cloud');
   }
@@ -222,7 +225,7 @@ const ClientPortal = () => {
       companyName,
       firstName,
       lastName,
-      phoneNumber,
+      phoneNumber: formatPhoneE164(phoneNumber),
       onboarded: false,
       createdAt: new Date().toISOString()
     };
@@ -241,13 +244,64 @@ const ClientPortal = () => {
   };
 
   const handleContentAction = async (contentId, action, feedback = '') => {
-    await saveContent(content.map(c => 
+    await saveContent(content.map(c =>
       c.id === contentId ? { ...c, status: action, feedback, reviewedAt: new Date().toISOString() } : c
     ));
   };
 
+  const formatPhoneE164 = (phone) => {
+    // Remove all non-digit characters
+    const digits = phone.replace(/\D/g, '');
+
+    // If it's already 11 digits starting with 1, format it
+    if (digits.length === 11 && digits.startsWith('1')) {
+      return `+${digits}`;
+    }
+
+    // If it's 10 digits, add +1
+    if (digits.length === 10) {
+      return `+1${digits}`;
+    }
+
+    // If it already starts with +1, return as is
+    if (phone.startsWith('+1')) {
+      return phone;
+    }
+
+    // Default: assume 10 digits and add +1
+    return `+1${digits.slice(-10)}`;
+  };
+
+  // File upload helper function
+  const uploadFileToStorage = async (file, path, onProgress) => {
+    if (!storage) {
+      throw new Error('Firebase Storage is not configured');
+    }
+
+    return new Promise((resolve, reject) => {
+      const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          if (onProgress) onProgress(progress);
+        },
+        (error) => {
+          console.error('Upload error:', error);
+          reject(error);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(downloadURL);
+        }
+      );
+    });
+  };
+
   const handleVideoUpload = async (contentId, file) => {
-    await saveContent(content.map(c => 
+    await saveContent(content.map(c =>
       c.id === contentId ? { ...c, videoUploaded: true, videoName: file.name, uploadedAt: new Date().toISOString() } : c
     ));
   };
@@ -523,6 +577,9 @@ const ClientPortal = () => {
     const [videoLink, setVideoLink] = useState('');
     const [videoDescription, setVideoDescription] = useState('');
     const [userVideos, setUserVideos] = useState([]);
+    const [uploadingVideo, setUploadingVideo] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [selectedVideoFile, setSelectedVideoFile] = useState(null);
 
     useEffect(() => {
       loadUserVideos();
@@ -824,43 +881,126 @@ const ClientPortal = () => {
 
               <div className="bg-white rounded-lg shadow p-6 mb-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Submit Video for Editing</h3>
-                <p className="text-sm text-gray-600 mb-4">Upload your raw footage and we'll handle the editing</p>
+                <p className="text-sm text-gray-600 mb-4">Upload your video file directly or provide a link to Google Drive/Dropbox</p>
                 <div className="space-y-4">
-                  <input type="text" value={videoLink} onChange={(e) => setVideoLink(e.target.value)} placeholder="Google Drive or Dropbox link to your video" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                  {/* File Upload Option */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload Video File</label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={(e) => setSelectedVideoFile(e.target.files[0])}
+                        className="w-full"
+                      />
+                      {selectedVideoFile && (
+                        <p className="text-sm text-gray-600 mt-2">
+                          Selected: {selectedVideoFile.name} ({(selectedVideoFile.size / 1024 / 1024).toFixed(2)} MB)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* OR divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 border-t border-gray-300"></div>
+                    <span className="text-gray-500 text-sm">OR</span>
+                    <div className="flex-1 border-t border-gray-300"></div>
+                  </div>
+
+                  {/* Link Option */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Video Link</label>
+                    <input
+                      type="text"
+                      value={videoLink}
+                      onChange={(e) => setVideoLink(e.target.value)}
+                      placeholder="Google Drive or Dropbox link to your video"
+                      className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
                   <textarea value={videoDescription} onChange={(e) => setVideoDescription(e.target.value)} placeholder="Brief description or notes about the video" className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 resize-none" rows="3" />
+
+                  {uploadingVideo && (
+                    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-4 transition-all duration-300 flex items-center justify-center text-xs text-white font-semibold"
+                        style={{ width: `${uploadProgress}%` }}
+                      >
+                        {uploadProgress > 5 && `${Math.round(uploadProgress)}%`}
+                      </div>
+                    </div>
+                  )}
+
                   <button onClick={async () => {
-                    if (videoLink.trim()) {
+                    if (!selectedVideoFile && !videoLink.trim()) {
+                      alert('Please upload a video file or provide a link');
+                      return;
+                    }
+
+                    setUploadingVideo(true);
+                    setUploadProgress(0);
+
+                    try {
+                      let finalVideoLink = videoLink;
+
+                      // If a file is selected, upload it to Firebase Storage
+                      if (selectedVideoFile) {
+                        console.log('📤 Uploading video file to storage...');
+                        finalVideoLink = await uploadFileToStorage(
+                          selectedVideoFile,
+                          'videos',
+                          (progress) => setUploadProgress(progress)
+                        );
+                        console.log('✅ Video uploaded successfully:', finalVideoLink);
+                      }
+
+                    if (finalVideoLink.trim()) {
                       const newVideo = {
                         id: Date.now().toString(),
                         clientId: effectiveClientId,
-                        videoLink,
+                        videoLink: finalVideoLink,
                         description: videoDescription,
                         status: 'pending',
-                        submittedAt: new Date().toISOString()
+                        submittedAt: new Date().toISOString(),
+                        fileName: selectedVideoFile ? selectedVideoFile.name : null
                       };
-                      try {
-                        if (!db) {
-                          alert('⚠️ Cloud storage not configured. Video not saved.');
-                          console.error('❌ Firestore not available');
-                          return;
-                        }
 
-                        // Save video to Firestore
-                        console.log('💾 Submitting video to Firestore...');
-                        await setDoc(doc(db, 'videos', newVideo.id), newVideo);
-                        console.log('✅ Video submitted successfully:', newVideo.id);
-                        setVideoLink('');
-                        setVideoDescription('');
-                        await loadUserVideos(); // Reload videos to show the new submission
-                        alert('Video submitted successfully!');
-                      } catch (error) {
-                        console.error('❌ Error submitting video:', error);
-                        console.error('Error details:', error.message);
-                        alert('Error submitting video. Please try again.');
+                      if (!db) {
+                        alert('⚠️ Cloud storage not configured. Video not saved.');
+                        console.error('❌ Firestore not available');
+                        setUploadingVideo(false);
+                        return;
                       }
+
+                      // Save video to Firestore
+                      console.log('💾 Submitting video to Firestore...');
+                      await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+                      console.log('✅ Video submitted successfully:', newVideo.id);
+
+                      // Send SMS notification to admin
+                      await sendSMS(
+                        '+18056379009',
+                        `📹 New video submitted by ${currentUser.companyName}. Check the admin portal to review!`
+                      );
+
+                      setVideoLink('');
+                      setVideoDescription('');
+                      setSelectedVideoFile(null);
+                      await loadUserVideos();
+                      alert('Video submitted successfully!');
                     }
-                  }} disabled={!videoLink.trim()} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                    Submit Video
+                    } catch (error) {
+                      console.error('❌ Error submitting video:', error);
+                      console.error('Error details:', error.message);
+                      alert('Error submitting video. Please try again.');
+                    } finally {
+                      setUploadingVideo(false);
+                      setUploadProgress(0);
+                    }
+                  }} disabled={(!selectedVideoFile && !videoLink.trim()) || uploadingVideo} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                    {uploadingVideo ? 'Uploading...' : 'Submit Video'}
                   </button>
                 </div>
               </div>
@@ -1333,11 +1473,16 @@ const ClientPortal = () => {
     const [newContent, setNewContent] = useState({
       clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: ''
     });
+    const [publishMode, setPublishMode] = useState('single'); // 'single', 'all-realtors', 'all-loan-officers'
     const [videos, setVideos] = useState([]);
     const [activeTab, setActiveTab] = useState('clients');
     const [selectedUser, setSelectedUser] = useState(null);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [aiGenerationResult, setAiGenerationResult] = useState(null);
+    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [selectedContent, setSelectedContent] = useState(null);
 
     useEffect(() => {
       loadVideos();
@@ -1471,6 +1616,39 @@ const ClientPortal = () => {
       }
     };
 
+    // Calendar helper functions
+    const getDaysInMonth = (date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const daysInMonth = lastDay.getDate();
+      const startingDayOfWeek = firstDay.getDay();
+
+      const days = [];
+      // Add empty slots for days before the month starts
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        days.push(null);
+      }
+      // Add actual days of the month
+      for (let i = 1; i <= daysInMonth; i++) {
+        days.push(new Date(year, month, i));
+      }
+      return days;
+    };
+
+    const getEventsForDate = (date) => {
+      if (!date) return [];
+      const dateStr = date.toISOString().split('T')[0];
+      return calendarEvents.filter(event => event.date === dateStr);
+    };
+
+    const isToday = (date) => {
+      if (!date) return false;
+      const today = new Date();
+      return date.toDateString() === today.toDateString();
+    };
+
     return (
       <div className="min-h-screen bg-gray-50">
         <nav className="bg-gray-800 text-white">
@@ -1497,6 +1675,47 @@ const ClientPortal = () => {
               </button>
             </div>
           </div>
+
+          {/* Today's Scheduled Content */}
+          {(() => {
+            const today = new Date().toISOString().split('T')[0];
+            const todaysEvents = calendarEvents.filter(event => event.date === today);
+
+            if (todaysEvents.length > 0) {
+              return (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Calendar className="w-6 h-6 text-blue-600" />
+                    <h3 className="text-xl font-semibold text-gray-800">Today's Scheduled Content</h3>
+                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{todaysEvents.length}</span>
+                  </div>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {todaysEvents.map(event => {
+                      const client = users.find(u => u.id === event.clientId);
+                      return (
+                        <div key={event.id} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-semibold text-gray-800 text-sm">{event.title}</h4>
+                            <span className={`inline-block px-2 py-1 rounded text-xs ${
+                              event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                              event.type === 'email' ? 'bg-green-100 text-green-800' :
+                              event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>{event.type}</span>
+                          </div>
+                          <p className="text-xs text-gray-600 mb-2">{client?.companyName || 'Unknown Client'}</p>
+                          {event.description && (
+                            <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           <div className="flex gap-4 mb-8">
             <button onClick={() => setActiveTab('clients')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
@@ -1550,11 +1769,28 @@ const ClientPortal = () => {
                       return (
                         <div key={item.id} className="p-4 bg-gray-50 rounded">
                           <div className="flex justify-between mb-2">
-                            <div>
+                            <div className="flex-1">
                               <p className="font-medium">{item.title}</p>
                               <p className="text-sm text-gray-600">{client?.companyName} • {item.type}</p>
                             </div>
-                            <span className={`px-3 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-3 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                                    const updatedContent = content.filter(c => c.id !== item.id);
+                                    await saveContent(updatedContent);
+                                    if (db) {
+                                      await deleteDoc(doc(db, 'content', item.id));
+                                    }
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-800 p-2"
+                                title="Delete content"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                           {item.feedback && <div className="mt-2 p-3 bg-blue-50 rounded"><p className="text-xs text-blue-700">Feedback: {item.feedback}</p></div>}
                         </div>
@@ -1567,74 +1803,128 @@ const ClientPortal = () => {
           )}
 
           {activeTab === 'calendar' && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold">Content Calendar Management</h3>
-                <button onClick={async () => {
-                  const clientId = prompt('Enter client ID (or check Clients tab):');
-                  const title = prompt('Event title:');
-                  const description = prompt('Event description:');
-                  const date = prompt('Event date (YYYY-MM-DD):');
-                  const type = prompt('Content type (social/email/blog/other):');
-
-                  if (clientId && title && date && type) {
-                    await saveCalendarEvents([...calendarEvents, {
-                      id: Date.now().toString(),
-                      clientId,
-                      title,
-                      description: description || '',
-                      date,
-                      type,
-                      createdAt: new Date().toISOString()
-                    }]);
-                  }
-                }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />Add Event
-                </button>
-              </div>
-
-              {calendarEvents.length === 0 ? (
-                <div className="text-center py-12">
-                  <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No calendar events yet</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Visual Calendar */}
+              <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-semibold">Content Calendar</h3>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
+                      className="p-2 hover:bg-gray-100 rounded"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="font-semibold text-gray-800 min-w-[150px] text-center">
+                      {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </span>
+                    <button
+                      onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
+                      className="p-2 hover:bg-gray-100 rounded"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {calendarEvents.sort((a, b) => new Date(a.date) - new Date(b.date)).map(event => {
-                    const client = users.find(u => u.id === event.clientId);
+
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Day headers */}
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="text-center font-semibold text-gray-600 text-sm py-2">
+                      {day}
+                    </div>
+                  ))}
+
+                  {/* Calendar days */}
+                  {getDaysInMonth(currentMonth).map((date, idx) => {
+                    const events = getEventsForDate(date);
+                    const todayClass = isToday(date) ? 'bg-blue-50 border-blue-300' : '';
+
                     return (
-                      <div key={event.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <h4 className="font-semibold">{event.title}</h4>
-                            <p className="text-sm text-gray-600">{client?.companyName || 'Unknown Client'}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium">{new Date(event.date).toLocaleDateString()}</p>
-                            <span className={`inline-block px-2 py-1 rounded text-xs mt-1 ${
-                              event.type === 'social' ? 'bg-blue-100 text-blue-800' :
-                              event.type === 'email' ? 'bg-green-100 text-green-800' :
-                              event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>{event.type}</span>
-                          </div>
-                        </div>
-                        {event.description && (
-                          <p className="text-sm text-gray-600 mb-2">{event.description}</p>
-                        )}
-                        <button onClick={async () => {
-                          if (confirm('Delete this event?')) {
-                            await saveCalendarEvents(calendarEvents.filter(e => e.id !== event.id));
-                            if (db) {
-                              await deleteDoc(doc(db, 'calendarEvents', event.id));
-                            }
+                      <div
+                        key={idx}
+                        className={`min-h-[100px] border rounded p-1 ${date ? 'cursor-pointer hover:bg-gray-50' : 'bg-gray-100'} ${todayClass}`}
+                        onClick={() => {
+                          if (date) {
+                            setSelectedDate(date);
+                            setShowScheduleModal(true);
                           }
-                        }} className="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                        }}
+                      >
+                        {date && (
+                          <>
+                            <div className="text-sm font-medium text-gray-700 mb-1">
+                              {date.getDate()}
+                            </div>
+                            <div className="space-y-1">
+                              {events.slice(0, 2).map(event => (
+                                <div
+                                  key={event.id}
+                                  className={`text-xs p-1 rounded truncate ${
+                                    event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                                    event.type === 'email' ? 'bg-green-100 text-green-800' :
+                                    event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}
+                                  title={event.title}
+                                >
+                                  {event.title}
+                                </div>
+                              ))}
+                              {events.length > 2 && (
+                                <div className="text-xs text-gray-500 pl-1">
+                                  +{events.length - 2} more
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-              )}
+              </div>
+
+              {/* Approved Content Sidebar */}
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Approved Content</h3>
+                <p className="text-sm text-gray-600 mb-4">Click on content to schedule it on the calendar</p>
+
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {content.filter(item => item.status === 'approved').length === 0 ? (
+                    <div className="text-center py-8">
+                      <Check className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">No approved content yet</p>
+                    </div>
+                  ) : (
+                    content.filter(item => item.status === 'approved').map(item => {
+                      const client = users.find(u => u.id === item.clientId);
+                      return (
+                        <div
+                          key={item.id}
+                          className="border rounded p-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                          onClick={() => {
+                            setSelectedContent(item);
+                            setShowScheduleModal(true);
+                          }}
+                        >
+                          <div className="flex items-start justify-between mb-1">
+                            <h4 className="font-medium text-sm text-gray-800 truncate flex-1">{item.title}</h4>
+                            <span className={`inline-block px-2 py-1 rounded text-xs ml-2 ${
+                              item.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                              item.type === 'email' ? 'bg-green-100 text-green-800' :
+                              item.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>{item.type}</span>
+                          </div>
+                          <p className="text-xs text-gray-600">{client?.companyName}</p>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1706,10 +1996,54 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
               <h2 className="text-2xl font-bold mb-6">Upload Content</h2>
               <div className="space-y-4">
-                <select value={newContent.clientId} onChange={(e) => setNewContent({ ...newContent, clientId: e.target.value })} className="w-full px-4 py-2 border rounded">
-                  <option value="">Select Client</option>
-                  {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
-                </select>
+                {/* Publish Mode Selection */}
+                <div className="border rounded p-4 bg-gray-50">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Publish To:</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="publishMode"
+                        value="single"
+                        checked={publishMode === 'single'}
+                        onChange={(e) => setPublishMode(e.target.value)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-gray-700">Single Client</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="publishMode"
+                        value="all-realtors"
+                        checked={publishMode === 'all-realtors'}
+                        onChange={(e) => setPublishMode(e.target.value)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-gray-700">All Realtors</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="publishMode"
+                        value="all-loan-officers"
+                        checked={publishMode === 'all-loan-officers'}
+                        onChange={(e) => setPublishMode(e.target.value)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-gray-700">All Loan Officers</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Client Selection - Only show for single mode */}
+                {publishMode === 'single' && (
+                  <select value={newContent.clientId} onChange={(e) => setNewContent({ ...newContent, clientId: e.target.value })} className="w-full px-4 py-2 border rounded">
+                    <option value="">Select Client</option>
+                    {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
+                  </select>
+                )}
+
                 <select value={newContent.type} onChange={(e) => setNewContent({ ...newContent, type: e.target.value })} className="w-full px-4 py-2 border rounded">
                   <option value="content-idea">Content Idea</option>
                   <option value="email">Email</option>
@@ -1724,7 +2058,70 @@ const ClientPortal = () => {
               </div>
               <div className="flex gap-3 mt-6">
                 <button onClick={async () => {
-                  if (newContent.clientId && newContent.title && newContent.content) {
+                  // Validation based on publish mode
+                  if (publishMode === 'single' && (!newContent.clientId || !newContent.title || !newContent.content)) {
+                    alert('Please fill in all required fields');
+                    return;
+                  }
+                  if (publishMode !== 'single' && (!newContent.title || !newContent.content)) {
+                    alert('Please fill in title and content');
+                    return;
+                  }
+
+                  // Bulk publish mode
+                  if (publishMode === 'all-realtors' || publishMode === 'all-loan-officers') {
+                    const targetIndustry = publishMode === 'all-realtors' ? 'Realtor' : 'Loan Officer';
+
+                    // Filter users by industry
+                    const targetUsers = users.filter(u => {
+                      if (u.parentClientId) return false; // Skip team members
+                      if (!u.onboardingAnswers?.industry) return false;
+                      const industries = Array.isArray(u.onboardingAnswers.industry)
+                        ? u.onboardingAnswers.industry
+                        : [u.onboardingAnswers.industry];
+                      return industries.includes(targetIndustry);
+                    });
+
+                    if (targetUsers.length === 0) {
+                      alert(`No ${targetIndustry}s found to publish to`);
+                      return;
+                    }
+
+                    const confirmMsg = `Publish this content to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''}?\n\n${targetUsers.map(u => u.companyName).join(', ')}`;
+                    if (!confirm(confirmMsg)) return;
+
+                    // Create content for each target user
+                    const newContentPieces = targetUsers.map(user => ({
+                      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                      clientId: user.id,
+                      type: newContent.type,
+                      title: newContent.title,
+                      description: newContent.description,
+                      content: newContent.content,
+                      fileLink: newContent.fileLink,
+                      status: 'pending',
+                      createdAt: new Date().toISOString()
+                    }));
+
+                    await saveContent([...content, ...newContentPieces]);
+
+                    // Send SMS notifications to all target users
+                    for (const user of targetUsers) {
+                      if (user.phoneNumber) {
+                        await sendSMS(
+                          user.phoneNumber,
+                          `📝 New ${newContent.type} ready for review: "${newContent.title}". Check your portal to approve or provide feedback!`
+                        );
+                      }
+                    }
+
+                    alert(`✅ Successfully published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''}!`);
+                    setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
+                    setPublishMode('single');
+                    setShowForm(false);
+                  }
+                  // Single client mode
+                  else {
                     await saveContent([...content, { id: Date.now().toString(), ...newContent, status: 'pending', createdAt: new Date().toISOString() }]);
 
                     // Send SMS notification to client
@@ -1739,9 +2136,146 @@ const ClientPortal = () => {
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
                     setShowForm(false);
                   }
-                }} className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700">Upload</button>
-                <button onClick={() => setShowForm(false)} className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300">Cancel</button>
+                }} className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700">
+                  {publishMode === 'single' ? 'Upload' : `Publish to All ${publishMode === 'all-realtors' ? 'Realtors' : 'Loan Officers'}`}
+                </button>
+                <button onClick={() => {
+                  setShowForm(false);
+                  setPublishMode('single');
+                }} className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300">Cancel</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Schedule Content Modal */}
+        {showScheduleModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
+              <h2 className="text-2xl font-bold mb-6">Schedule Content</h2>
+
+              {selectedContent ? (
+                <div className="space-y-4">
+                  <div className="border rounded p-4 bg-gray-50">
+                    <h3 className="font-semibold text-gray-800 mb-2">{selectedContent.title}</h3>
+                    <p className="text-sm text-gray-600 mb-1">{selectedContent.description}</p>
+                    <span className={`inline-block px-2 py-1 rounded text-xs ${
+                      selectedContent.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                      selectedContent.type === 'email' ? 'bg-green-100 text-green-800' :
+                      selectedContent.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>{selectedContent.type}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Schedule Date</label>
+                    <input
+                      type="date"
+                      value={selectedDate ? selectedDate.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setSelectedDate(new Date(e.target.value + 'T00:00:00'))}
+                      className="w-full px-4 py-2 border rounded"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={async () => {
+                        if (!selectedDate) {
+                          alert('Please select a date');
+                          return;
+                        }
+
+                        await saveCalendarEvents([...calendarEvents, {
+                          id: Date.now().toString(),
+                          clientId: selectedContent.clientId,
+                          title: selectedContent.title,
+                          description: selectedContent.description,
+                          date: selectedDate.toISOString().split('T')[0],
+                          type: selectedContent.type,
+                          contentId: selectedContent.id,
+                          createdAt: new Date().toISOString()
+                        }]);
+
+                        setShowScheduleModal(false);
+                        setSelectedContent(null);
+                        setSelectedDate(null);
+                        alert('Content scheduled successfully!');
+                      }}
+                      className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
+                    >
+                      Schedule
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowScheduleModal(false);
+                        setSelectedContent(null);
+                        setSelectedDate(null);
+                      }}
+                      className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : selectedDate ? (
+                <div className="space-y-4">
+                  <p className="text-gray-600 mb-4">
+                    Select content to schedule for <strong>{selectedDate.toLocaleDateString()}</strong>
+                  </p>
+
+                  <div className="max-h-[400px] overflow-y-auto space-y-2">
+                    {content.filter(item => item.status === 'approved').length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">No approved content available to schedule</p>
+                      </div>
+                    ) : (
+                      content.filter(item => item.status === 'approved').map(item => {
+                        const client = users.find(u => u.id === item.clientId);
+                        return (
+                          <div
+                            key={item.id}
+                            className="border rounded p-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300"
+                            onClick={() => setSelectedContent(item)}
+                          >
+                            <div className="flex items-start justify-between mb-1">
+                              <h4 className="font-medium text-sm text-gray-800">{item.title}</h4>
+                              <span className={`inline-block px-2 py-1 rounded text-xs ml-2 ${
+                                item.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                                item.type === 'email' ? 'bg-green-100 text-green-800' :
+                                item.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>{item.type}</span>
+                            </div>
+                            <p className="text-xs text-gray-600">{client?.companyName}</p>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setShowScheduleModal(false);
+                        setSelectedDate(null);
+                      }}
+                      className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Please select a date or content to schedule</p>
+                  <button
+                    onClick={() => setShowScheduleModal(false)}
+                    className="mt-4 bg-gray-200 px-6 py-2 rounded hover:bg-gray-300"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

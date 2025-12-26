@@ -613,6 +613,13 @@ const ClientPortal = () => {
     const [headshotProgress, setHeadshotProgress] = useState(0);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [logoProgress, setLogoProgress] = useState(0);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordedBlob, setRecordedBlob] = useState(null);
+    const [mediaRecorder, setMediaRecorder] = useState(null);
+    const [cameraStream, setCameraStream] = useState(null);
+    const [teleprompterText, setTeleprompterText] = useState('');
+    const [showTeleprompter, setShowTeleprompter] = useState(false);
+    const [teleprompterScroll, setTeleprompterScroll] = useState(0);
 
     useEffect(() => {
       loadUserVideos();
@@ -635,12 +642,22 @@ const ClientPortal = () => {
 
       try {
         console.log('🤖 Generating initial personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
+
+        // Gather context for ChatGPT
+        const previousTitles = clientContent.map(c => c.title);
+        const userFeedback = clientContent
+          .filter(c => c.feedback)
+          .map(c => ({ title: c.title, feedback: c.feedback, status: c.status }));
+
         const response = await fetch('/api/generate-personalized-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user: currentUser,
-            onboardingAnswers: currentUser.onboardingAnswers
+            onboardingAnswers: currentUser.onboardingAnswers,
+            previousTitles,
+            aiNotes: currentUser.aiNotes || '',
+            userFeedback
           })
         });
 
@@ -730,6 +747,110 @@ const ClientPortal = () => {
           <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-8 mb-8 text-white">
             <h2 className="text-3xl font-bold mb-2">Let's Get Started, {currentUser.firstName}! 👋</h2>
             <p className="text-blue-100">Review your marketing materials and provide feedback</p>
+          </div>
+
+          {/* Client Progress Scorecard */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <span>📊</span> This Month's Progress
+            </h3>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Content Ideas Approved */}
+              {(() => {
+                const total = clientContent.filter(c => ['social', 'blog', 'email', 'content-idea'].includes(c.type)).length;
+                const approved = clientContent.filter(c => c.status === 'approved' && ['social', 'blog', 'email', 'content-idea'].includes(c.type)).length;
+                const percentage = total > 0 ? Math.round((approved / total) * 100) : 0;
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Content Ideas</span>
+                      <span className="text-sm font-bold text-blue-600">{approved} of {total}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{percentage}% approved</p>
+                  </div>
+                );
+              })()}
+
+              {/* Videos Uploaded */}
+              {(() => {
+                const thisMonth = new Date();
+                const monthStart = new Date(thisMonth.getFullYear(), thisMonth.getMonth(), 1);
+                const uploaded = userVideos.filter(v => new Date(v.submittedAt) >= monthStart).length;
+                const target = 4;
+                const percentage = Math.min(Math.round((uploaded / target) * 100), 100);
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Videos Uploaded</span>
+                      <span className="text-sm font-bold text-purple-600">{uploaded} of {target}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{percentage}% of monthly goal</p>
+                  </div>
+                );
+              })()}
+
+              {/* Emails Approved */}
+              {(() => {
+                const emailTotal = clientContent.filter(c => c.type === 'email').length;
+                const emailApproved = clientContent.filter(c => c.type === 'email' && c.status === 'approved').length;
+                const target = 4;
+                const percentage = emailTotal > 0 ? Math.min(Math.round((emailApproved / target) * 100), 100) : 0;
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Emails</span>
+                      <span className="text-sm font-bold text-green-600">{emailApproved} of {target}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{percentage}% of monthly goal</p>
+                  </div>
+                );
+              })()}
+
+              {/* Pending Reviews */}
+              {(() => {
+                const pending = clientContent.filter(c => c.status === 'pending').length;
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Pending Review</span>
+                      <span className={`text-sm font-bold ${pending > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{pending}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-3 rounded-full transition-all duration-500 ${pending > 0 ? 'bg-gradient-to-r from-orange-500 to-orange-600' : 'bg-gray-300'}`}
+                        style={{ width: pending > 0 ? '100%' : '0%' }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {pending === 0 ? 'All caught up! 🎉' : 'Items need your review'}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
           <div className="mb-8">
@@ -912,8 +1033,218 @@ const ClientPortal = () => {
                 <p className="text-gray-600">Manage your approved social content and video production</p>
               </div>
 
+              {/* Video Recording Section */}
               <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Submit Video for Editing</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Record Video with Teleprompter</h3>
+                <p className="text-sm text-gray-600 mb-4">Record your video directly in the browser with an optional teleprompter</p>
+
+                {!isRecording && !recordedBlob && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Teleprompter Script (Optional)</label>
+                      <textarea
+                        value={teleprompterText}
+                        onChange={(e) => setTeleprompterText(e.target.value)}
+                        placeholder="Enter your script here... It will scroll automatically while you record."
+                        className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        rows="4"
+                      />
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          const stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'user', width: 1280, height: 720 },
+                            audio: true
+                          });
+                          setCameraStream(stream);
+
+                          const videoElement = document.getElementById('camera-preview');
+                          if (videoElement) {
+                            videoElement.srcObject = stream;
+                          }
+
+                          const recorder = new MediaRecorder(stream, {
+                            mimeType: 'video/webm;codecs=vp9'
+                          });
+                          const chunks = [];
+
+                          recorder.ondataavailable = (e) => {
+                            if (e.data.size > 0) {
+                              chunks.push(e.data);
+                            }
+                          };
+
+                          recorder.onstop = () => {
+                            const blob = new Blob(chunks, { type: 'video/webm' });
+                            setRecordedBlob(blob);
+                            stream.getTracks().forEach(track => track.stop());
+                            setCameraStream(null);
+                          };
+
+                          setMediaRecorder(recorder);
+                          recorder.start();
+                          setIsRecording(true);
+                          setShowTeleprompter(teleprompterText.length > 0);
+
+                          // Auto-scroll teleprompter
+                          if (teleprompterText.length > 0) {
+                            const scrollInterval = setInterval(() => {
+                              setTeleprompterScroll(prev => prev + 1);
+                            }, 50);
+
+                            setTimeout(() => clearInterval(scrollInterval), 180000); // Max 3 minutes
+                          }
+                        } catch (error) {
+                          console.error('Camera error:', error);
+                          alert('Could not access camera. Please ensure you have granted camera permissions.');
+                        }
+                      }}
+                      className="w-full bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 font-medium"
+                    >
+                      <div className="w-4 h-4 bg-white rounded-full"></div>
+                      Start Recording
+                    </button>
+                  </div>
+                )}
+
+                {isRecording && (
+                  <div className="relative">
+                    <video
+                      id="camera-preview"
+                      autoPlay
+                      muted
+                      playsInline
+                      className="w-full rounded-lg bg-black"
+                      style={{ maxHeight: '500px' }}
+                    />
+
+                    {showTeleprompter && teleprompterText && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white p-4 rounded-b-lg overflow-hidden" style={{ maxHeight: '150px' }}>
+                        <div
+                          className="text-2xl font-semibold text-center leading-relaxed transition-transform duration-100"
+                          style={{ transform: `translateY(-${teleprompterScroll}px)` }}
+                        >
+                          {teleprompterText}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        onClick={() => {
+                          if (mediaRecorder && mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                            setIsRecording(false);
+                            setShowTeleprompter(false);
+                            setTeleprompterScroll(0);
+                          }
+                        }}
+                        className="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 font-medium"
+                      >
+                        <div className="w-4 h-4 bg-white"></div>
+                        Stop Recording
+                      </button>
+
+                      <button
+                        onClick={() => setShowTeleprompter(!showTeleprompter)}
+                        className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                      >
+                        {showTeleprompter ? 'Hide' : 'Show'} Script
+                      </button>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-2 text-red-600 animate-pulse">
+                      <div className="w-3 h-3 bg-red-600 rounded-full"></div>
+                      <span className="font-medium">Recording in progress...</span>
+                    </div>
+                  </div>
+                )}
+
+                {recordedBlob && !isRecording && (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-2">Preview Your Recording:</p>
+                      <video
+                        src={URL.createObjectURL(recordedBlob)}
+                        controls
+                        className="w-full rounded-lg bg-black"
+                        style={{ maxHeight: '400px' }}
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={async () => {
+                          setUploadingVideo(true);
+                          setUploadProgress(0);
+
+                          try {
+                            // Create a File object from the blob
+                            const file = new File([recordedBlob], `recording-${Date.now()}.webm`, { type: 'video/webm' });
+
+                            // Upload to Firebase Storage
+                            const finalVideoLink = await uploadFileToStorage(
+                              file,
+                              'videos',
+                              (progress) => setUploadProgress(progress)
+                            );
+
+                            // Submit video to Firestore
+                            const newVideo = {
+                              id: Date.now().toString(),
+                              clientId: effectiveClientId,
+                              videoLink: finalVideoLink,
+                              description: videoDescription,
+                              status: 'pending',
+                              submittedAt: new Date().toISOString(),
+                              fileName: file.name
+                            };
+
+                            await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+
+                            // Send SMS notification
+                            await sendSMS(
+                              '+18056379009',
+                              `📹 New video submitted by ${currentUser.companyName}. Check the admin portal to review!`
+                            );
+
+                            setRecordedBlob(null);
+                            setVideoDescription('');
+                            await loadUserVideos();
+                            alert('Video submitted successfully!');
+                          } catch (error) {
+                            console.error('Upload error:', error);
+                            alert('Failed to upload video: ' + error.message);
+                          } finally {
+                            setUploadingVideo(false);
+                            setUploadProgress(0);
+                          }
+                        }}
+                        disabled={uploadingVideo}
+                        className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                      >
+                        {uploadingVideo ? `Uploading... ${Math.round(uploadProgress)}%` : 'Submit Recording'}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setRecordedBlob(null);
+                          setTeleprompterText('');
+                          setTeleprompterScroll(0);
+                        }}
+                        className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                      >
+                        Discard & Record Again
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Or Upload Existing Video</h3>
                 <p className="text-sm text-gray-600 mb-4">Upload your video file directly or provide a link to Google Drive/Dropbox</p>
                 <div className="space-y-4">
                   {/* File Upload Option */}
@@ -1257,40 +1588,190 @@ const ClientPortal = () => {
           {activePage === 'settings' && (
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Settings</h3>
-              <div className="space-y-3 mb-8">
-                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => {
-                  const value = editedAnswers[key];
-                  const displayValue = Array.isArray(value) ? value.join(', ') : (value || '');
-                  const isArrayField = key !== 'competitors';
 
-                  return (
-                    <div key={key} className="border rounded">
-                      <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
-                        <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                        <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
-                      </button>
-                      {expanded === key && (
-                        <div className="px-4 pb-4">
-                          <div className="text-sm text-gray-600 mb-2">Current: {displayValue || 'Not set'}</div>
-                          <textarea value={displayValue} onChange={(e) => {
-                            const newValue = isArrayField ? e.target.value.split(',').map(s => s.trim()).filter(s => s) : e.target.value;
-                            setEditedAnswers({ ...editedAnswers, [key]: newValue });
-                          }} placeholder={isArrayField ? 'Enter comma-separated values' : 'Enter text...'} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
-                          {isArrayField && <p className="text-xs text-gray-500 mb-3">Separate multiple values with commas</p>}
-                          <button onClick={async () => {
-                            const updated = { ...currentUser, onboardingAnswers: editedAnswers };
-                            setCurrentUser(updated);
-                            await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-                            saveSession(updated, 'dashboard');
-                            setExpanded(null);
-                          }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              {/* Industry */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">What do you do?</label>
+                <select
+                  value={Array.isArray(editedAnswers.industry) ? editedAnswers.industry[0] || '' : editedAnswers.industry || ''}
+                  onChange={(e) => setEditedAnswers({ ...editedAnswers, industry: [e.target.value] })}
+                  className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select...</option>
+                  <option value="Realtor">Realtor</option>
+                  <option value="Loan Officer">Loan Officer</option>
+                </select>
               </div>
 
+              {/* Target Audience */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Who is your target audience?</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'].map(option => {
+                    const current = Array.isArray(editedAnswers.targetAudience) ? editedAnswers.targetAudience : [];
+                    const isSelected = current.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          if (isSelected) {
+                            setEditedAnswers({ ...editedAnswers, targetAudience: current.filter(a => a !== option) });
+                          } else {
+                            setEditedAnswers({ ...editedAnswers, targetAudience: [...current, option] });
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Marketing Goals */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">What are your main marketing goals?</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'].map(option => {
+                    const current = Array.isArray(editedAnswers.goals) ? editedAnswers.goals : [];
+                    const isSelected = current.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          if (isSelected) {
+                            setEditedAnswers({ ...editedAnswers, goals: current.filter(g => g !== option) });
+                          } else {
+                            setEditedAnswers({ ...editedAnswers, goals: [...current, option] });
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Brand Voice */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">How would you describe your brand voice?</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'].map(option => {
+                    const current = Array.isArray(editedAnswers.brandVoice) ? editedAnswers.brandVoice : [];
+                    const isSelected = current.includes(option);
+                    return (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          if (isSelected) {
+                            setEditedAnswers({ ...editedAnswers, brandVoice: current.filter(v => v !== option) });
+                          } else {
+                            setEditedAnswers({ ...editedAnswers, brandVoice: [...current, option] });
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}
+                      >
+                        {option}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Text Fields */}
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Who are your main competitors?</label>
+                  <textarea
+                    value={editedAnswers.competitors || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, competitors: e.target.value })}
+                    placeholder="e.g., Company A, Company B"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">What separates you from your competitors?</label>
+                  <textarea
+                    value={editedAnswers.differentiators || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, differentiators: e.target.value })}
+                    placeholder="Describe what makes you unique..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">What are your primary markets? (locations)</label>
+                  <textarea
+                    value={editedAnswers.primaryMarkets || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, primaryMarkets: e.target.value })}
+                    placeholder="e.g., Los Angeles, Orange County, San Diego"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Average price point or loan size</label>
+                  <input
+                    type="text"
+                    value={editedAnswers.pricePoint || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, pricePoint: e.target.value })}
+                    placeholder="e.g., $500K-$1M, $300K loans"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Are there creators or competitors whose style you like?</label>
+                  <textarea
+                    value={editedAnswers.styleInspirations || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, styleInspirations: e.target.value })}
+                    placeholder="List any accounts or brands you admire..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">What does success look like in the next 30, 60, and 90 days?</label>
+                  <textarea
+                    value={editedAnswers.successMetrics || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, successMetrics: e.target.value })}
+                    placeholder="Describe your goals for each timeframe..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Have you worked with a marketing agency before? What did you like or dislike?</label>
+                  <textarea
+                    value={editedAnswers.agencyExperience || ''}
+                    onChange={(e) => setEditedAnswers({ ...editedAnswers, agencyExperience: e.target.value })}
+                    placeholder="Share your experience..."
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                </div>
+              </div>
+
+              <button onClick={async () => {
+                const updated = { ...currentUser, onboardingAnswers: editedAnswers };
+                setCurrentUser(updated);
+                await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                saveSession(updated, 'dashboard');
+                alert('Settings saved successfully!');
+              }} className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-medium">
+                Save All Settings
+              </button>
+
+              <div className="border-t mt-8 pt-8">
               <h4 className="font-semibold mb-4">Social Media Logins</h4>
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 {Object.keys(socialLogins).map(key => (
@@ -1713,6 +2194,78 @@ const ClientPortal = () => {
       }
     };
 
+    const handleSendReminders = async () => {
+      if (!confirm('Send reminder texts to users with pending content (48hr and 7-day reminders)?')) {
+        return;
+      }
+
+      try {
+        console.log('📱 Checking for pending content that needs reminders...');
+
+        const response = await fetch('/api/send-reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, users })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to send reminders');
+        }
+
+        const result = await response.json();
+        console.log('✅ Reminders sent:', result);
+
+        // Update content with new remindersSent data
+        const updatedContent = content.map(item => {
+          const updated = result.details.sent48hr.find(r => r.itemId === item.id);
+          const updated7day = result.details.sent7day.find(r => r.itemId === item.id);
+
+          if (updated || updated7day) {
+            const remindersSent = item.remindersSent || [];
+            if (updated) remindersSent.push('48hr');
+            if (updated7day) remindersSent.push('7day');
+            return { ...item, remindersSent };
+          }
+          return item;
+        });
+
+        await saveContent(updatedContent);
+
+        alert(`✅ Reminders sent successfully!\n\n48-hour reminders: ${result.reminders48hr}\n7-day reminders: ${result.reminders7day}\nSkipped: ${result.skipped}`);
+      } catch (error) {
+        console.error('❌ Error sending reminders:', error);
+        alert('Failed to send reminders. Check console for details.');
+      }
+    };
+
+    const handleTestTwilio = async () => {
+      const phoneNumber = prompt('Enter your phone number to test Twilio SMS:\n(e.g., 5551234567 or +15551234567)');
+
+      if (!phoneNumber) return;
+
+      try {
+        console.log('🧪 Testing Twilio SMS configuration...');
+
+        const response = await fetch('/api/test-twilio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.details || result.error);
+        }
+
+        console.log('✅ Test SMS sent:', result);
+        alert(`✅ Test SMS sent successfully!\n\nMessage ID: ${result.details.sid}\nStatus: ${result.details.status}\nTo: ${result.details.to}\nFrom: ${result.details.from}\n\nCheck your phone for the test message!`);
+      } catch (error) {
+        console.error('❌ Twilio test failed:', error);
+        alert(`❌ Twilio test failed!\n\n${error.message}\n\nCheck the console for more details. Common issues:\n- Wrong credentials in Vercel environment variables\n- Phone number not verified (trial accounts)\n- Invalid Twilio phone number`);
+      }
+    };
+
     const handleAIGenerateContent = async () => {
       if (!confirm('Generate AI content for all users? This will create 15 pieces of content for each client and send them SMS notifications.')) {
         return;
@@ -1724,11 +2277,26 @@ const ClientPortal = () => {
       try {
         console.log('🤖 Starting AI content generation for all users...');
 
+        // Prepare user data with context
+        const usersWithContext = users.filter(u => !u.parentClientId).map(user => {
+          const userContent = content.filter(c => c.clientId === user.id);
+          const previousTitles = userContent.map(c => c.title);
+          const userFeedback = userContent
+            .filter(c => c.feedback)
+            .map(c => ({ title: c.title, feedback: c.feedback, status: c.status }));
+
+          return {
+            ...user,
+            previousTitles,
+            userFeedback
+          };
+        });
+
         // Call the admin API to generate content
         const response = await fetch('/api/admin-generate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ users: users.filter(u => !u.parentClientId) }) // Only generate for primary clients, not team members
+          body: JSON.stringify({ users: usersWithContext })
         });
 
         if (!response.ok) {
@@ -1828,6 +2396,26 @@ const ClientPortal = () => {
               >
                 <Sparkles className="w-5 h-5" />
                 {isGeneratingAI ? 'Generating AI Content...' : 'AI Generate Content'}
+              </button>
+              <button
+                onClick={handleSendReminders}
+                className="bg-orange-600 text-white px-6 py-3 rounded hover:bg-orange-700 flex items-center gap-2"
+                title="Send 48hr and 7-day reminders for pending content"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                Send Reminders
+              </button>
+              <button
+                onClick={handleTestTwilio}
+                className="bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 flex items-center gap-2"
+                title="Send a test SMS to verify Twilio configuration"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Test Twilio
               </button>
               <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 flex items-center gap-2">
                 <Upload className="w-5 h-5" />Upload Content
@@ -2582,6 +3170,62 @@ const ClientPortal = () => {
                     <p className="text-gray-600 text-sm">No social media logins provided</p>
                   </div>
                 )}
+
+                {/* Admin Notes for ChatGPT Context */}
+                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-yellow-600" />
+                    AI Content Notes
+                  </h3>
+                  <p className="text-xs text-gray-600 mb-3">
+                    These notes will be used by ChatGPT when generating content for this client. Include preferences, feedback patterns, or special instructions.
+                  </p>
+                  <textarea
+                    value={selectedUser.aiNotes || ''}
+                    onChange={async (e) => {
+                      const updatedUser = { ...selectedUser, aiNotes: e.target.value };
+                      setSelectedUser(updatedUser);
+                      // Save to database
+                      await saveUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
+                    }}
+                    placeholder="e.g., Client prefers shorter content, likes data-driven posts, avoids industry jargon..."
+                    className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-yellow-500 resize-none"
+                    rows="4"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 Tip: Add user feedback patterns here to help AI learn their preferences
+                  </p>
+                </div>
+
+                {/* Recent Content Feedback */}
+                {(() => {
+                  const userContentWithFeedback = content.filter(c => c.clientId === selectedUser.id && c.feedback);
+                  if (userContentWithFeedback.length > 0) {
+                    return (
+                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                          <FileText className="w-5 h-5 text-green-600" />
+                          Recent User Feedback ({userContentWithFeedback.length})
+                        </h3>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {userContentWithFeedback.slice(0, 5).map(item => (
+                            <div key={item.id} className="bg-white p-3 rounded border border-green-100">
+                              <p className="text-xs font-medium text-gray-700 mb-1">{item.title}</p>
+                              <p className="text-xs text-gray-600 italic">"{item.feedback}"</p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {item.status === 'approved' ? '✅ Approved' : '❌ Rejected'} • {new Date(item.reviewedAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                          💬 Use this feedback to update AI Notes above
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <button onClick={() => setSelectedUser(null)} className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">

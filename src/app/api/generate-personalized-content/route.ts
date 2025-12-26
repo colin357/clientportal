@@ -56,10 +56,12 @@ ${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.prima
 Please create EXACTLY 5 pieces of each of the following types (15 total):
 
 **Social Media Posts (5 pieces):**
-- Engaging posts for platforms like Instagram, Facebook, LinkedIn
-- Include hooks, value propositions, and calls-to-action
+- Each post MUST include three parts:
+  1. Title: Catchy title for the content
+  2. Video Script: A complete 30-60 second video script (conversational, engaging, with hook, value, and CTA)
+  3. Caption: Instagram/Facebook caption with emojis, hooks, and hashtags
 - Vary the style: educational, inspirational, promotional, storytelling, engagement-focused
-- Keep posts concise and platform-appropriate
+- Make scripts natural and conversational as if speaking to camera
 
 **Blog Posts (5 pieces):**
 - Full blog post with title, introduction, main points, and conclusion
@@ -77,7 +79,9 @@ For each piece, provide:
 - type: "social", "blog", or "email"
 - title: Catchy and relevant title
 - content: Complete, ready-to-use content
-- description: Brief summary of the piece
+  * For social posts: Format as "VIDEO SCRIPT:\n[script here]\n\nCAPTION:\n[caption here]"
+  * For blog/email: The full content text
+- description: Brief summary of the piece (for social posts, mention the topic/hook)
 
 Format as a JSON array with exactly 15 objects (5 social, 5 blog, 5 email).`;
 

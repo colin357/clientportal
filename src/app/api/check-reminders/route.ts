@@ -66,13 +66,13 @@ export async function POST(request: NextRequest) {
           if (!has48HourReminder && hoursSinceCreation >= 48) {
             shouldSendReminder = true;
             reminderType = '48hour';
-            message = `👋 Hi ${user.firstName}! Just a friendly reminder - you have pending content waiting for your review in the portal. We'd love your feedback! 📝`;
+            message = `👋 Hi ${user.firstName}! Just a friendly reminder - you have pending content waiting for your review in the portal. We'd love your feedback! 📝\n\n- The Team at Own It Social\nportal.ownitsocial.com`;
           }
           // Check for 7-day reminder (168 hours)
           else if (has48HourReminder && !has7DayReminder && hoursSinceCreation >= 168) {
             shouldSendReminder = true;
             reminderType = '7day';
-            message = `Hi ${user.firstName}, you still have content pending review. Please let us know if you need any changes or have questions! 🙏`;
+            message = `Hi ${user.firstName}, you still have content pending review. Please let us know if you need any changes or have questions! 🙏\n\n- The Team at Own It Social\nportal.ownitsocial.com`;
           }
 
           if (shouldSendReminder) {

@@ -178,7 +178,7 @@ Format as a JSON array with exactly 15 objects (5 social, 5 blog, 5 email).`;
               body: new URLSearchParams({
                 To: user.phoneNumber,
                 From: twilioPhone,
-                Body: `🎉 Great news! We've created ${limitedPieces.length} new personalized marketing pieces for you (${socialPosts.length} social posts, ${blogPosts.length} blog posts, ${emailCampaigns.length} emails). Check your portal to review and approve them!`,
+                Body: `🎉 Great news! We've created ${limitedPieces.length} new personalized marketing pieces for you (${socialPosts.length} social posts, ${blogPosts.length} blog posts, ${emailCampaigns.length} emails). Check your portal to review and approve them!\n\n- The Team at Own It Social\nportal.ownitsocial.com`,
               }),
             });
             console.log(`✅ SMS sent to ${user.companyName}`);

@@ -298,10 +298,12 @@ const ClientPortal = () => {
   const sendSMS = async (phoneNumber, message) => {
     try {
       console.log('📱 Sending SMS to:', phoneNumber);
+      // Add signature to all SMS messages
+      const messageWithSignature = `${message}\n\n- The Team at Own It Social\nportal.ownitsocial.com`;
       const response = await fetch('/api/send-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: phoneNumber, message })
+        body: JSON.stringify({ to: phoneNumber, message: messageWithSignature })
       });
 
       const result = await response.json();
@@ -787,16 +789,13 @@ const ClientPortal = () => {
             const emailsTotal = thisMonthContent.filter(c => c.type === 'email').length;
             const emailsApproved = thisMonthContent.filter(c => c.type === 'email' && c.status === 'approved').length;
 
-            // For ads, we'll show a simple status (this can be expanded based on your ads system)
-            const adsStatus = 'Live'; // Placeholder - you can connect this to actual ad tracking
-
             return (
               <div className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-blue-100">
                 <div className="flex items-center gap-2 mb-4">
                   <h3 className="text-xl font-bold text-gray-800">This Month's Progress</h3>
                   <span className="text-sm text-gray-500">({now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</span>
                 </div>
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {/* Content Ideas */}
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
@@ -840,22 +839,6 @@ const ClientPortal = () => {
                       ></div>
                     </div>
                     <p className="text-xs text-gray-500">{emailsApproved} approved</p>
-                  </div>
-
-                  {/* Ads Status */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-700">Ads Status</span>
-                      <span className={`text-sm font-bold px-2 py-1 rounded ${adsStatus === 'Live' ? 'bg-green-100 text-green-700' : adsStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>
-                        {adsStatus}
-                      </span>
-                    </div>
-                    <div className="flex gap-2 mt-3">
-                      <button className="flex-1 text-xs py-1 rounded bg-green-50 text-green-700 hover:bg-green-100">Live</button>
-                      <button className="flex-1 text-xs py-1 rounded bg-yellow-50 text-yellow-700 hover:bg-yellow-100">Pending</button>
-                      <button className="flex-1 text-xs py-1 rounded bg-gray-50 text-gray-700 hover:bg-gray-100">Paused</button>
-                    </div>
-                    <p className="text-xs text-gray-500">Campaign status</p>
                   </div>
                 </div>
               </div>
@@ -1413,37 +1396,91 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow p-8">
               <h3 className="text-2xl font-semibold mb-6">Settings</h3>
               <div className="space-y-3 mb-8">
-                {['industry', 'targetAudience', 'goals', 'brandVoice', 'competitors'].map(key => {
-                  const value = editedAnswers[key];
-                  const displayValue = Array.isArray(value) ? value.join(', ') : (value || '');
-                  const isArrayField = key !== 'competitors';
+                {(() => {
+                  const fieldOptions = {
+                    industry: ['Realtor', 'Loan Officer'],
+                    targetAudience: ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'],
+                    goals: ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'],
+                    brandVoice: ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'],
+                    competitors: null // Text field
+                  };
 
-                  return (
-                    <div key={key} className="border rounded">
-                      <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
-                        <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                        <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
-                      </button>
-                      {expanded === key && (
-                        <div className="px-4 pb-4">
-                          <div className="text-sm text-gray-600 mb-2">Current: {displayValue || 'Not set'}</div>
-                          <textarea value={displayValue} onChange={(e) => {
-                            const newValue = isArrayField ? e.target.value.split(',').map(s => s.trim()).filter(s => s) : e.target.value;
-                            setEditedAnswers({ ...editedAnswers, [key]: newValue });
-                          }} placeholder={isArrayField ? 'Enter comma-separated values' : 'Enter text...'} className="w-full px-4 py-3 border rounded mb-3" rows="3" />
-                          {isArrayField && <p className="text-xs text-gray-500 mb-3">Separate multiple values with commas</p>}
-                          <button onClick={async () => {
-                            const updated = { ...currentUser, onboardingAnswers: editedAnswers };
-                            setCurrentUser(updated);
-                            await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
-                            saveSession(updated, 'dashboard');
-                            setExpanded(null);
-                          }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                  return Object.keys(fieldOptions).map(key => {
+                    const value = editedAnswers[key];
+                    const displayValue = Array.isArray(value) ? value.join(', ') : (value || '');
+                    const options = fieldOptions[key];
+                    const isDropdown = options !== null;
+
+                    return (
+                      <div key={key} className="border rounded">
+                        <button onClick={() => setExpanded(expanded === key ? null : key)} className="w-full px-4 py-3 flex justify-between hover:bg-gray-50">
+                          <span className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                          <ChevronRight className={`w-5 h-5 transition ${expanded === key ? 'rotate-90' : ''}`} />
+                        </button>
+                        {expanded === key && (
+                          <div className="px-4 pb-4">
+                            <div className="text-sm text-gray-600 mb-2">Current: {displayValue || 'Not set'}</div>
+
+                            {isDropdown ? (
+                              <div className="mb-3">
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                  {(Array.isArray(value) ? value : []).map((selectedOption, idx) => (
+                                    <span key={idx} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                                      {selectedOption}
+                                      <button
+                                        onClick={() => {
+                                          const newValue = (Array.isArray(value) ? value : []).filter((_, i) => i !== idx);
+                                          setEditedAnswers({ ...editedAnswers, [key]: newValue });
+                                        }}
+                                        className="hover:text-blue-900"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      const currentValues = Array.isArray(value) ? value : [];
+                                      if (!currentValues.includes(e.target.value)) {
+                                        setEditedAnswers({ ...editedAnswers, [key]: [...currentValues, e.target.value] });
+                                      }
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                  defaultValue=""
+                                >
+                                  <option value="">Select to add...</option>
+                                  {options.map(option => (
+                                    <option key={option} value={option}>{option}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <textarea
+                                value={displayValue}
+                                onChange={(e) => setEditedAnswers({ ...editedAnswers, [key]: e.target.value })}
+                                placeholder="Enter text..."
+                                className="w-full px-4 py-3 border rounded mb-3"
+                                rows="3"
+                              />
+                            )}
+
+                            <button onClick={async () => {
+                              const updated = { ...currentUser, onboardingAnswers: editedAnswers };
+                              setCurrentUser(updated);
+                              await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
+                              saveSession(updated, 'dashboard');
+                              setExpanded(null);
+                            }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm">Save</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
 
               <h4 className="font-semibold mb-4">Social Media Logins</h4>
@@ -1800,6 +1837,7 @@ const ClientPortal = () => {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(null);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [contentTypeFilter, setContentTypeFilter] = useState('all'); // 'all', 'social', 'blog', 'email', 'landing-page'
     const [selectedContent, setSelectedContent] = useState(null);
 
     useEffect(() => {
@@ -2136,9 +2174,22 @@ const ClientPortal = () => {
 
               {content.length > 0 && (
                 <div className="bg-white rounded-lg shadow p-6">
-                  <h3 className="text-lg font-semibold mb-4">All Content</h3>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-semibold">All Content</h3>
+                    <select
+                      value={contentTypeFilter}
+                      onChange={(e) => setContentTypeFilter(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="social">Social Media</option>
+                      <option value="blog">Blog Posts</option>
+                      <option value="email">Email Campaigns</option>
+                      <option value="landing-page">Landing Pages</option>
+                    </select>
+                  </div>
                   <div className="space-y-3">
-                    {content.map(item => {
+                    {content.filter(item => contentTypeFilter === 'all' || item.type === contentTypeFilter).map(item => {
                       const client = users.find(u => u.id === item.clientId);
                       return (
                         <div key={item.id} className="p-4 bg-gray-50 rounded">
@@ -2823,11 +2874,57 @@ const ClientPortal = () => {
                     💡 Tip: These notes help ChatGPT remember what works and what doesn't for this client
                   </p>
                 </div>
+
+                {/* Client Assets */}
+                {(selectedUser.headshot || selectedUser.companyLogo) && (
+                  <div className="bg-indigo-50 rounded-lg p-4 border-2 border-indigo-200">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Upload className="w-5 h-5 text-indigo-600" />
+                      Client Assets
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {selectedUser.headshot && (
+                        <div>
+                          <p className="text-sm text-gray-600 mb-2">Headshot</p>
+                          <img
+                            src={selectedUser.headshot}
+                            alt="Client Headshot"
+                            className="w-full h-48 object-cover rounded-lg border-2 border-indigo-300"
+                          />
+                        </div>
+                      )}
+                      {selectedUser.companyLogo && (
+                        <div>
+                          <p className="text-sm text-gray-600 mb-2">Company Logo</p>
+                          <img
+                            src={selectedUser.companyLogo}
+                            alt="Company Logo"
+                            className="w-full h-48 object-contain rounded-lg border-2 border-indigo-300 bg-white p-4"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <button onClick={() => setSelectedUser(null)} className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">
-                Close
-              </button>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setCurrentUser(selectedUser);
+                    setView('dashboard');
+                    saveSession(selectedUser, 'dashboard');
+                    setSelectedUser(null);
+                  }}
+                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
+                >
+                  <Eye className="w-5 h-5" />
+                  View as User
+                </button>
+                <button onClick={() => setSelectedUser(null)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

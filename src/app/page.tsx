@@ -615,6 +615,7 @@ const ClientPortal = () => {
     const [teamPass, setTeamPass] = useState('');
     const [teamName, setTeamName] = useState('');
     const [expanded, setExpanded] = useState(null);
+    const [expandedContentType, setExpandedContentType] = useState(null); // For content review sections
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', crm: ''
@@ -872,122 +873,141 @@ const ClientPortal = () => {
 
           {activePage === 'content' && (
             <>
-              {clientContent.length === 0 ? (
-                <div className="bg-white rounded-lg shadow p-12 text-center">
-                  <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-800 mb-2">No content yet</h3>
-                </div>
-              ) : (
-                <div className="space-y-8">
-                  {/* Social Media Posts */}
-                  {clientContent.filter(c => c.type === 'social').length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <Share2 className="w-6 h-6 text-blue-600" />
-                        <h3 className="text-xl font-bold text-gray-800">Social Media Posts</h3>
-                        <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-                          {clientContent.filter(c => c.type === 'social').length}
-                        </span>
-                      </div>
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {clientContent.filter(c => c.type === 'social').map(item => (
-                          <div key={item.id} className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
-                            <div className="flex justify-between mb-3">
-                              <h4 className="font-semibold text-gray-800">{item.title}</h4>
-                              <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-4">{item.description}</p>
-                            <button onClick={() => setSelectedContent(item)} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 flex items-center justify-center gap-2">
-                              <Eye className="w-4 h-4" />Review
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              {(() => {
+                // Filter to only pending content and sort by newest first
+                const pendingContent = clientContent
+                  .filter(c => c.status === 'pending')
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-                  {/* Email Campaigns */}
-                  {clientContent.filter(c => c.type === 'email').length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <Mail className="w-6 h-6 text-green-600" />
-                        <h3 className="text-xl font-bold text-gray-800">Email Campaigns</h3>
-                        <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
-                          {clientContent.filter(c => c.type === 'email').length}
-                        </span>
-                      </div>
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {clientContent.filter(c => c.type === 'email').map(item => (
-                          <div key={item.id} className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-                            <div className="flex justify-between mb-3">
-                              <h4 className="font-semibold text-gray-800">{item.title}</h4>
-                              <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-4">{item.description}</p>
-                            <button onClick={() => setSelectedContent(item)} className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 flex items-center justify-center gap-2">
-                              <Eye className="w-4 h-4" />Review
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                const contentTypes = [
+                  {
+                    type: 'social',
+                    label: 'Social Media Posts',
+                    icon: Share2,
+                    color: 'blue',
+                    items: pendingContent.filter(c => c.type === 'social')
+                  },
+                  {
+                    type: 'email',
+                    label: 'Email Campaigns',
+                    icon: Mail,
+                    color: 'green',
+                    items: pendingContent.filter(c => c.type === 'email')
+                  },
+                  {
+                    type: 'blog',
+                    label: 'Blog Posts',
+                    icon: FileText,
+                    color: 'purple',
+                    items: pendingContent.filter(c => c.type === 'blog')
+                  },
+                  {
+                    type: 'landing-page',
+                    label: 'Landing Pages',
+                    icon: Layout,
+                    color: 'indigo',
+                    items: pendingContent.filter(c => c.type === 'landing-page')
+                  }
+                ];
 
-                  {/* Blog Posts */}
-                  {clientContent.filter(c => c.type === 'blog').length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <FileText className="w-6 h-6 text-purple-600" />
-                        <h3 className="text-xl font-bold text-gray-800">Blog Posts</h3>
-                        <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
-                          {clientContent.filter(c => c.type === 'blog').length}
-                        </span>
-                      </div>
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {clientContent.filter(c => c.type === 'blog').map(item => (
-                          <div key={item.id} className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
-                            <div className="flex justify-between mb-3">
-                              <h4 className="font-semibold text-gray-800">{item.title}</h4>
-                              <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-4">{item.description}</p>
-                            <button onClick={() => setSelectedContent(item)} className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 flex items-center justify-center gap-2">
-                              <Eye className="w-4 h-4" />Review
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                if (pendingContent.length === 0) {
+                  return (
+                    <div className="bg-white rounded-lg shadow p-12 text-center">
+                      <Clock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold text-gray-800 mb-2">No pending content</h3>
+                      <p className="text-gray-600">All content has been reviewed!</p>
                     </div>
-                  )}
+                  );
+                }
 
-                  {/* Landing Pages (if any exist) */}
-                  {clientContent.filter(c => c.type === 'landing-page').length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <Layout className="w-6 h-6 text-indigo-600" />
-                        <h3 className="text-xl font-bold text-gray-800">Landing Pages</h3>
-                        <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-medium">
-                          {clientContent.filter(c => c.type === 'landing-page').length}
-                        </span>
-                      </div>
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {clientContent.filter(c => c.type === 'landing-page').map(item => (
-                          <div key={item.id} className="bg-white rounded-lg shadow p-6 border-l-4 border-indigo-500">
-                            <div className="flex justify-between mb-3">
-                              <h4 className="font-semibold text-gray-800">{item.title}</h4>
-                              <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
+                return (
+                  <div className="space-y-4">
+                    {contentTypes.map(({ type, label, icon: Icon, color, items }) => {
+                      if (items.length === 0) return null;
+
+                      const isExpanded = expandedContentType === type;
+
+                      // Define color classes explicitly for Tailwind
+                      const colorClasses = {
+                        blue: {
+                          icon: 'text-blue-600',
+                          badge: 'bg-blue-100 text-blue-800',
+                          border: 'border-blue-200',
+                          button: 'bg-blue-600 hover:bg-blue-700'
+                        },
+                        green: {
+                          icon: 'text-green-600',
+                          badge: 'bg-green-100 text-green-800',
+                          border: 'border-green-200',
+                          button: 'bg-green-600 hover:bg-green-700'
+                        },
+                        purple: {
+                          icon: 'text-purple-600',
+                          badge: 'bg-purple-100 text-purple-800',
+                          border: 'border-purple-200',
+                          button: 'bg-purple-600 hover:bg-purple-700'
+                        },
+                        indigo: {
+                          icon: 'text-indigo-600',
+                          badge: 'bg-indigo-100 text-indigo-800',
+                          border: 'border-indigo-200',
+                          button: 'bg-indigo-600 hover:bg-indigo-700'
+                        }
+                      };
+
+                      const classes = colorClasses[color];
+
+                      return (
+                        <div key={type} className="bg-white rounded-lg shadow overflow-hidden">
+                          <button
+                            onClick={() => setExpandedContentType(isExpanded ? null : type)}
+                            className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Icon className={`w-6 h-6 ${classes.icon}`} />
+                              <h3 className="text-xl font-bold text-gray-800">{label}</h3>
+                              <span className={`${classes.badge} px-3 py-1 rounded-full text-sm font-medium`}>
+                                {items.length} pending
+                              </span>
                             </div>
-                            <p className="text-sm text-gray-600 mb-4">{item.description}</p>
-                            <button onClick={() => setSelectedContent(item)} className="w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700 flex items-center justify-center gap-2">
-                              <Eye className="w-4 h-4" />Review
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                            <ChevronRight className={`w-6 h-6 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          </button>
+
+                          {isExpanded && (
+                            <div className="px-6 pb-6">
+                              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {items.map(item => (
+                                  <div key={item.id} className={`bg-white rounded-lg border-2 ${classes.border} p-6 hover:shadow-md transition`}>
+                                    <div className="flex justify-between mb-3">
+                                      <h4 className="font-semibold text-gray-800 flex-1 pr-2">{item.title}</h4>
+                                      <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-medium whitespace-nowrap">
+                                        Pending
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mb-3">{item.description}</p>
+                                    {item.createdAt && (
+                                      <p className="text-xs text-gray-500 mb-3">
+                                        Created {new Date(item.createdAt).toLocaleDateString()}
+                                      </p>
+                                    )}
+                                    <button
+                                      onClick={() => setSelectedContent(item)}
+                                      className={`w-full ${classes.button} text-white py-2 rounded flex items-center justify-center gap-2`}
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                      Review
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </>
           )}
 

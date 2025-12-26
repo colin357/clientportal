@@ -74,7 +74,12 @@ export async function POST(request: NextRequest) {
           item.remindersSent = [...remindersSent, '7day'];
         } catch (error) {
           console.error(`Failed to send 7-day reminder for ${item.id}:`, error);
-          reminders.skipped.push({ itemId: item.id, reason: 'SMS send failed' });
+          reminders.skipped.push({
+            itemId: item.id,
+            reason: 'SMS send failed',
+            error: error.message,
+            phoneNumber: user.phoneNumber
+          });
         }
       }
       // Check for 48-hour reminder
@@ -99,7 +104,12 @@ export async function POST(request: NextRequest) {
           item.remindersSent = [...remindersSent, '48hr'];
         } catch (error) {
           console.error(`Failed to send 48hr reminder for ${item.id}:`, error);
-          reminders.skipped.push({ itemId: item.id, reason: 'SMS send failed' });
+          reminders.skipped.push({
+            itemId: item.id,
+            reason: 'SMS send failed',
+            error: error.message,
+            phoneNumber: user.phoneNumber
+          });
         }
       }
     }
@@ -120,9 +130,39 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Format phone number to E.164 format (+1XXXXXXXXXX)
+function formatPhoneNumber(phone: string): string {
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '');
+
+  // If it's 10 digits, assume US and add +1
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+
+  // If it's 11 digits starting with 1, add +
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+
+  // If it already starts with +, return as is
+  if (phone.startsWith('+')) {
+    return phone;
+  }
+
+  // Otherwise, add + prefix
+  return `+${digits}`;
+}
+
 async function sendTwilioSMS(sid: string, token: string, from: string, to: string, message: string) {
   const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
   const credentials = Buffer.from(`${sid}:${token}`).toString('base64');
+
+  // Format phone numbers to E.164
+  const formattedTo = formatPhoneNumber(to);
+  const formattedFrom = formatPhoneNumber(from);
+
+  console.log(`📱 Attempting to send SMS from ${formattedFrom} to ${formattedTo}`);
 
   const response = await fetch(twilioUrl, {
     method: 'POST',
@@ -131,16 +171,26 @@ async function sendTwilioSMS(sid: string, token: string, from: string, to: strin
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
-      To: to,
-      From: from,
+      To: formattedTo,
+      From: formattedFrom,
       Body: message,
     }),
   });
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(`Twilio error: ${error.message || 'Unknown error'}`);
+    console.error('❌ Twilio API error:', {
+      status: response.status,
+      code: error.code,
+      message: error.message,
+      moreInfo: error.more_info,
+      to: formattedTo,
+      from: formattedFrom
+    });
+    throw new Error(`Twilio error (${error.code}): ${error.message}. More info: ${error.more_info}`);
   }
 
-  return await response.json();
+  const result = await response.json();
+  console.log('✅ SMS sent successfully:', { sid: result.sid, to: formattedTo, status: result.status });
+  return result;
 }

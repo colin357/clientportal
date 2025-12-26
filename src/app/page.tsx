@@ -2238,6 +2238,34 @@ const ClientPortal = () => {
       }
     };
 
+    const handleTestTwilio = async () => {
+      const phoneNumber = prompt('Enter your phone number to test Twilio SMS:\n(e.g., 5551234567 or +15551234567)');
+
+      if (!phoneNumber) return;
+
+      try {
+        console.log('🧪 Testing Twilio SMS configuration...');
+
+        const response = await fetch('/api/test-twilio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.details || result.error);
+        }
+
+        console.log('✅ Test SMS sent:', result);
+        alert(`✅ Test SMS sent successfully!\n\nMessage ID: ${result.details.sid}\nStatus: ${result.details.status}\nTo: ${result.details.to}\nFrom: ${result.details.from}\n\nCheck your phone for the test message!`);
+      } catch (error) {
+        console.error('❌ Twilio test failed:', error);
+        alert(`❌ Twilio test failed!\n\n${error.message}\n\nCheck the console for more details. Common issues:\n- Wrong credentials in Vercel environment variables\n- Phone number not verified (trial accounts)\n- Invalid Twilio phone number`);
+      }
+    };
+
     const handleAIGenerateContent = async () => {
       if (!confirm('Generate AI content for all users? This will create 15 pieces of content for each client and send them SMS notifications.')) {
         return;
@@ -2378,6 +2406,16 @@ const ClientPortal = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 Send Reminders
+              </button>
+              <button
+                onClick={handleTestTwilio}
+                className="bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 flex items-center gap-2"
+                title="Send a test SMS to verify Twilio configuration"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Test Twilio
               </button>
               <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 flex items-center gap-2">
                 <Upload className="w-5 h-5" />Upload Content

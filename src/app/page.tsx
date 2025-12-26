@@ -771,9 +771,9 @@ const ClientPortal = () => {
               return createdDate.getMonth() === currentMonth && createdDate.getFullYear() === currentYear;
             });
 
-            // Calculate metrics
-            const contentIdeasTotal = thisMonthContent.filter(c => c.type === 'content-idea' || c.type === 'social' || c.type === 'blog').length;
-            const contentIdeasApproved = thisMonthContent.filter(c => (c.type === 'content-idea' || c.type === 'social' || c.type === 'blog') && c.status === 'approved').length;
+            // Calculate metrics (social + blog posts only)
+            const contentIdeasTotal = thisMonthContent.filter(c => c.type === 'social' || c.type === 'blog').length;
+            const contentIdeasApproved = thisMonthContent.filter(c => (c.type === 'social' || c.type === 'blog') && c.status === 'approved').length;
 
             const videosTotal = userVideos.filter(v => {
               const uploadedDate = new Date(v.uploadedAt);
@@ -969,33 +969,6 @@ const ClientPortal = () => {
                             </div>
                             <p className="text-sm text-gray-600 mb-4">{item.description}</p>
                             <button onClick={() => setSelectedContent(item)} className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 flex items-center justify-center gap-2">
-                              <Eye className="w-4 h-4" />Review
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Content Ideas */}
-                  {clientContent.filter(c => c.type === 'content-idea' || !c.type).length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-3 mb-4">
-                        <Sparkles className="w-6 h-6 text-orange-600" />
-                        <h3 className="text-xl font-bold text-gray-800">Content Ideas</h3>
-                        <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
-                          {clientContent.filter(c => c.type === 'content-idea' || !c.type).length}
-                        </span>
-                      </div>
-                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {clientContent.filter(c => c.type === 'content-idea' || !c.type).map(item => (
-                          <div key={item.id} className="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
-                            <div className="flex justify-between mb-3">
-                              <h4 className="font-semibold text-gray-800">{item.title}</h4>
-                              <span className={`px-2 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-4">{item.description}</p>
-                            <button onClick={() => setSelectedContent(item)} className="w-full bg-orange-600 text-white py-2 rounded hover:bg-orange-700 flex items-center justify-center gap-2">
                               <Eye className="w-4 h-4" />Review
                             </button>
                           </div>
@@ -1262,20 +1235,72 @@ const ClientPortal = () => {
           )}
 
           {activePage === 'crm' && (
-            <div className="bg-white rounded-lg shadow p-12 text-center">
-              <Users className="w-16 h-16 text-green-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold">CRM</h3>
-              <p className="text-gray-600">Approved emails will appear here</p>
+            <div className="bg-white rounded-lg shadow p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <Mail className="w-8 h-8 text-green-600" />
+                <h3 className="text-2xl font-bold text-gray-800">CRM - Email Campaigns</h3>
+              </div>
+              {clientContent.filter(c => c.type === 'email' && c.status === 'approved').length === 0 ? (
+                <div className="text-center py-12">
+                  <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No approved email campaigns yet</p>
+                  <p className="text-gray-500 text-sm mt-2">Approve emails in the Content Review tab to see them here</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-6">
+                  {clientContent.filter(c => c.type === 'email' && c.status === 'approved').map(item => (
+                    <div key={item.id} className="bg-gradient-to-br from-green-50 to-white rounded-lg p-6 border-2 border-green-200 shadow-sm hover:shadow-md transition">
+                      <div className="flex justify-between items-start mb-4">
+                        <h4 className="font-bold text-lg text-gray-800">{item.title}</h4>
+                        <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">Approved</span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-4">{item.description}</p>
+                      <div className="bg-white rounded p-4 mb-4 max-h-60 overflow-y-auto">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.content}</p>
+                      </div>
+                      {item.reviewedAt && (
+                        <p className="text-xs text-gray-500">Approved on {new Date(item.reviewedAt).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {activePage === 'ai-generator' && <AIContentAssistant />}
 
           {activePage === 'ai' && (
-            <div className="bg-white rounded-lg shadow p-12 text-center">
-              <Sparkles className="w-16 h-16 text-purple-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold">AI Optimization</h3>
-              <p className="text-gray-600">Coming soon - optimized content for your campaigns</p>
+            <div className="bg-white rounded-lg shadow p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <Sparkles className="w-8 h-8 text-purple-600" />
+                <h3 className="text-2xl font-bold text-gray-800">AI Optimization - Blog Posts</h3>
+              </div>
+              {clientContent.filter(c => c.type === 'blog' && c.status === 'approved').length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600">No approved blog posts yet</p>
+                  <p className="text-gray-500 text-sm mt-2">Approve blog posts in the Content Review tab to see them here</p>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-6">
+                  {clientContent.filter(c => c.type === 'blog' && c.status === 'approved').map(item => (
+                    <div key={item.id} className="bg-gradient-to-br from-purple-50 to-white rounded-lg p-6 border-2 border-purple-200 shadow-sm hover:shadow-md transition">
+                      <div className="flex justify-between items-start mb-4">
+                        <h4 className="font-bold text-lg text-gray-800">{item.title}</h4>
+                        <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">Approved</span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-4">{item.description}</p>
+                      <div className="bg-white rounded p-4 mb-4 max-h-60 overflow-y-auto">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.content}</p>
+                      </div>
+                      {item.reviewedAt && (
+                        <p className="text-xs text-gray-500">Approved on {new Date(item.reviewedAt).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

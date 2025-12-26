@@ -642,12 +642,22 @@ const ClientPortal = () => {
 
       try {
         console.log('🤖 Generating initial personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
+
+        // Gather context for ChatGPT
+        const previousTitles = clientContent.map(c => c.title);
+        const userFeedback = clientContent
+          .filter(c => c.feedback)
+          .map(c => ({ title: c.title, feedback: c.feedback, status: c.status }));
+
         const response = await fetch('/api/generate-personalized-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user: currentUser,
-            onboardingAnswers: currentUser.onboardingAnswers
+            onboardingAnswers: currentUser.onboardingAnswers,
+            previousTitles,
+            aiNotes: currentUser.aiNotes || '',
+            userFeedback
           })
         });
 
@@ -2195,11 +2205,26 @@ const ClientPortal = () => {
       try {
         console.log('🤖 Starting AI content generation for all users...');
 
+        // Prepare user data with context
+        const usersWithContext = users.filter(u => !u.parentClientId).map(user => {
+          const userContent = content.filter(c => c.clientId === user.id);
+          const previousTitles = userContent.map(c => c.title);
+          const userFeedback = userContent
+            .filter(c => c.feedback)
+            .map(c => ({ title: c.title, feedback: c.feedback, status: c.status }));
+
+          return {
+            ...user,
+            previousTitles,
+            userFeedback
+          };
+        });
+
         // Call the admin API to generate content
         const response = await fetch('/api/admin-generate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ users: users.filter(u => !u.parentClientId) }) // Only generate for primary clients, not team members
+          body: JSON.stringify({ users: usersWithContext })
         });
 
         if (!response.ok) {
@@ -3053,6 +3078,62 @@ const ClientPortal = () => {
                     <p className="text-gray-600 text-sm">No social media logins provided</p>
                   </div>
                 )}
+
+                {/* Admin Notes for ChatGPT Context */}
+                <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-yellow-600" />
+                    AI Content Notes
+                  </h3>
+                  <p className="text-xs text-gray-600 mb-3">
+                    These notes will be used by ChatGPT when generating content for this client. Include preferences, feedback patterns, or special instructions.
+                  </p>
+                  <textarea
+                    value={selectedUser.aiNotes || ''}
+                    onChange={async (e) => {
+                      const updatedUser = { ...selectedUser, aiNotes: e.target.value };
+                      setSelectedUser(updatedUser);
+                      // Save to database
+                      await saveUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
+                    }}
+                    placeholder="e.g., Client prefers shorter content, likes data-driven posts, avoids industry jargon..."
+                    className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-yellow-500 resize-none"
+                    rows="4"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 Tip: Add user feedback patterns here to help AI learn their preferences
+                  </p>
+                </div>
+
+                {/* Recent Content Feedback */}
+                {(() => {
+                  const userContentWithFeedback = content.filter(c => c.clientId === selectedUser.id && c.feedback);
+                  if (userContentWithFeedback.length > 0) {
+                    return (
+                      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                          <FileText className="w-5 h-5 text-green-600" />
+                          Recent User Feedback ({userContentWithFeedback.length})
+                        </h3>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {userContentWithFeedback.slice(0, 5).map(item => (
+                            <div key={item.id} className="bg-white p-3 rounded border border-green-100">
+                              <p className="text-xs font-medium text-gray-700 mb-1">{item.title}</p>
+                              <p className="text-xs text-gray-600 italic">"{item.feedback}"</p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {item.status === 'approved' ? '✅ Approved' : '❌ Rejected'} • {new Date(item.reviewedAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                          💬 Use this feedback to update AI Notes above
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <button onClick={() => setSelectedUser(null)} className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">

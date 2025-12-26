@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -632,6 +632,9 @@ const ClientPortal = () => {
     const [headshotProgress, setHeadshotProgress] = useState(0);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [logoProgress, setLogoProgress] = useState(0);
+    const [contentVideoUploads, setContentVideoUploads] = useState({}); // Track uploads per content item
+    const [contentVideoFiles, setContentVideoFiles] = useState({}); // Track selected files per content item
+    const [contentVideoLinks, setContentVideoLinks] = useState({}); // Track video links per content item
 
     useEffect(() => {
       loadUserVideos();
@@ -1224,18 +1227,196 @@ const ClientPortal = () => {
                     <p className="text-gray-600">No approved social content yet</p>
                   </div>
                 ) : (
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {clientContent.filter(c => c.status === 'approved' && c.type === 'social').map(item => (
-                      <div key={item.id} className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="font-semibold text-gray-800 mb-2">{item.title}</h4>
-                        <p className="text-gray-600 text-sm mb-3">{item.content}</p>
-                        {item.fileLink && (
-                          <a href={item.fileLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
-                            <FileText className="w-4 h-4" />View Attachment
-                          </a>
-                        )}
-                      </div>
-                    ))}
+                  <div className="space-y-4">
+                    {clientContent.filter(c => c.status === 'approved' && c.type === 'social').map(item => {
+                      const linkedVideo = userVideos.find(v => v.contentId === item.id);
+                      const isUploading = contentVideoUploads[item.id]?.uploading || false;
+                      const uploadProgress = contentVideoUploads[item.id]?.progress || 0;
+
+                      return (
+                        <div key={item.id} className="bg-gradient-to-br from-blue-50 to-white rounded-lg p-5 border-2 border-blue-200 shadow-sm">
+                          <div className="mb-4">
+                            <h4 className="font-semibold text-gray-800 mb-2">{item.title}</h4>
+                            <p className="text-gray-600 text-sm mb-3 whitespace-pre-wrap">{item.content}</p>
+                            {item.fileLink && (
+                              <a href={item.fileLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
+                                <FileText className="w-4 h-4" />View Attachment
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Video Upload Section */}
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Video className="w-5 h-5 text-purple-600" />
+                              <h5 className="font-medium text-gray-800">Upload Video for This Content</h5>
+                            </div>
+
+                            {linkedVideo ? (
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-green-800 mb-1">Video Submitted</p>
+                                    <p className="text-xs text-green-600 mb-2">{linkedVideo.description}</p>
+                                    <div className="flex items-center gap-2">
+                                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                        linkedVideo.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        linkedVideo.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
+                                        'bg-green-100 text-green-800'
+                                      }`}>
+                                        {linkedVideo.status === 'pending' ? 'Pending Review' :
+                                         linkedVideo.status === 'in-progress' ? 'Being Edited' :
+                                         'Completed'}
+                                      </span>
+                                      {linkedVideo.completedLink && (
+                                        <a href={linkedVideo.completedLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs flex items-center gap-1">
+                                          <Download className="w-3 h-3" />View Final Video
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {/* File Upload */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Upload Video File</label>
+                                  <input
+                                    type="file"
+                                    accept="video/*"
+                                    onChange={(e) => {
+                                      const file = e.target.files[0];
+                                      setContentVideoFiles(prev => ({ ...prev, [item.id]: file }));
+                                    }}
+                                    className="w-full text-sm"
+                                    disabled={isUploading}
+                                  />
+                                  {contentVideoFiles[item.id] && (
+                                    <p className="text-xs text-gray-600 mt-1">
+                                      {contentVideoFiles[item.id].name} ({(contentVideoFiles[item.id].size / 1024 / 1024).toFixed(2)} MB)
+                                    </p>
+                                  )}
+                                </div>
+
+                                {/* OR divider */}
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 border-t border-gray-300"></div>
+                                  <span className="text-gray-500 text-xs">OR</span>
+                                  <div className="flex-1 border-t border-gray-300"></div>
+                                </div>
+
+                                {/* Link Input */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Video Link</label>
+                                  <input
+                                    type="text"
+                                    value={contentVideoLinks[item.id] || ''}
+                                    onChange={(e) => setContentVideoLinks(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                    placeholder="Google Drive or Dropbox link"
+                                    className="w-full px-3 py-2 border rounded text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                    disabled={isUploading}
+                                  />
+                                </div>
+
+                                {/* Progress Bar */}
+                                {isUploading && (
+                                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                    <div
+                                      className="bg-blue-600 h-3 transition-all duration-300 flex items-center justify-center text-xs text-white font-semibold"
+                                      style={{ width: `${uploadProgress}%` }}
+                                    >
+                                      {uploadProgress > 5 && `${Math.round(uploadProgress)}%`}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Submit Button */}
+                                <button
+                                  onClick={async () => {
+                                    const file = contentVideoFiles[item.id];
+                                    const link = contentVideoLinks[item.id];
+
+                                    if (!file && !link?.trim()) {
+                                      alert('Please upload a video file or provide a link');
+                                      return;
+                                    }
+
+                                    setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: true, progress: 0 } }));
+
+                                    try {
+                                      let finalVideoLink = link;
+
+                                      // Upload file if selected
+                                      if (file) {
+                                        if (!storage) {
+                                          alert('❌ Firebase Storage is not configured. Please use a link instead.');
+                                          setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
+                                          return;
+                                        }
+
+                                        finalVideoLink = await uploadFileToStorage(
+                                          file,
+                                          'videos',
+                                          (progress) => setContentVideoUploads(prev => ({
+                                            ...prev,
+                                            [item.id]: { uploading: true, progress }
+                                          }))
+                                        );
+                                      }
+
+                                      if (finalVideoLink && finalVideoLink.trim()) {
+                                        const newVideo = {
+                                          id: Date.now().toString(),
+                                          clientId: effectiveClientId,
+                                          contentId: item.id, // Link to the content item
+                                          contentTitle: item.title, // Store content title for reference
+                                          videoLink: finalVideoLink,
+                                          description: `Video for: ${item.title}`,
+                                          status: 'pending',
+                                          submittedAt: new Date().toISOString(),
+                                          fileName: file ? file.name : null
+                                        };
+
+                                        if (!db) {
+                                          alert('⚠️ Cloud storage not configured. Video not saved.');
+                                          setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
+                                          return;
+                                        }
+
+                                        await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+
+                                        // Send SMS notification
+                                        await sendSMS(
+                                          '+18056379009',
+                                          `📹 New video submitted by ${currentUser.companyName} for "${item.title}". Check the admin portal!`
+                                        );
+
+                                        // Clear form
+                                        setContentVideoFiles(prev => ({ ...prev, [item.id]: null }));
+                                        setContentVideoLinks(prev => ({ ...prev, [item.id]: '' }));
+                                        await loadUserVideos();
+                                        alert('Video submitted successfully!');
+                                      }
+                                    } catch (error) {
+                                      console.error('❌ Error submitting video:', error);
+                                      alert('Error submitting video. Please try again.');
+                                    } finally {
+                                      setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
+                                    }
+                                  }}
+                                  disabled={(!contentVideoFiles[item.id] && !contentVideoLinks[item.id]?.trim()) || isUploading}
+                                  className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium flex items-center justify-center gap-2"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  {isUploading ? 'Uploading...' : 'Submit Video for Editing'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2400,6 +2581,9 @@ const ClientPortal = () => {
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <p className="font-semibold text-gray-800">{client?.companyName}</p>
+                            {video.contentTitle && (
+                              <p className="text-sm text-purple-600 font-medium">📝 For Content: {video.contentTitle}</p>
+                            )}
                             <p className="text-sm text-gray-600">Submitted {new Date(video.submittedAt).toLocaleDateString()}</p>
                           </div>
                           <span className={`px-3 py-1 rounded text-xs font-medium ${
@@ -2408,7 +2592,7 @@ const ClientPortal = () => {
                             'bg-green-100 text-green-800'
                           }`}>{video.status}</span>
                         </div>
-                        
+
                         {video.description && (
                           <p className="text-sm text-gray-700 mb-3">{video.description}</p>
                         )}

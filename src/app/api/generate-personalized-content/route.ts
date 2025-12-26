@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, onboardingAnswers } = await request.json();
+    const { user, onboardingAnswers, contentHistory = [], adminNotes = '' } = await request.json();
 
     // Validate required fields
     if (!user || !onboardingAnswers) {
@@ -27,13 +27,31 @@ export async function POST(request: NextRequest) {
     const goals = Array.isArray(onboardingAnswers.goals) ? onboardingAnswers.goals.join(', ') : onboardingAnswers.goals || 'marketing';
     const brandVoice = Array.isArray(onboardingAnswers.brandVoice) ? onboardingAnswers.brandVoice.join(', ') : onboardingAnswers.brandVoice || 'professional';
 
+    // Build conversation history context
+    let historyContext = '';
+    if (contentHistory && contentHistory.length > 0) {
+      historyContext = `\n\nPREVIOUSLY GENERATED CONTENT (DO NOT REPEAT OR RECYCLE THESE IDEAS):
+${contentHistory.slice(-20).map(item => `- ${item.title}: ${item.description || ''}`).join('\n')}
+
+IMPORTANT: Generate completely NEW and DIFFERENT ideas from the ones listed above. Avoid repeating topics, angles, or themes.`;
+    }
+
+    // Build admin notes context
+    let adminContext = '';
+    if (adminNotes && adminNotes.trim()) {
+      adminContext = `\n\nADMIN FEEDBACK & PREFERENCES:
+${adminNotes}
+
+Please take this feedback into account when creating new content.`;
+    }
+
     const prompt = `You are a professional marketing content creator. Generate 15 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
 
 Target Audience: ${targetAudience}
 Goals: ${goals}
 Brand Voice: ${brandVoice}
 ${onboardingAnswers.differentiators ? `What makes them unique: ${onboardingAnswers.differentiators}` : ''}
-${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}
+${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}${historyContext}${adminContext}
 
 Please create EXACTLY 5 pieces of each of the following types (15 total):
 

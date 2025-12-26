@@ -244,9 +244,25 @@ const ClientPortal = () => {
   };
 
   const handleContentAction = async (contentId, action, feedback = '') => {
-    await saveContent(content.map(c =>
+    const updatedContent = content.map(c =>
       c.id === contentId ? { ...c, status: action, feedback, reviewedAt: new Date().toISOString() } : c
-    ));
+    );
+
+    // Find the updated item for logging
+    const updatedItem = updatedContent.find(c => c.id === contentId);
+    console.log(`📝 Content ${action}:`, updatedItem?.title, 'Status:', updatedItem?.status);
+
+    await saveContent(updatedContent);
+
+    // Also update individual document in Firestore to ensure it's saved
+    if (db && updatedItem) {
+      try {
+        await setDoc(doc(db, 'content', contentId), updatedItem);
+        console.log('✅ Content status updated in Firestore:', contentId);
+      } catch (error) {
+        console.error('❌ Error updating content in Firestore:', error);
+      }
+    }
   };
 
   const formatPhoneE164 = (phone) => {
@@ -635,12 +651,20 @@ const ClientPortal = () => {
 
       try {
         console.log('🤖 Generating initial personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
+
+        // Get content history for this user
+        const userHistory = content
+          .filter(c => c.clientId === effectiveClientId)
+          .map(c => ({ title: c.title, description: c.description }));
+
         const response = await fetch('/api/generate-personalized-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user: currentUser,
-            onboardingAnswers: currentUser.onboardingAnswers
+            onboardingAnswers: currentUser.onboardingAnswers,
+            contentHistory: userHistory,
+            adminNotes: currentUser.adminNotes || ''
           })
         });
 
@@ -656,6 +680,7 @@ const ClientPortal = () => {
         const emailCampaigns = data.contentPieces.filter(p => p.type === 'email').slice(0, 5);
         const limitedPieces = [...socialPosts, ...blogPosts, ...emailCampaigns];
 
+        const nowTimestamp = new Date().toISOString();
         const newContent = limitedPieces.map(piece => ({
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           clientId: effectiveClientId,
@@ -664,7 +689,9 @@ const ClientPortal = () => {
           description: piece.description || 'AI-generated personalized content',
           content: piece.content || '',
           status: 'pending',
-          createdAt: new Date().toISOString()
+          createdAt: nowTimestamp,
+          firstNotificationSentAt: nowTimestamp, // Track when first notification was sent (content creation)
+          reminders: [] // Initialize empty reminders array
         }));
 
         // Save the new content
@@ -731,6 +758,109 @@ const ClientPortal = () => {
             <h2 className="text-3xl font-bold mb-2">Let's Get Started, {currentUser.firstName}! 👋</h2>
             <p className="text-blue-100">Review your marketing materials and provide feedback</p>
           </div>
+
+          {/* Client Scorecard / Progress Bar */}
+          {(() => {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+
+            // Filter content for current month
+            const thisMonthContent = clientContent.filter(c => {
+              const createdDate = new Date(c.createdAt);
+              return createdDate.getMonth() === currentMonth && createdDate.getFullYear() === currentYear;
+            });
+
+            // Calculate metrics
+            const contentIdeasTotal = thisMonthContent.filter(c => c.type === 'content-idea' || c.type === 'social' || c.type === 'blog').length;
+            const contentIdeasApproved = thisMonthContent.filter(c => (c.type === 'content-idea' || c.type === 'social' || c.type === 'blog') && c.status === 'approved').length;
+
+            const videosTotal = userVideos.filter(v => {
+              const uploadedDate = new Date(v.uploadedAt);
+              return uploadedDate.getMonth() === currentMonth && uploadedDate.getFullYear() === currentYear;
+            }).length;
+            const videosCompleted = userVideos.filter(v => {
+              const uploadedDate = new Date(v.uploadedAt);
+              return uploadedDate.getMonth() === currentMonth && uploadedDate.getFullYear() === currentYear && v.status === 'completed';
+            }).length;
+
+            const emailsTotal = thisMonthContent.filter(c => c.type === 'email').length;
+            const emailsApproved = thisMonthContent.filter(c => c.type === 'email' && c.status === 'approved').length;
+
+            // For ads, we'll show a simple status (this can be expanded based on your ads system)
+            const adsStatus = 'Live'; // Placeholder - you can connect this to actual ad tracking
+
+            return (
+              <div className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-blue-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">This Month's Progress</h3>
+                  <span className="text-sm text-gray-500">({now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</span>
+                </div>
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Content Ideas */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Content Ideas</span>
+                      <span className="text-sm font-bold text-blue-600">{contentIdeasApproved} of {contentIdeasTotal}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${contentIdeasTotal > 0 ? (contentIdeasApproved / contentIdeasTotal) * 100 : 0}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500">{contentIdeasApproved} approved</p>
+                  </div>
+
+                  {/* Videos */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Videos Uploaded</span>
+                      <span className="text-sm font-bold text-purple-600">{videosTotal} total</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${videosTotal > 0 ? (videosCompleted / videosTotal) * 100 : 0}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500">{videosCompleted} completed</p>
+                  </div>
+
+                  {/* Emails */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Emails Approved</span>
+                      <span className="text-sm font-bold text-green-600">{emailsApproved} of {emailsTotal}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${emailsTotal > 0 ? (emailsApproved / emailsTotal) * 100 : 0}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-500">{emailsApproved} approved</p>
+                  </div>
+
+                  {/* Ads Status */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Ads Status</span>
+                      <span className={`text-sm font-bold px-2 py-1 rounded ${adsStatus === 'Live' ? 'bg-green-100 text-green-700' : adsStatus === 'Pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>
+                        {adsStatus}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button className="flex-1 text-xs py-1 rounded bg-green-50 text-green-700 hover:bg-green-100">Live</button>
+                      <button className="flex-1 text-xs py-1 rounded bg-yellow-50 text-yellow-700 hover:bg-yellow-100">Pending</button>
+                      <button className="flex-1 text-xs py-1 rounded bg-gray-50 text-gray-700 hover:bg-gray-100">Paused</button>
+                    </div>
+                    <p className="text-xs text-gray-500">Campaign status</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="mb-8">
             <button onClick={() => setActivePage('content')} className={`w-full p-6 rounded-lg transition shadow-lg flex items-center justify-between ${activePage === 'content' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
@@ -1724,11 +1854,22 @@ const ClientPortal = () => {
       try {
         console.log('🤖 Starting AI content generation for all users...');
 
+        // Build content history for each user
+        const contentHistoryMap = {};
+        users.filter(u => !u.parentClientId).forEach(user => {
+          contentHistoryMap[user.id] = content
+            .filter(c => c.clientId === user.id)
+            .map(c => ({ title: c.title, description: c.description }));
+        });
+
         // Call the admin API to generate content
         const response = await fetch('/api/admin-generate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ users: users.filter(u => !u.parentClientId) }) // Only generate for primary clients, not team members
+          body: JSON.stringify({
+            users: users.filter(u => !u.parentClientId), // Only generate for primary clients, not team members
+            contentHistory: contentHistoryMap
+          })
         });
 
         if (!response.ok) {
@@ -1740,6 +1881,7 @@ const ClientPortal = () => {
 
         // Save all generated content to Firestore
         const allNewContent = [];
+        const nowTimestamp = new Date().toISOString();
         for (const userResult of result.results) {
           const userContent = userResult.contentPieces.map(piece => ({
             id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -1749,7 +1891,9 @@ const ClientPortal = () => {
             description: piece.description || 'AI-generated personalized content',
             content: piece.content || '',
             status: 'pending',
-            createdAt: new Date().toISOString()
+            createdAt: nowTimestamp,
+            firstNotificationSentAt: nowTimestamp, // Track when first notification was sent (SMS sent via admin-generate-content)
+            reminders: [] // Initialize empty reminders array
           }));
           allNewContent.push(...userContent);
         }
@@ -1821,6 +1965,52 @@ const ClientPortal = () => {
           <div className="mb-8 flex justify-between items-center">
             <h2 className="text-2xl font-semibold">Admin Dashboard</h2>
             <div className="flex gap-3">
+              <button
+                onClick={async () => {
+                  if (!confirm('Check for pending content and send reminder texts to clients who need them?')) {
+                    return;
+                  }
+
+                  try {
+                    console.log('📲 Checking reminders...');
+                    const response = await fetch('/api/check-reminders', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ users, content })
+                    });
+
+                    const result = await response.json();
+                    if (response.ok) {
+                      alert(`✅ Reminders sent: ${result.remindersSent}\n\nDetails:\n${result.details.map(d => `- ${d.companyName}: ${d.reminderType} reminder for "${d.contentTitle}"`).join('\n')}`);
+
+                      // Update content with reminder tracking
+                      const updatedContent = [...content];
+                      result.details.forEach(detail => {
+                        const contentIndex = updatedContent.findIndex(c => c.id === detail.contentId);
+                        if (contentIndex !== -1) {
+                          if (!updatedContent[contentIndex].reminders) {
+                            updatedContent[contentIndex].reminders = [];
+                          }
+                          updatedContent[contentIndex].reminders.push({
+                            type: detail.reminderType,
+                            sentAt: detail.sentAt
+                          });
+                        }
+                      });
+                      await saveContent(updatedContent);
+                    } else {
+                      alert(`❌ Error: ${result.error}`);
+                    }
+                  } catch (error) {
+                    console.error('❌ Error checking reminders:', error);
+                    alert('Failed to check reminders. See console for details.');
+                  }
+                }}
+                className="bg-orange-600 text-white px-6 py-3 rounded hover:bg-orange-700 flex items-center gap-2"
+              >
+                <Clock className="w-5 h-5" />
+                Send Reminders
+              </button>
               <button
                 onClick={handleAIGenerateContent}
                 disabled={isGeneratingAI}
@@ -2582,6 +2772,32 @@ const ClientPortal = () => {
                     <p className="text-gray-600 text-sm">No social media logins provided</p>
                   </div>
                 )}
+                {/* Admin Notes for ChatGPT */}
+                <div className="bg-yellow-50 rounded-lg p-4 border-2 border-yellow-200">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-yellow-600" />
+                    Admin Notes for ChatGPT
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Add notes about this client's preferences, feedback, or special requirements. ChatGPT will use these notes when generating future content to avoid recycled ideas and better match their expectations.
+                  </p>
+                  <textarea
+                    className="w-full px-4 py-3 border border-yellow-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none text-sm"
+                    rows="6"
+                    placeholder="e.g., 'Client prefers casual tone, avoid real estate jargon. They loved the storytelling approach in previous posts. Focus more on first-time homebuyers.'"
+                    defaultValue={selectedUser.adminNotes || ''}
+                    onBlur={async (e) => {
+                      const updatedNotes = e.target.value;
+                      const updatedUser = { ...selectedUser, adminNotes: updatedNotes };
+                      setSelectedUser(updatedUser);
+                      await saveUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
+                      console.log('✅ Admin notes saved for', selectedUser.companyName);
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 Tip: These notes help ChatGPT remember what works and what doesn't for this client
+                  </p>
+                </div>
               </div>
 
               <button onClick={() => setSelectedUser(null)} className="w-full mt-6 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">

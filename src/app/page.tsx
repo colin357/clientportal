@@ -739,6 +739,110 @@ const ClientPortal = () => {
             <p className="text-blue-100">Review your marketing materials and provide feedback</p>
           </div>
 
+          {/* Client Progress Scorecard */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <span>📊</span> This Month's Progress
+            </h3>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Content Ideas Approved */}
+              {(() => {
+                const total = clientContent.filter(c => ['social', 'blog', 'email', 'content-idea'].includes(c.type)).length;
+                const approved = clientContent.filter(c => c.status === 'approved' && ['social', 'blog', 'email', 'content-idea'].includes(c.type)).length;
+                const percentage = total > 0 ? Math.round((approved / total) * 100) : 0;
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Content Ideas</span>
+                      <span className="text-sm font-bold text-blue-600">{approved} of {total}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{percentage}% approved</p>
+                  </div>
+                );
+              })()}
+
+              {/* Videos Uploaded */}
+              {(() => {
+                const thisMonth = new Date();
+                const monthStart = new Date(thisMonth.getFullYear(), thisMonth.getMonth(), 1);
+                const uploaded = userVideos.filter(v => new Date(v.submittedAt) >= monthStart).length;
+                const target = 4;
+                const percentage = Math.min(Math.round((uploaded / target) * 100), 100);
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Videos Uploaded</span>
+                      <span className="text-sm font-bold text-purple-600">{uploaded} of {target}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{percentage}% of monthly goal</p>
+                  </div>
+                );
+              })()}
+
+              {/* Emails Approved */}
+              {(() => {
+                const emailTotal = clientContent.filter(c => c.type === 'email').length;
+                const emailApproved = clientContent.filter(c => c.type === 'email' && c.status === 'approved').length;
+                const target = 4;
+                const percentage = emailTotal > 0 ? Math.min(Math.round((emailApproved / target) * 100), 100) : 0;
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Emails</span>
+                      <span className="text-sm font-bold text-green-600">{emailApproved} of {target}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{percentage}% of monthly goal</p>
+                  </div>
+                );
+              })()}
+
+              {/* Pending Reviews */}
+              {(() => {
+                const pending = clientContent.filter(c => c.status === 'pending').length;
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Pending Review</span>
+                      <span className={`text-sm font-bold ${pending > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{pending}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-3 rounded-full transition-all duration-500 ${pending > 0 ? 'bg-gradient-to-r from-orange-500 to-orange-600' : 'bg-gray-300'}`}
+                        style={{ width: pending > 0 ? '100%' : '0%' }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {pending === 0 ? 'All caught up! 🎉' : 'Items need your review'}
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
           <div className="mb-8">
             <button onClick={() => setActivePage('content')} className={`w-full p-6 rounded-lg transition shadow-lg flex items-center justify-between ${activePage === 'content' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
               <div className="flex items-center gap-4">

@@ -748,9 +748,14 @@ const ClientPortal = () => {
       <div className="min-h-screen bg-gray-50">
         <nav className="bg-white shadow-sm">
           <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">{currentUser.companyName}</h1>
-              <p className="text-sm text-gray-600">Content Review Portal</p>
+            <div className="flex items-center gap-4">
+              {currentUser.companyLogo && (
+                <img src={currentUser.companyLogo} alt="Company Logo" className="h-12 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
+              )}
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">{currentUser.companyName}</h1>
+                <p className="text-sm text-gray-600">Content Review Portal</p>
+              </div>
             </div>
             <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-600 hover:text-gray-800">Logout</button>
           </div>
@@ -2038,8 +2043,13 @@ const ClientPortal = () => {
     return (
       <div className="min-h-screen bg-gray-50">
         <nav className="bg-gray-800 text-white">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between">
-            <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+          <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              {currentUser.companyLogo && (
+                <img src={currentUser.companyLogo} alt="Logo" className="h-12 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
+              )}
+              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+            </div>
             <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-300 hover:text-white">Logout</button>
           </div>
         </nav>
@@ -2169,8 +2179,8 @@ const ClientPortal = () => {
                   const teamMembers = users.filter(u => u.parentClientId === user.id);
                   return (
                     <div key={user.id} className="bg-white rounded-lg shadow p-6">
-                      <h3 className="text-lg font-semibold">{user.companyName}</h3>
-                      <p className="text-sm text-gray-600">{user.firstName} {user.lastName || ''} • {user.email}</p>
+                      <h3 className="text-lg font-semibold">{user.firstName} {user.lastName || ''} - {user.companyName}</h3>
+                      <p className="text-sm text-gray-600">{user.email}</p>
                       {teamMembers.length > 0 && (
                         <p className="text-xs text-gray-500 mt-1">{teamMembers.length} team member{teamMembers.length > 1 ? 's' : ''}</p>
                       )}

@@ -74,6 +74,10 @@ Please take this feedback into account when creating new content.`;
 
         const prompt = `You are a professional marketing content creator. Generate 15 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
 
+SPEAKER INFORMATION (use these exact values when needed):
+- Speaker's Name: ${user.firstName} ${user.lastName || ''}
+- Company Name: ${user.companyName}
+
 Target Audience: ${targetAudience}
 Goals: ${goals}
 Brand Voice: ${brandVoice}
@@ -89,6 +93,10 @@ Please create EXACTLY 5 pieces of each of the following types (15 total):
   3. Caption: Instagram/Facebook caption with emojis, hooks, and hashtags
 - Vary the style: educational, inspirational, promotional, storytelling, engagement-focused
 - Make scripts natural and conversational as if speaking to camera
+- IMPORTANT: DO NOT include self-introductions like "Hi, I'm [name]" or "I'm [name] with [company]" unless it's genuinely necessary for establishing credentials on a specific topic
+- Focus on delivering MEANINGFUL INFORMATION and ACTIONABLE ADVICE to the viewer immediately
+- Jump straight into the valuable content with a strong hook
+- Use the speaker's actual name (${user.firstName} ${user.lastName || ''}) and company name (${user.companyName}) if introductions are needed - NEVER use placeholders like "[first name]" or "[company name]"
 
 **Blog Posts (5 pieces):**
 - Full blog post with title, introduction, main points, and conclusion

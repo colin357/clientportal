@@ -613,6 +613,13 @@ const ClientPortal = () => {
     const [headshotProgress, setHeadshotProgress] = useState(0);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [logoProgress, setLogoProgress] = useState(0);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordedBlob, setRecordedBlob] = useState(null);
+    const [mediaRecorder, setMediaRecorder] = useState(null);
+    const [cameraStream, setCameraStream] = useState(null);
+    const [teleprompterText, setTeleprompterText] = useState('');
+    const [showTeleprompter, setShowTeleprompter] = useState(false);
+    const [teleprompterScroll, setTeleprompterScroll] = useState(0);
 
     useEffect(() => {
       loadUserVideos();
@@ -912,8 +919,218 @@ const ClientPortal = () => {
                 <p className="text-gray-600">Manage your approved social content and video production</p>
               </div>
 
+              {/* Video Recording Section */}
               <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Submit Video for Editing</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Record Video with Teleprompter</h3>
+                <p className="text-sm text-gray-600 mb-4">Record your video directly in the browser with an optional teleprompter</p>
+
+                {!isRecording && !recordedBlob && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Teleprompter Script (Optional)</label>
+                      <textarea
+                        value={teleprompterText}
+                        onChange={(e) => setTeleprompterText(e.target.value)}
+                        placeholder="Enter your script here... It will scroll automatically while you record."
+                        className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        rows="4"
+                      />
+                    </div>
+
+                    <button
+                      onClick={async () => {
+                        try {
+                          const stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'user', width: 1280, height: 720 },
+                            audio: true
+                          });
+                          setCameraStream(stream);
+
+                          const videoElement = document.getElementById('camera-preview');
+                          if (videoElement) {
+                            videoElement.srcObject = stream;
+                          }
+
+                          const recorder = new MediaRecorder(stream, {
+                            mimeType: 'video/webm;codecs=vp9'
+                          });
+                          const chunks = [];
+
+                          recorder.ondataavailable = (e) => {
+                            if (e.data.size > 0) {
+                              chunks.push(e.data);
+                            }
+                          };
+
+                          recorder.onstop = () => {
+                            const blob = new Blob(chunks, { type: 'video/webm' });
+                            setRecordedBlob(blob);
+                            stream.getTracks().forEach(track => track.stop());
+                            setCameraStream(null);
+                          };
+
+                          setMediaRecorder(recorder);
+                          recorder.start();
+                          setIsRecording(true);
+                          setShowTeleprompter(teleprompterText.length > 0);
+
+                          // Auto-scroll teleprompter
+                          if (teleprompterText.length > 0) {
+                            const scrollInterval = setInterval(() => {
+                              setTeleprompterScroll(prev => prev + 1);
+                            }, 50);
+
+                            setTimeout(() => clearInterval(scrollInterval), 180000); // Max 3 minutes
+                          }
+                        } catch (error) {
+                          console.error('Camera error:', error);
+                          alert('Could not access camera. Please ensure you have granted camera permissions.');
+                        }
+                      }}
+                      className="w-full bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 font-medium"
+                    >
+                      <div className="w-4 h-4 bg-white rounded-full"></div>
+                      Start Recording
+                    </button>
+                  </div>
+                )}
+
+                {isRecording && (
+                  <div className="relative">
+                    <video
+                      id="camera-preview"
+                      autoPlay
+                      muted
+                      playsInline
+                      className="w-full rounded-lg bg-black"
+                      style={{ maxHeight: '500px' }}
+                    />
+
+                    {showTeleprompter && teleprompterText && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white p-4 rounded-b-lg overflow-hidden" style={{ maxHeight: '150px' }}>
+                        <div
+                          className="text-2xl font-semibold text-center leading-relaxed transition-transform duration-100"
+                          style={{ transform: `translateY(-${teleprompterScroll}px)` }}
+                        >
+                          {teleprompterText}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        onClick={() => {
+                          if (mediaRecorder && mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                            setIsRecording(false);
+                            setShowTeleprompter(false);
+                            setTeleprompterScroll(0);
+                          }
+                        }}
+                        className="flex-1 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 font-medium"
+                      >
+                        <div className="w-4 h-4 bg-white"></div>
+                        Stop Recording
+                      </button>
+
+                      <button
+                        onClick={() => setShowTeleprompter(!showTeleprompter)}
+                        className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                      >
+                        {showTeleprompter ? 'Hide' : 'Show'} Script
+                      </button>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-2 text-red-600 animate-pulse">
+                      <div className="w-3 h-3 bg-red-600 rounded-full"></div>
+                      <span className="font-medium">Recording in progress...</span>
+                    </div>
+                  </div>
+                )}
+
+                {recordedBlob && !isRecording && (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-2">Preview Your Recording:</p>
+                      <video
+                        src={URL.createObjectURL(recordedBlob)}
+                        controls
+                        className="w-full rounded-lg bg-black"
+                        style={{ maxHeight: '400px' }}
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={async () => {
+                          setUploadingVideo(true);
+                          setUploadProgress(0);
+
+                          try {
+                            // Create a File object from the blob
+                            const file = new File([recordedBlob], `recording-${Date.now()}.webm`, { type: 'video/webm' });
+
+                            // Upload to Firebase Storage
+                            const finalVideoLink = await uploadFileToStorage(
+                              file,
+                              'videos',
+                              (progress) => setUploadProgress(progress)
+                            );
+
+                            // Submit video to Firestore
+                            const newVideo = {
+                              id: Date.now().toString(),
+                              clientId: effectiveClientId,
+                              videoLink: finalVideoLink,
+                              description: videoDescription,
+                              status: 'pending',
+                              submittedAt: new Date().toISOString(),
+                              fileName: file.name
+                            };
+
+                            await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+
+                            // Send SMS notification
+                            await sendSMS(
+                              '+18056379009',
+                              `📹 New video submitted by ${currentUser.companyName}. Check the admin portal to review!`
+                            );
+
+                            setRecordedBlob(null);
+                            setVideoDescription('');
+                            await loadUserVideos();
+                            alert('Video submitted successfully!');
+                          } catch (error) {
+                            console.error('Upload error:', error);
+                            alert('Failed to upload video: ' + error.message);
+                          } finally {
+                            setUploadingVideo(false);
+                            setUploadProgress(0);
+                          }
+                        }}
+                        disabled={uploadingVideo}
+                        className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                      >
+                        {uploadingVideo ? `Uploading... ${Math.round(uploadProgress)}%` : 'Submit Recording'}
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setRecordedBlob(null);
+                          setTeleprompterText('');
+                          setTeleprompterScroll(0);
+                        }}
+                        className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium"
+                      >
+                        Discard & Record Again
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Or Upload Existing Video</h3>
                 <p className="text-sm text-gray-600 mb-4">Upload your video file directly or provide a link to Google Drive/Dropbox</p>
                 <div className="space-y-4">
                   {/* File Upload Option */}

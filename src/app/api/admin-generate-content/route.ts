@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
           ? user.onboardingAnswers.brandVoice.join(', ')
           : user.onboardingAnswers.brandVoice || 'professional';
 
+        // Extract context
+        const previousTitles = user.previousTitles || [];
+        const aiNotes = user.aiNotes || '';
+        const userFeedback = user.userFeedback || [];
+
         const prompt = `You are a professional marketing content creator. Generate 15 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
 
 Target Audience: ${targetAudience}
@@ -60,6 +65,24 @@ Goals: ${goals}
 Brand Voice: ${brandVoice}
 ${user.onboardingAnswers.differentiators ? `What makes them unique: ${user.onboardingAnswers.differentiators}` : ''}
 ${user.onboardingAnswers.primaryMarkets ? `Primary Markets: ${user.onboardingAnswers.primaryMarkets}` : ''}
+
+${aiNotes ? `**IMPORTANT CLIENT PREFERENCES & FEEDBACK:**
+${aiNotes}
+
+Please carefully follow these preferences when creating content.
+` : ''}
+
+${previousTitles.length > 0 ? `**PREVIOUSLY GENERATED CONTENT (avoid duplicating these topics):**
+- ${previousTitles.slice(0, 30).join('\n- ')}
+
+Create NEW and DIFFERENT content ideas. Do NOT rehash these previous topics.
+` : ''}
+
+${userFeedback.length > 0 ? `**USER FEEDBACK PATTERNS:**
+${userFeedback.slice(0, 10).map(f => `- "${f.feedback}" (${f.status === 'approved' ? 'liked' : 'disliked'}: ${f.title})`).join('\n')}
+
+Learn from this feedback to create content the user will approve.
+` : ''}
 
 Please create EXACTLY 5 pieces of each of the following types (15 total):
 

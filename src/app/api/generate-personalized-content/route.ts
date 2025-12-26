@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, onboardingAnswers } = await request.json();
+    const { user, onboardingAnswers, previousTitles = [], aiNotes = '', userFeedback = [] } = await request.json();
 
     // Validate required fields
     if (!user || !onboardingAnswers) {
@@ -34,6 +34,24 @@ Goals: ${goals}
 Brand Voice: ${brandVoice}
 ${onboardingAnswers.differentiators ? `What makes them unique: ${onboardingAnswers.differentiators}` : ''}
 ${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}
+
+${aiNotes ? `**IMPORTANT CLIENT PREFERENCES & FEEDBACK:**
+${aiNotes}
+
+Please carefully follow these preferences when creating content.
+` : ''}
+
+${previousTitles.length > 0 ? `**PREVIOUSLY GENERATED CONTENT (avoid duplicating these topics):**
+${previousTitles.slice(0, 30).join('\n- ')}
+
+Create NEW and DIFFERENT content ideas. Do NOT rehash these previous topics.
+` : ''}
+
+${userFeedback.length > 0 ? `**USER FEEDBACK PATTERNS:**
+${userFeedback.slice(0, 10).map(f => `- "${f.feedback}" (${f.status === 'approved' ? 'liked' : 'disliked'}: ${f.title})`).join('\n')}
+
+Learn from this feedback to create content the user will approve.
+` : ''}
 
 Please create EXACTLY 5 pieces of each of the following types (15 total):
 

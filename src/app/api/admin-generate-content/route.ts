@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { users } = await request.json();
+    const { users, contentHistory = {} } = await request.json();
 
     // Validate required fields
     if (!users || !Array.isArray(users) || users.length === 0) {
@@ -53,13 +53,32 @@ export async function POST(request: NextRequest) {
           ? user.onboardingAnswers.brandVoice.join(', ')
           : user.onboardingAnswers.brandVoice || 'professional';
 
+        // Build conversation history context
+        const userHistory = contentHistory[user.id] || [];
+        let historyContext = '';
+        if (userHistory && userHistory.length > 0) {
+          historyContext = `\n\nPREVIOUSLY GENERATED CONTENT (DO NOT REPEAT OR RECYCLE THESE IDEAS):
+${userHistory.slice(-20).map((item: any) => `- ${item.title}: ${item.description || ''}`).join('\n')}
+
+IMPORTANT: Generate completely NEW and DIFFERENT ideas from the ones listed above. Avoid repeating topics, angles, or themes.`;
+        }
+
+        // Build admin notes context
+        let adminContext = '';
+        if (user.adminNotes && user.adminNotes.trim()) {
+          adminContext = `\n\nADMIN FEEDBACK & PREFERENCES:
+${user.adminNotes}
+
+Please take this feedback into account when creating new content.`;
+        }
+
         const prompt = `You are a professional marketing content creator. Generate 15 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
 
 Target Audience: ${targetAudience}
 Goals: ${goals}
 Brand Voice: ${brandVoice}
 ${user.onboardingAnswers.differentiators ? `What makes them unique: ${user.onboardingAnswers.differentiators}` : ''}
-${user.onboardingAnswers.primaryMarkets ? `Primary Markets: ${user.onboardingAnswers.primaryMarkets}` : ''}
+${user.onboardingAnswers.primaryMarkets ? `Primary Markets: ${user.onboardingAnswers.primaryMarkets}` : ''}${historyContext}${adminContext}
 
 Please create EXACTLY 5 pieces of each of the following types (15 total):
 

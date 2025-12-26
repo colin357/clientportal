@@ -2194,6 +2194,50 @@ const ClientPortal = () => {
       }
     };
 
+    const handleSendReminders = async () => {
+      if (!confirm('Send reminder texts to users with pending content (48hr and 7-day reminders)?')) {
+        return;
+      }
+
+      try {
+        console.log('📱 Checking for pending content that needs reminders...');
+
+        const response = await fetch('/api/send-reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, users })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to send reminders');
+        }
+
+        const result = await response.json();
+        console.log('✅ Reminders sent:', result);
+
+        // Update content with new remindersSent data
+        const updatedContent = content.map(item => {
+          const updated = result.details.sent48hr.find(r => r.itemId === item.id);
+          const updated7day = result.details.sent7day.find(r => r.itemId === item.id);
+
+          if (updated || updated7day) {
+            const remindersSent = item.remindersSent || [];
+            if (updated) remindersSent.push('48hr');
+            if (updated7day) remindersSent.push('7day');
+            return { ...item, remindersSent };
+          }
+          return item;
+        });
+
+        await saveContent(updatedContent);
+
+        alert(`✅ Reminders sent successfully!\n\n48-hour reminders: ${result.reminders48hr}\n7-day reminders: ${result.reminders7day}\nSkipped: ${result.skipped}`);
+      } catch (error) {
+        console.error('❌ Error sending reminders:', error);
+        alert('Failed to send reminders. Check console for details.');
+      }
+    };
+
     const handleAIGenerateContent = async () => {
       if (!confirm('Generate AI content for all users? This will create 15 pieces of content for each client and send them SMS notifications.')) {
         return;
@@ -2324,6 +2368,16 @@ const ClientPortal = () => {
               >
                 <Sparkles className="w-5 h-5" />
                 {isGeneratingAI ? 'Generating AI Content...' : 'AI Generate Content'}
+              </button>
+              <button
+                onClick={handleSendReminders}
+                className="bg-orange-600 text-white px-6 py-3 rounded hover:bg-orange-700 flex items-center gap-2"
+                title="Send 48hr and 7-day reminders for pending content"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                Send Reminders
               </button>
               <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 flex items-center gap-2">
                 <Upload className="w-5 h-5" />Upload Content

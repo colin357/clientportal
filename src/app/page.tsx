@@ -1235,7 +1235,10 @@ const ClientPortal = () => {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {clientContent.filter(c => c.status === 'approved' && c.type === 'social').map(item => {
+                    {clientContent
+                      .filter(c => c.status === 'approved' && c.type === 'social')
+                      .sort((a, b) => new Date(b.reviewedAt || b.createdAt) - new Date(a.reviewedAt || a.createdAt))
+                      .map(item => {
                       const linkedVideo = userVideos.find(v => v.contentId === item.id);
                       const isUploading = contentVideoUploads[item.id]?.uploading || false;
                       const uploadProgress = contentVideoUploads[item.id]?.progress || 0;
@@ -1243,7 +1246,14 @@ const ClientPortal = () => {
                       return (
                         <div key={item.id} className="bg-gradient-to-br from-blue-50 to-white rounded-lg p-5 border-2 border-blue-200 shadow-sm">
                           <div className="mb-4">
-                            <h4 className="font-semibold text-gray-800 mb-2">{item.title}</h4>
+                            <div className="flex justify-between items-start mb-2">
+                              <h4 className="font-semibold text-gray-800">{item.title}</h4>
+                              {item.reviewedAt && (
+                                <span className="text-xs text-gray-500">
+                                  Approved {new Date(item.reviewedAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-gray-600 text-sm mb-3 whitespace-pre-wrap">{item.content}</p>
                             {item.fileLink && (
                               <a href={item.fileLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
@@ -1444,7 +1454,10 @@ const ClientPortal = () => {
                 </div>
               ) : (
                 <div className="grid md:grid-cols-2 gap-6">
-                  {clientContent.filter(c => c.type === 'email' && c.status === 'approved').map(item => (
+                  {clientContent
+                    .filter(c => c.type === 'email' && c.status === 'approved')
+                    .sort((a, b) => new Date(b.reviewedAt || b.createdAt) - new Date(a.reviewedAt || a.createdAt))
+                    .map(item => (
                     <div key={item.id} className="bg-gradient-to-br from-green-50 to-white rounded-lg p-6 border-2 border-green-200 shadow-sm hover:shadow-md transition">
                       <div className="flex justify-between items-start mb-4">
                         <h4 className="font-bold text-lg text-gray-800">{item.title}</h4>
@@ -1464,8 +1477,6 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {activePage === 'ai-generator' && <AIContentAssistant />}
-
           {activePage === 'ai' && (
             <div className="bg-white rounded-lg shadow p-8">
               <div className="flex items-center gap-3 mb-6">
@@ -1480,7 +1491,10 @@ const ClientPortal = () => {
                 </div>
               ) : (
                 <div className="grid md:grid-cols-2 gap-6">
-                  {clientContent.filter(c => c.type === 'blog' && c.status === 'approved').map(item => (
+                  {clientContent
+                    .filter(c => c.type === 'blog' && c.status === 'approved')
+                    .sort((a, b) => new Date(b.reviewedAt || b.createdAt) - new Date(a.reviewedAt || a.createdAt))
+                    .map(item => (
                     <div key={item.id} className="bg-gradient-to-br from-purple-50 to-white rounded-lg p-6 border-2 border-purple-200 shadow-sm hover:shadow-md transition">
                       <div className="flex justify-between items-start mb-4">
                         <h4 className="font-bold text-lg text-gray-800">{item.title}</h4>
@@ -2157,132 +2171,6 @@ const ClientPortal = () => {
             </div>
           </div>
         )}
-      </div>
-    );
-  }
-
-  function AIContentAssistant() {
-    const [step, setStep] = useState(0);
-    const [topic, setTopic] = useState('');
-    const [contentType, setContentType] = useState('');
-    const [audience, setAudience] = useState('');
-    const [tone, setTone] = useState('');
-    const [generatedContent, setGeneratedContent] = useState('');
-    const [isGenerating, setIsGenerating] = useState(false);
-
-    const contentTypes = ['Blog Post', 'Email Campaign', 'Social Media Post', 'Landing Page', 'Product Description', 'Ad Copy', 'Newsletter', 'Video Script'];
-    const audiences = ['Small Business Owners', 'Millennials', 'Gen Z', 'Baby Boomers', 'Professionals', 'Students', 'Parents', 'Entrepreneurs', 'Other'];
-    const tones = ['Professional', 'Casual', 'Friendly', 'Inspiring', 'Authoritative', 'Humorous', 'Empathetic', 'Enthusiastic', 'Educational'];
-
-    const questions = [
-      { type: 'text', label: 'What is the topic of your content?', value: topic, setValue: setTopic, placeholder: 'e.g., Social media marketing tips for small businesses' },
-      { type: 'select', label: 'What type of content do you need?', value: contentType, setValue: setContentType, options: contentTypes },
-      { type: 'buttons', label: 'Who is your target audience?', value: audience, setValue: setAudience, options: audiences },
-      { type: 'buttons', label: 'What tone should the content have?', value: tone, setValue: setTone, options: tones }
-    ];
-
-    const generateContent = async () => {
-      setIsGenerating(true);
-      try {
-        const response = await fetch('/api/generate-content', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic,
-            contentType,
-            audience,
-            tone
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to generate content');
-        }
-
-        const data = await response.json();
-        setGeneratedContent(data.content || 'No content generated');
-        setStep(4);
-      } catch (error) {
-        console.error('Error generating content:', error);
-        setGeneratedContent('Sorry, there was an error generating content. Please try again.');
-        setStep(4);
-      }
-      setIsGenerating(false);
-    };
-
-    const resetForm = () => {
-      setStep(0);
-      setTopic('');
-      setContentType('');
-      setAudience('');
-      setTone('');
-      setGeneratedContent('');
-    };
-
-    if (step === 4) {
-      return (
-        <div className="bg-white rounded-lg shadow p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <Sparkles className="w-8 h-8 text-purple-500" />
-            <h3 className="text-2xl font-semibold">Generated Content</h3>
-          </div>
-          <div className="bg-purple-50 p-6 rounded-lg mb-6">
-            <p className="whitespace-pre-wrap text-gray-800">{generatedContent}</p>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={resetForm} className="flex-1 bg-purple-600 text-white py-3 rounded hover:bg-purple-700">Create New Content</button>
-            <button onClick={() => navigator.clipboard.writeText(generatedContent)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded hover:bg-gray-300">Copy to Clipboard</button>
-          </div>
-        </div>
-      );
-    }
-
-    const currentQ = questions[step];
-    return (
-      <div className="bg-white rounded-lg shadow p-8 max-w-3xl">
-        <div className="flex items-center gap-3 mb-6">
-          <Sparkles className="w-8 h-8 text-purple-500" />
-          <h3 className="text-2xl font-semibold">AI Content Assistant</h3>
-        </div>
-        <div className="flex gap-2 mb-8">
-          {questions.map((_, idx) => (
-            <div key={idx} className={`h-2 flex-1 rounded-full transition ${idx <= step ? 'bg-purple-600' : 'bg-gray-200'}`} />
-          ))}
-        </div>
-        <div className="mb-2 text-sm text-purple-600 font-medium">Question {step + 1} of {questions.length}</div>
-        <label className="block text-xl font-semibold text-gray-800 mb-4">{currentQ.label}</label>
-        
-        {currentQ.type === 'text' && (
-          <input type="text" value={currentQ.value} onChange={(e) => currentQ.setValue(e.target.value)} placeholder={currentQ.placeholder} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6" />
-        )}
-        {currentQ.type === 'select' && (
-          <select value={currentQ.value} onChange={(e) => currentQ.setValue(e.target.value)} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6">
-            <option value="">Select an option...</option>
-            {currentQ.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-          </select>
-        )}
-        {currentQ.type === 'buttons' && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-            {currentQ.options.map(opt => (
-              <button key={opt} onClick={() => currentQ.setValue(opt)} className={`px-4 py-3 rounded-lg border-2 transition ${currentQ.value === opt ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>{opt}</button>
-            ))}
-          </div>
-        )}
-        <div className="flex gap-3">
-          {step > 0 && (
-            <button onClick={() => setStep(step - 1)} className="px-6 py-3 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 flex items-center gap-2">
-              <ChevronLeft className="w-5 h-5" />Back
-            </button>
-          )}
-          <button onClick={() => {
-            if (currentQ.value.trim()) {
-              if (step < 3) setStep(step + 1);
-              else generateContent();
-            }
-          }} disabled={!currentQ.value.trim() || isGenerating} className="flex-1 bg-purple-600 text-white py-3 rounded hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
-            {isGenerating ? 'Generating...' : step < 3 ? <><span>Next</span><ChevronRight className="w-5 h-5" /></> : 'Generate Content'}
-          </button>
-        </div>
       </div>
     );
   }

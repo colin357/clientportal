@@ -2825,7 +2825,7 @@ const ClientPortal = () => {
                 {publishMode === 'single' && (
                   <select value={newContent.clientId} onChange={(e) => setNewContent({ ...newContent, clientId: e.target.value })} className="w-full px-4 py-2 border rounded">
                     <option value="">Select Client</option>
-                    {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName}</option>)}
+                    {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName} - {u.firstName} {u.lastName || ''}</option>)}
                   </select>
                 )}
 

@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2 } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -635,6 +635,13 @@ const ClientPortal = () => {
     const [contentVideoUploads, setContentVideoUploads] = useState({}); // Track uploads per content item
     const [contentVideoFiles, setContentVideoFiles] = useState({}); // Track selected files per content item
     const [contentVideoLinks, setContentVideoLinks] = useState({}); // Track video links per content item
+    const [aiContentType, setAiContentType] = useState('social');
+    const [aiPurpose, setAiPurpose] = useState('');
+    const [aiAudience, setAiAudience] = useState('');
+    const [aiTopic, setAiTopic] = useState('');
+    const [generatedIdea, setGeneratedIdea] = useState(null);
+    const [generatingIdea, setGeneratingIdea] = useState(false);
+    const [ideaFeedback, setIdeaFeedback] = useState('');
 
     useEffect(() => {
       loadUserVideos();
@@ -743,7 +750,7 @@ const ClientPortal = () => {
       { id: 'calendar', label: 'Content Calendar', icon: Calendar },
       { id: 'crm', label: 'CRM', icon: Users },
       { id: 'ai', label: 'AI Optimization', icon: Sparkles },
-      { id: 'team', label: 'Team Members', icon: UserPlus },
+      { id: 'ai-generator', label: 'AI Content Generator', icon: Wand2 },
       { id: 'settings', label: 'Settings', icon: Settings }
     ];
 
@@ -1493,71 +1500,258 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {activePage === 'team' && (
+          {activePage === 'ai-generator' && (
             <div className="bg-white rounded-lg shadow p-8">
-              <h3 className="text-2xl font-semibold mb-6">Team Members</h3>
-              <p className="text-gray-600 mb-6">Add team members to collaborate on your marketing</p>
-
-              <div className="space-y-4 max-w-md mb-8">
-                <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="Full Name" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
-                <input type="email" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="Email" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
-                <input type="password" value={teamPass} onChange={(e) => setTeamPass(e.target.value)} placeholder="Password" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
-                <button onClick={async () => {
-                  if (teamName.trim() && teamEmail.trim() && teamPass.trim()) {
-                    await saveUsers([...users, {
-                      id: Date.now().toString(),
-                      email: teamEmail,
-                      password: teamPass,
-                      companyName: currentUser.companyName,
-                      firstName: teamName,
-                      onboarded: true,
-                      parentClientId: effectiveClientId,
-                      createdAt: new Date().toISOString()
-                    }]);
-                    setTeamName('');
-                    setTeamEmail('');
-                    setTeamPass('');
-                  }
-                }} disabled={!teamName.trim() || !teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
+              <div className="flex items-center gap-3 mb-6">
+                <Wand2 className="w-8 h-8 text-purple-600" />
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-800">AI Content Generator</h3>
+                  <p className="text-gray-600">Create custom content ideas tailored to your needs</p>
+                </div>
               </div>
 
-              <div className="border-t pt-6">
-                <h4 className="font-semibold text-gray-800 mb-4">Current Team Members</h4>
-                <div className="space-y-2">
-                  {users.filter(u => u.parentClientId === effectiveClientId).map(member => (
-                    <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <div className="text-gray-700 font-medium">{member.firstName}</div>
-                        <div className="text-sm text-gray-600">{member.email}</div>
-                        <span className="text-xs text-gray-500">Added {new Date(member.createdAt).toLocaleDateString()}</span>
+              {!generatedIdea ? (
+                <div className="max-w-2xl">
+                  <div className="space-y-6">
+                    {/* Content Type Selection */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-3">What type of content do you want to create?</label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { value: 'social', label: 'Social Media Post', icon: Share2 },
+                          { value: 'blog', label: 'Blog Post', icon: FileText },
+                          { value: 'email', label: 'Email Campaign', icon: Mail }
+                        ].map(type => (
+                          <button
+                            key={type.value}
+                            onClick={() => setAiContentType(type.value)}
+                            className={`p-4 border-2 rounded-lg transition-all flex flex-col items-center gap-2 ${
+                              aiContentType === type.value
+                                ? 'border-purple-600 bg-purple-50 text-purple-700'
+                                : 'border-gray-200 hover:border-purple-300 text-gray-700'
+                            }`}
+                          >
+                            <type.icon className="w-6 h-6" />
+                            <span className="text-sm font-medium">{type.label}</span>
+                          </button>
+                        ))}
                       </div>
-                      <button onClick={async () => {
+                    </div>
+
+                    {/* Topic */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">What topic or subject?</label>
+                      <input
+                        type="text"
+                        value={aiTopic}
+                        onChange={(e) => setAiTopic(e.target.value)}
+                        placeholder="e.g., First-time home buying tips, Mortgage rates explained..."
+                        className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    {/* Purpose */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">What's the purpose of this content?</label>
+                      <input
+                        type="text"
+                        value={aiPurpose}
+                        onChange={(e) => setAiPurpose(e.target.value)}
+                        placeholder="e.g., Educate clients, Generate leads, Build trust..."
+                        className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    {/* Audience */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Who is this for? (Optional)</label>
+                      <input
+                        type="text"
+                        value={aiAudience}
+                        onChange={(e) => setAiAudience(e.target.value)}
+                        placeholder="Leave blank to use your default target audience"
+                        className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Your default: {currentUser.onboardingAnswers?.targetAudience
+                          ? (Array.isArray(currentUser.onboardingAnswers.targetAudience)
+                              ? currentUser.onboardingAnswers.targetAudience.join(', ')
+                              : currentUser.onboardingAnswers.targetAudience)
+                          : 'Not set'}
+                      </p>
+                    </div>
+
+                    {/* Generate Button */}
+                    <button
+                      onClick={async () => {
+                        if (!aiTopic.trim() || !aiPurpose.trim()) {
+                          alert('Please fill in the topic and purpose fields');
+                          return;
+                        }
+
+                        setGeneratingIdea(true);
                         try {
-                          if (!db) {
-                            console.error('❌ Firestore not available');
-                            alert('⚠️ Cloud storage not configured. Cannot remove team member.');
+                          const response = await fetch('/api/generate-ai-content-idea', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              contentType: aiContentType,
+                              topic: aiTopic,
+                              purpose: aiPurpose,
+                              audience: aiAudience || null,
+                              user: currentUser,
+                              onboardingAnswers: currentUser.onboardingAnswers
+                            })
+                          });
+
+                          const data = await response.json();
+                          if (response.ok) {
+                            setGeneratedIdea(data.idea);
+                          } else {
+                            alert('Error generating idea: ' + data.error);
+                          }
+                        } catch (error) {
+                          console.error('Error:', error);
+                          alert('Failed to generate content idea. Please try again.');
+                        } finally {
+                          setGeneratingIdea(false);
+                        }
+                      }}
+                      disabled={!aiTopic.trim() || !aiPurpose.trim() || generatingIdea}
+                      className="w-full bg-purple-600 text-white py-4 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold text-lg flex items-center justify-center gap-2"
+                    >
+                      <Wand2 className="w-5 h-5" />
+                      {generatingIdea ? 'Generating Your Content Idea...' : 'Generate Content Idea'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="max-w-3xl">
+                  <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-6 mb-6 border-2 border-purple-200">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Sparkles className="w-6 h-6 text-purple-600" />
+                      <h4 className="font-bold text-lg text-gray-800">AI Generated Content Idea</h4>
+                    </div>
+                    <div className="bg-white rounded-lg p-5 mb-4">
+                      <h5 className="font-semibold text-gray-800 mb-2">{generatedIdea.title}</h5>
+                      <p className="text-gray-700 whitespace-pre-wrap">{generatedIdea.content}</p>
+                    </div>
+                    {generatedIdea.description && (
+                      <p className="text-sm text-gray-600 italic">{generatedIdea.description}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <textarea
+                      value={ideaFeedback}
+                      onChange={(e) => setIdeaFeedback(e.target.value)}
+                      placeholder="Want changes? Describe what you'd like to improve or adjust..."
+                      className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                      rows="3"
+                    />
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={async () => {
+                          if (!ideaFeedback.trim()) {
+                            alert('Please provide feedback on what to change');
                             return;
                           }
 
-                          console.log(`🗑️ Removing team member: ${member.email}`);
-                          // Delete user from Firestore
-                          await deleteDoc(doc(db, 'users', member.id));
-                          console.log('✅ Team member deleted from Firestore');
+                          setGeneratingIdea(true);
+                          try {
+                            const response = await fetch('/api/generate-ai-content-idea', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                contentType: aiContentType,
+                                topic: aiTopic,
+                                purpose: aiPurpose,
+                                audience: aiAudience || null,
+                                user: currentUser,
+                                onboardingAnswers: currentUser.onboardingAnswers,
+                                previousIdea: generatedIdea,
+                                feedback: ideaFeedback
+                              })
+                            });
 
-                          // Update local state
-                          await saveUsers(users.filter(u => u.id !== member.id));
-                        } catch (e) {
-                          console.error('❌ Error removing team member:', e);
-                          console.error('Error details:', e.message);
-                        }
-                      }} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
+                            const data = await response.json();
+                            if (response.ok) {
+                              setGeneratedIdea(data.idea);
+                              setIdeaFeedback('');
+                            } else {
+                              alert('Error regenerating idea: ' + data.error);
+                            }
+                          } catch (error) {
+                            console.error('Error:', error);
+                            alert('Failed to regenerate content idea. Please try again.');
+                          } finally {
+                            setGeneratingIdea(false);
+                          }
+                        }}
+                        disabled={!ideaFeedback.trim() || generatingIdea}
+                        className="flex-1 bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2"
+                      >
+                        <X className="w-5 h-5" />
+                        {generatingIdea ? 'Regenerating...' : 'Regenerate with Feedback'}
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          // Save the approved idea as content
+                          const newContent = {
+                            id: Date.now().toString(),
+                            clientId: effectiveClientId,
+                            type: aiContentType,
+                            title: generatedIdea.title,
+                            content: generatedIdea.content,
+                            description: generatedIdea.description || '',
+                            status: 'approved',
+                            createdAt: new Date().toISOString(),
+                            reviewedAt: new Date().toISOString(),
+                            source: 'ai-generator'
+                          };
+
+                          try {
+                            if (db) {
+                              await setDoc(doc(db, 'content', newContent.id), newContent);
+                            }
+                            await saveContent([...content, newContent]);
+                            alert('✅ Content idea approved and added to your library!');
+
+                            // Reset form
+                            setGeneratedIdea(null);
+                            setIdeaFeedback('');
+                            setAiTopic('');
+                            setAiPurpose('');
+                            setAiAudience('');
+                          } catch (error) {
+                            console.error('Error saving content:', error);
+                            alert('Failed to save content. Please try again.');
+                          }
+                        }}
+                        className="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+                      >
+                        <Check className="w-5 h-5" />
+                        Approve & Save
+                      </button>
                     </div>
-                  ))}
-                  {users.filter(u => u.parentClientId === effectiveClientId).length === 0 && (
-                    <p className="text-gray-500 text-sm">No team members added yet</p>
-                  )}
+
+                    <button
+                      onClick={() => {
+                        setGeneratedIdea(null);
+                        setIdeaFeedback('');
+                        setAiTopic('');
+                        setAiPurpose('');
+                        setAiAudience('');
+                      }}
+                      className="w-full text-gray-600 hover:text-gray-800 py-2 text-sm"
+                    >
+                      Start Over
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -1861,7 +2055,71 @@ const ClientPortal = () => {
                 setCurrentUser(updated);
                 await saveUsers(users.map(u => u.id === currentUser.id ? updated : u));
                 saveSession(updated, 'dashboard');
-              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700">Save Profile & Branding</button>
+              }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 mb-8">Save Profile & Branding</button>
+
+              {/* Team Members Section */}
+              <div className="border-t pt-8 mt-8">
+                <h3 className="text-xl font-semibold mb-4">Team Members</h3>
+                <p className="text-gray-600 mb-6">Add team members to collaborate on your marketing</p>
+
+                <div className="space-y-4 max-w-md mb-8">
+                  <input type="text" value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="Full Name" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
+                  <input type="email" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="Email" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
+                  <input type="password" value={teamPass} onChange={(e) => setTeamPass(e.target.value)} placeholder="Password" className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2" />
+                  <button onClick={async () => {
+                    if (teamName.trim() && teamEmail.trim() && teamPass.trim()) {
+                      await saveUsers([...users, {
+                        id: Date.now().toString(),
+                        email: teamEmail,
+                        password: teamPass,
+                        companyName: currentUser.companyName,
+                        firstName: teamName,
+                        onboarded: true,
+                        parentClientId: effectiveClientId,
+                        createdAt: new Date().toISOString()
+                      }]);
+                      setTeamName('');
+                      setTeamEmail('');
+                      setTeamPass('');
+                    }
+                  }} disabled={!teamName.trim() || !teamEmail.trim() || !teamPass.trim()} className="w-full bg-orange-600 text-white py-3 rounded hover:bg-orange-700 disabled:bg-gray-300">Add Team Member</button>
+                </div>
+
+                <div className="border-t pt-6">
+                  <h4 className="font-semibold text-gray-800 mb-4">Current Team Members</h4>
+                  <div className="space-y-2">
+                    {users.filter(u => u.parentClientId === effectiveClientId).map(member => (
+                      <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="text-gray-700 font-medium">{member.firstName}</div>
+                          <div className="text-sm text-gray-600">{member.email}</div>
+                          <span className="text-xs text-gray-500">Added {new Date(member.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <button onClick={async () => {
+                          try {
+                            if (!db) {
+                              console.error('❌ Firestore not available');
+                              alert('⚠️ Cloud storage not configured. Cannot remove team member.');
+                              return;
+                            }
+
+                            console.log(`🗑️ Removing team member: ${member.email}`);
+                            await deleteDoc(doc(db, 'users', member.id));
+                            console.log('✅ Team member deleted from Firestore');
+                            await saveUsers(users.filter(u => u.id !== member.id));
+                          } catch (e) {
+                            console.error('❌ Error removing team member:', e);
+                            console.error('Error details:', e.message);
+                          }
+                        }} className="text-red-600 hover:text-red-800 text-sm">Remove</button>
+                      </div>
+                    ))}
+                    {users.filter(u => u.parentClientId === effectiveClientId).length === 0 && (
+                      <p className="text-gray-500 text-sm">No team members added yet</p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

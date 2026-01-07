@@ -1017,23 +1017,10 @@ const ClientPortal = () => {
                 <button
                   key={item.id}
                   id={`nav-${item.id}`}
-                  onClick={() => {
-                    setActivePage(item.id);
-                    // Tutorial progression for calendar click
-                    if (showTutorial && tutorialStep === 3 && item.id === 'calendar') {
-                      setTutorialStep(4);
-                    }
-                    // Tutorial progression for settings click
-                    if (showTutorial && tutorialStep === 4 && item.id === 'settings') {
-                      setTutorialStep(5);
-                    }
-                  }}
+                  onClick={() => setActivePage(item.id)}
                   className={`p-3 rounded-lg transition ${
                     activePage === item.id ? 'bg-blue-600 text-white shadow-lg' :
                     'bg-white text-gray-700 hover:bg-gray-50'
-                  } ${
-                    showTutorial && ((tutorialStep === 3 && item.id === 'calendar') || (tutorialStep === 4 && item.id === 'settings')) ?
-                    'ring-4 ring-yellow-400 animate-pulse' : ''
                   }`}
                 >
                   <Icon className={`w-5 h-5 mx-auto mb-1 ${activePage === item.id ? 'text-white' : 'text-gray-600'}`} />
@@ -2391,15 +2378,8 @@ const ClientPortal = () => {
 
         {/* Tutorial Overlay */}
         {showTutorial && (
-          <>
-            {/* Spotlight dimming overlay */}
-            <div className="fixed inset-0 bg-black bg-opacity-70 z-40 pointer-events-none"></div>
-
-            {/* Tutorial dialog */}
-            <div className={`fixed flex items-center justify-center p-4 z-50 ${
-              tutorialStep >= 3 ? 'inset-x-0 top-0 h-[30%]' : 'inset-0'
-            }`}>
-              <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-8 relative">
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-8 relative">
                 <button
                   onClick={async () => {
                     setShowTutorial(false);
@@ -2527,15 +2507,10 @@ const ClientPortal = () => {
               {tutorialStep === 3 && (
                 <div>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4">🗓️ Content Calendar</h2>
-                  <p className="text-gray-600 mb-4">
-                    Now let's check out your content calendar. This helps you visualize your entire content strategy at a glance.
+                  <p className="text-gray-600 mb-6">
+                    Navigate to the <strong>Content Calendar</strong> tab to see when your approved content is scheduled to be published.
+                    This helps you visualize your entire content strategy at a glance.
                   </p>
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-                    <p className="text-yellow-800 font-semibold flex items-center gap-2">
-                      <Calendar className="w-5 h-5" />
-                      Click on the "Content Calendar" button above (it's highlighted in yellow!)
-                    </p>
-                  </div>
                   <div className="flex justify-between">
                     <button
                       onClick={() => setTutorialStep(2)}
@@ -2545,13 +2520,10 @@ const ClientPortal = () => {
                       Back
                     </button>
                     <button
-                      onClick={() => {
-                        setActivePage('calendar');
-                        setTutorialStep(4);
-                      }}
-                      className="bg-gray-400 text-white px-6 py-2 rounded-lg hover:bg-gray-500 flex items-center gap-2"
+                      onClick={() => setTutorialStep(4)}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
                     >
-                      Skip
+                      Next
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -2562,39 +2534,27 @@ const ClientPortal = () => {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4">⚙️ Manage Your Settings</h2>
                   <p className="text-gray-600 mb-4">
-                    Great! Now let's explore the Settings tab where you can:
+                    In the <strong>Settings</strong> tab, you can:
                   </p>
-                  <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
+                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
                     <li>Update your business information and preferences</li>
                     <li>Connect your social media accounts</li>
                     <li>Upload your headshot and company logo</li>
                     <li>Add team members to collaborate on content</li>
                   </ul>
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-                    <p className="text-yellow-800 font-semibold flex items-center gap-2">
-                      <Settings className="w-5 h-5" />
-                      Click on the "Settings" button above (it's highlighted in yellow!)
-                    </p>
-                  </div>
                   <div className="flex justify-between">
                     <button
-                      onClick={() => {
-                        setActivePage('content');
-                        setTutorialStep(3);
-                      }}
+                      onClick={() => setTutorialStep(3)}
                       className="text-gray-600 hover:underline flex items-center gap-2"
                     >
                       <ChevronLeft className="w-5 h-5" />
                       Back
                     </button>
                     <button
-                      onClick={() => {
-                        setActivePage('settings');
-                        setTutorialStep(5);
-                      }}
-                      className="bg-gray-400 text-white px-6 py-2 rounded-lg hover:bg-gray-500 flex items-center gap-2"
+                      onClick={() => setTutorialStep(5)}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
                     >
-                      Skip
+                      Next
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -2652,8 +2612,7 @@ const ClientPortal = () => {
                 ))}
               </div>
             </div>
-            </div>
-          </>
+          </div>
         )}
       </div>
     );

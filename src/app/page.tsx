@@ -648,6 +648,7 @@ const ClientPortal = () => {
     const [showTutorial, setShowTutorial] = useState(!currentUser.tutorialCompleted);
     const [tutorialStep, setTutorialStep] = useState(0);
     const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
+    const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', crm: ''
     });
@@ -694,6 +695,7 @@ const ClientPortal = () => {
       }
 
       try {
+        setIsGeneratingInitialContent(true);
         console.log('🤖 Generating initial personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
 
         // Get content history for this user
@@ -751,6 +753,8 @@ const ClientPortal = () => {
         console.log(`✅ Generated ${newContent.length} personalized content pieces (${socialPosts.length} social, ${blogPosts.length} blog, ${emailCampaigns.length} email)`);
       } catch (error) {
         console.error('❌ Error generating personalized content:', error);
+      } finally {
+        setIsGeneratingInitialContent(false);
       }
     };
 
@@ -830,6 +834,61 @@ const ClientPortal = () => {
       const today = new Date();
       return date.toDateString() === today.toDateString();
     };
+
+    // Show loading screen while generating initial content
+    if (isGeneratingInitialContent) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl p-12 max-w-2xl w-full text-center">
+            <div className="mb-8">
+              <Sparkles className="w-20 h-20 text-purple-600 mx-auto mb-4 animate-pulse" />
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">Creating Your Personalized Content</h2>
+              <p className="text-lg text-gray-600 mb-6">
+                Our AI is crafting custom content ideas tailored specifically for your business...
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
+                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold">1</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-800">Analyzing Your Business</p>
+                  <p className="text-sm text-gray-600">Understanding your industry and target audience</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-4 bg-purple-50 rounded-lg">
+                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold">2</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-800">Generating Content Ideas</p>
+                  <p className="text-sm text-gray-600">Creating social posts, blogs, and email campaigns</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-4 bg-green-50 rounded-lg">
+                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold">3</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-800">Personalizing Your Portal</p>
+                  <p className="text-sm text-gray-600">Setting up your customized dashboard</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-4">
+              <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
+            </div>
+
+            <p className="text-sm text-gray-500">This usually takes 1-2 minutes. Please don't close this window.</p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-screen bg-gray-50">

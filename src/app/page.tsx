@@ -3287,7 +3287,12 @@ const ClientPortal = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {videos.map(video => {
+                  {videos
+                    .sort((a, b) => {
+                      const statusOrder = { 'pending': 1, 'in-progress': 2, 'completed': 3 };
+                      return (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
+                    })
+                    .map(video => {
                     const client = users.find(u => u.id === video.clientId);
                     return (
                       <div key={video.id} className="border rounded-lg p-4">

@@ -45,7 +45,7 @@ ${adminNotes}
 Please take this feedback into account when creating new content.`;
     }
 
-    const prompt = `You are a professional marketing content creator. Generate 15 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
+    const prompt = `You are a professional marketing content creator. Generate a total of 15 marketing content pieces (5 social posts, 5 blog posts, 5 emails) for ${user.companyName}, a ${industry} business.
 
 SPEAKER INFORMATION (use these exact values when needed):
 - Speaker's Name: ${user.firstName} ${user.lastName || ''}
@@ -57,9 +57,9 @@ Brand Voice: ${brandVoice}
 ${onboardingAnswers.differentiators ? `What makes them unique: ${onboardingAnswers.differentiators}` : ''}
 ${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}${historyContext}${adminContext}
 
-Please create EXACTLY 5 pieces of each of the following types (15 total):
+CRITICAL: Create EXACTLY 5 pieces of EACH type below. NO MORE, NO LESS. Total output must be exactly 15 pieces.
 
-**Social Media Posts (5 pieces):**
+**Social Media Posts (EXACTLY 5 pieces - NOT 15):**
 - Each post MUST include three parts:
   1. Title: Catchy title for the content
   2. Video Script: A complete 30-60 second video script (conversational, engaging, with hook, value, and CTA)
@@ -71,13 +71,13 @@ Please create EXACTLY 5 pieces of each of the following types (15 total):
 - Jump straight into the valuable content with a strong hook
 - Use the speaker's actual name (${user.firstName} ${user.lastName || ''}) and company name (${user.companyName}) if introductions are needed - NEVER use placeholders like "[first name]" or "[company name]"
 
-**Blog Posts (5 pieces):**
+**Blog Posts (EXACTLY 5 pieces - NOT 15):**
 - Full blog post with title, introduction, main points, and conclusion
 - Topics relevant to ${industry} and ${targetAudience}
 - SEO-friendly and valuable content
 - Aim for 300-500 words each
 
-**Email Campaigns (5 pieces):**
+**Email Campaigns (EXACTLY 5 pieces - NOT 15):**
 - Subject lines and full email body
 - Various purposes: nurture, promotion, newsletter, re-engagement, event invitation
 - Personalized and conversion-focused
@@ -91,7 +91,7 @@ For each piece, provide:
   * For blog/email: The full content text
 - description: Brief summary of the piece (for social posts, mention the topic/hook)
 
-Format as a JSON array with exactly 15 objects (5 social, 5 blog, 5 email).`;
+REMINDER: Return a JSON array with EXACTLY 15 total objects: 5 social + 5 blog + 5 email = 15 total.`;
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

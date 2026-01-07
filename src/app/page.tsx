@@ -696,7 +696,7 @@ const ClientPortal = () => {
 
       try {
         setIsGeneratingInitialContent(true);
-        console.log('🤖 Generating initial personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
+        console.log('🤖 Generating initial personalized content (15 total: 5 social, 5 blog, 5 email)...');
 
         // Get content history for this user
         const userHistory = content
@@ -720,11 +720,14 @@ const ClientPortal = () => {
 
         const data = await response.json();
 
-        // Map and limit to exactly 15 pieces (5 of each type)
+        // IMPORTANT: Limit to EXACTLY 5 of each type (15 total pieces)
+        // Even if API returns more, we only take 5 of each
         const socialPosts = data.contentPieces.filter(p => p.type === 'social').slice(0, 5);
         const blogPosts = data.contentPieces.filter(p => p.type === 'blog').slice(0, 5);
         const emailCampaigns = data.contentPieces.filter(p => p.type === 'email').slice(0, 5);
         const limitedPieces = [...socialPosts, ...blogPosts, ...emailCampaigns];
+
+        console.log(`📊 Content breakdown: ${socialPosts.length} social, ${blogPosts.length} blog, ${emailCampaigns.length} email = ${limitedPieces.length} total`);
 
         const nowTimestamp = new Date().toISOString();
         const newContent = limitedPieces.map(piece => ({

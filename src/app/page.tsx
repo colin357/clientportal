@@ -73,6 +73,7 @@ const ClientPortal = () => {
   const [users, setUsers] = useState([]);
   const [content, setContent] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const [groups, setGroups] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -134,6 +135,12 @@ const ClientPortal = () => {
       const eventsData = eventsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       console.log(`✅ Loaded ${eventsData.length} calendar events from Firestore`);
       setCalendarEvents(eventsData);
+
+      // Load groups from Firestore
+      const groupsSnapshot = await getDocs(collection(db, 'groups'));
+      const groupsData = groupsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      console.log(`✅ Loaded ${groupsData.length} groups from Firestore`);
+      setGroups(groupsData);
     } catch (e) {
       console.error('❌ Error loading data from cloud:', e);
       console.error('Error details:', e.message);
@@ -201,6 +208,27 @@ const ClientPortal = () => {
       console.log('✅ All calendar events saved successfully');
     } catch (e) {
       console.error('❌ Error saving calendar events to cloud:', e);
+      console.error('Error details:', e.message);
+    }
+  };
+
+  const saveGroups = async (g) => {
+    setGroups(g);
+
+    if (!db) {
+      console.warn('⚠️ Firestore not available - groups not saved to cloud');
+      return;
+    }
+
+    try {
+      console.log(`💾 Saving ${g.length} groups to Firestore...`);
+      for (const group of g) {
+        await setDoc(doc(db, 'groups', group.id), group);
+        console.log(`✅ Saved group: ${group.name} (ID: ${group.id})`);
+      }
+      console.log('✅ All groups saved successfully');
+    } catch (e) {
+      console.error('❌ Error saving groups to cloud:', e);
       console.error('Error details:', e.message);
     }
   };
@@ -617,6 +645,10 @@ const ClientPortal = () => {
     const [expanded, setExpanded] = useState(null);
     const [expandedContentType, setExpandedContentType] = useState(null); // For content review sections
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
+    const [showTutorial, setShowTutorial] = useState(!currentUser.tutorialCompleted);
+    const [tutorialStep, setTutorialStep] = useState(0);
+    const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
+    const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', crm: ''
     });
@@ -663,7 +695,8 @@ const ClientPortal = () => {
       }
 
       try {
-        console.log('🤖 Generating initial personalized content (15 pieces: 5 social, 5 blog, 5 email)...');
+        setIsGeneratingInitialContent(true);
+        console.log('🤖 Generating initial personalized content (15 total: 5 social, 5 blog, 5 email)...');
 
         // Get content history for this user
         const userHistory = content
@@ -687,11 +720,14 @@ const ClientPortal = () => {
 
         const data = await response.json();
 
-        // Map and limit to exactly 15 pieces (5 of each type)
+        // IMPORTANT: Limit to EXACTLY 5 of each type (15 total pieces)
+        // Even if API returns more, we only take 5 of each
         const socialPosts = data.contentPieces.filter(p => p.type === 'social').slice(0, 5);
         const blogPosts = data.contentPieces.filter(p => p.type === 'blog').slice(0, 5);
         const emailCampaigns = data.contentPieces.filter(p => p.type === 'email').slice(0, 5);
         const limitedPieces = [...socialPosts, ...blogPosts, ...emailCampaigns];
+
+        console.log(`📊 Content breakdown: ${socialPosts.length} social, ${blogPosts.length} blog, ${emailCampaigns.length} email = ${limitedPieces.length} total`);
 
         const nowTimestamp = new Date().toISOString();
         const newContent = limitedPieces.map(piece => ({
@@ -720,6 +756,8 @@ const ClientPortal = () => {
         console.log(`✅ Generated ${newContent.length} personalized content pieces (${socialPosts.length} social, ${blogPosts.length} blog, ${emailCampaigns.length} email)`);
       } catch (error) {
         console.error('❌ Error generating personalized content:', error);
+      } finally {
+        setIsGeneratingInitialContent(false);
       }
     };
 
@@ -753,6 +791,107 @@ const ClientPortal = () => {
       { id: 'ai-generator', label: 'AI Content Generator', icon: Wand2 },
       { id: 'settings', label: 'Settings', icon: Settings }
     ];
+
+    // Calendar helper functions
+    const formatDateLocal = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const getDaysInMonth = (date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const daysInMonth = lastDay.getDate();
+      const startingDayOfWeek = firstDay.getDay();
+
+      const days = [];
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        days.push(null);
+      }
+      for (let i = 1; i <= daysInMonth; i++) {
+        days.push(new Date(year, month, i));
+      }
+      return days;
+    };
+
+    const getEventsForDate = (date) => {
+      if (!date) return [];
+      const dateStr = formatDateLocal(date);
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      return calendarEvents.filter(event => {
+        const eventDate = parseDateLocal(event.date);
+        return event.date === dateStr &&
+               event.clientId === effectiveClientId &&
+               eventDate >= thirtyDaysAgo;
+      });
+    };
+
+    const isToday = (date) => {
+      if (!date) return false;
+      const today = new Date();
+      return date.toDateString() === today.toDateString();
+    };
+
+    // Show loading screen while generating initial content
+    if (isGeneratingInitialContent) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl p-12 max-w-2xl w-full text-center">
+            <div className="mb-8">
+              <Sparkles className="w-20 h-20 text-purple-600 mx-auto mb-4 animate-pulse" />
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">Creating Your Personalized Content</h2>
+              <p className="text-lg text-gray-600 mb-6">
+                Our AI is crafting custom content ideas tailored specifically for your business...
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
+                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold">1</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-800">Analyzing Your Business</p>
+                  <p className="text-sm text-gray-600">Understanding your industry and target audience</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-4 bg-purple-50 rounded-lg">
+                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold">2</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-800">Generating Content Ideas</p>
+                  <p className="text-sm text-gray-600">Creating social posts, blogs, and email campaigns</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 p-4 bg-green-50 rounded-lg">
+                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-bold">3</span>
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-gray-800">Personalizing Your Portal</p>
+                  <p className="text-sm text-gray-600">Setting up your customized dashboard</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-4">
+              <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
+            </div>
+
+            <p className="text-sm text-gray-500">This usually takes 1-2 minutes. Please don't close this window.</p>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-screen bg-gray-50">
@@ -878,7 +1017,15 @@ const ClientPortal = () => {
             {navItems.map(item => {
               const Icon = item.icon;
               return (
-                <button key={item.id} onClick={() => setActivePage(item.id)} className={`p-3 rounded-lg transition ${activePage === item.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+                <button
+                  key={item.id}
+                  id={`nav-${item.id}`}
+                  onClick={() => setActivePage(item.id)}
+                  className={`p-3 rounded-lg transition ${
+                    activePage === item.id ? 'bg-blue-600 text-white shadow-lg' :
+                    'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
                   <Icon className={`w-5 h-5 mx-auto mb-1 ${activePage === item.id ? 'text-white' : 'text-gray-600'}`} />
                   <p className="text-xs font-medium text-center">{item.label}</p>
                 </button>
@@ -1770,39 +1917,104 @@ const ClientPortal = () => {
           )}
 
           {activePage === 'calendar' && (
-            <div className="bg-white rounded-lg shadow p-8">
-              <h3 className="text-2xl font-semibold mb-6">Content Calendar</h3>
-              <p className="text-gray-600 mb-6">View your upcoming content schedule</p>
+            <div id="calendar-section" className="bg-white rounded-lg shadow p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-semibold">Content Calendar</h3>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1))}
+                    className="p-2 hover:bg-gray-100 rounded"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="text-lg font-semibold min-w-[200px] text-center">
+                    {currentCalendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    onClick={() => setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() + 1, 1))}
+                    className="p-2 hover:bg-gray-100 rounded"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
 
-              {calendarEvents.filter(e => e.clientId === effectiveClientId).length === 0 ? (
-                <div className="text-center py-12">
-                  <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No scheduled events yet</p>
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-1">
+                {/* Day headers */}
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-center font-semibold text-gray-600 text-sm py-2">
+                    {day}
+                  </div>
+                ))}
+
+                {/* Calendar days */}
+                {getDaysInMonth(currentCalendarMonth).map((date, idx) => {
+                  const dayEvents = date ? getEventsForDate(date) : [];
+                  const isPast = date && date < new Date().setHours(0, 0, 0, 0);
+                  const todayClass = isToday(date) ? 'bg-blue-50 border-blue-300' : '';
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`min-h-[100px] border rounded p-1 ${
+                        !date ? 'bg-gray-100' :
+                        isPast ? 'bg-gray-50 hover:bg-gray-100' :
+                        'bg-white hover:bg-gray-50'
+                      } ${todayClass}`}
+                    >
+                      {date && (
+                        <>
+                          <div className={`text-sm font-medium mb-1 ${
+                            isToday(date) ? 'text-blue-600' :
+                            isPast ? 'text-gray-400' :
+                            'text-gray-700'
+                          }`}>
+                            {date.getDate()}
+                          </div>
+                          <div className="space-y-1">
+                            {dayEvents.slice(0, 2).map(event => (
+                              <div
+                                key={event.id}
+                                className={`text-xs p-1 rounded truncate ${
+                                  event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                                  event.type === 'email' ? 'bg-green-100 text-green-800' :
+                                  event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}
+                                title={`${event.title} - ${event.description}`}
+                              >
+                                {event.title}
+                              </div>
+                            ))}
+                            {dayEvents.length > 2 && (
+                              <div className="text-xs text-gray-500 pl-1">
+                                +{dayEvents.length - 2} more
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="mt-6 flex gap-4 justify-center flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-100 rounded"></div>
+                  <span className="text-sm text-gray-600">Social Media</span>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {calendarEvents
-                    .filter(e => e.clientId === effectiveClientId)
-                    .sort((a, b) => parseDateLocal(a.date) - parseDateLocal(b.date))
-                    .map(event => (
-                      <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-semibold text-lg">{event.title}</h4>
-                          <span className="text-sm text-gray-600">{parseDateLocal(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        </div>
-                        <p className="text-gray-600 text-sm mb-2">{event.description}</p>
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                          event.type === 'social' ? 'bg-blue-100 text-blue-800' :
-                          event.type === 'email' ? 'bg-green-100 text-green-800' :
-                          event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {event.type}
-                        </span>
-                      </div>
-                    ))}
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-purple-100 rounded"></div>
+                  <span className="text-sm text-gray-600">Blog Post</span>
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-green-100 rounded"></div>
+                  <span className="text-sm text-gray-600">Email</span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -2171,6 +2383,245 @@ const ClientPortal = () => {
             </div>
           </div>
         )}
+
+        {/* Tutorial Overlay */}
+        {showTutorial && (
+          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-8 relative">
+                <button
+                  onClick={async () => {
+                    setShowTutorial(false);
+                    const updatedUser = { ...currentUser, tutorialCompleted: true };
+                    setCurrentUser(updatedUser);
+                    await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+                    saveSession(updatedUser, 'dashboard');
+                  }}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+
+              {tutorialStep === 0 && (
+                <div>
+                  <h2 className="text-3xl font-bold text-gray-800 mb-4">Welcome to Your Client Portal!</h2>
+                  <p className="text-gray-600 mb-6">
+                    Let's take a quick tour of the key features to help you get started. This will only take a minute!
+                  </p>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={async () => {
+                        setShowTutorial(false);
+                        const updatedUser = { ...currentUser, tutorialCompleted: true };
+                        setCurrentUser(updatedUser);
+                        await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+                        saveSession(updatedUser, 'dashboard');
+                      }}
+                      className="text-gray-600 hover:underline"
+                    >
+                      Skip Tutorial
+                    </button>
+                    <button
+                      onClick={() => setTutorialStep(1)}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      Get Started
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tutorialStep === 1 && (
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">📊 Review Your Content</h2>
+                  <p className="text-gray-600 mb-4">
+                    Your main dashboard shows all the content we've created for you. You'll find:
+                  </p>
+                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
+                    <li><strong>Social Media Posts</strong> - Ready-to-publish content for your social channels</li>
+                    <li><strong>Blog Posts</strong> - Long-form content to drive traffic to your site</li>
+                    <li><strong>Email Campaigns</strong> - Engaging emails to nurture your audience</li>
+                  </ul>
+                  <p className="text-gray-600 mb-6">
+                    Click on any content item to review it in detail, approve it, or request changes.
+                  </p>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() => setTutorialStep(0)}
+                      className="text-gray-600 hover:underline flex items-center gap-2"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setTutorialStep(2)}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      Next
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tutorialStep === 2 && (
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">✅ Approve or Request Changes</h2>
+                  <p className="text-gray-600 mb-4">
+                    For each piece of content, you have three options:
+                  </p>
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
+                      <Check className="w-6 h-6 text-green-600 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-green-800">Approve</p>
+                        <p className="text-sm text-green-700">Content is ready to publish!</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg">
+                      <X className="w-6 h-6 text-red-600 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-red-800">Request Changes</p>
+                        <p className="text-sm text-red-700">Provide feedback and we'll revise it for you</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                      <Clock className="w-6 h-6 text-gray-600 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-gray-800">Review Later</p>
+                        <p className="text-sm text-gray-700">Content stays in pending status</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() => setTutorialStep(1)}
+                      className="text-gray-600 hover:underline flex items-center gap-2"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setTutorialStep(3)}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      Next
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tutorialStep === 3 && (
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">🗓️ Content Calendar</h2>
+                  <p className="text-gray-600 mb-6">
+                    Navigate to the <strong>Content Calendar</strong> tab to see when your approved content is scheduled to be published.
+                    This helps you visualize your entire content strategy at a glance.
+                  </p>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() => setTutorialStep(2)}
+                      className="text-gray-600 hover:underline flex items-center gap-2"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setTutorialStep(4)}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      Next
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tutorialStep === 4 && (
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">⚙️ Manage Your Settings</h2>
+                  <p className="text-gray-600 mb-4">
+                    In the <strong>Settings</strong> tab, you can:
+                  </p>
+                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
+                    <li>Update your business information and preferences</li>
+                    <li>Connect your social media accounts</li>
+                    <li>Upload your headshot and company logo</li>
+                    <li>Add team members to collaborate on content</li>
+                  </ul>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() => setTutorialStep(3)}
+                      className="text-gray-600 hover:underline flex items-center gap-2"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      Back
+                    </button>
+                    <button
+                      onClick={() => setTutorialStep(5)}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    >
+                      Next
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tutorialStep === 5 && (
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-4">🚀 You're All Set!</h2>
+                  <p className="text-gray-600 mb-6">
+                    You now know the basics of your client portal. Remember:
+                  </p>
+                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
+                    <li>Review content regularly to keep your marketing on track</li>
+                    <li>Provide detailed feedback when requesting changes</li>
+                    <li>Check the calendar to stay organized</li>
+                    <li>Update your settings to get the most personalized content</li>
+                  </ul>
+                  <p className="text-gray-600 mb-6">
+                    Have questions? Don't hesitate to reach out to your account manager!
+                  </p>
+                  <div className="flex justify-between">
+                    <button
+                      onClick={() => setTutorialStep(4)}
+                      className="text-gray-600 hover:underline flex items-center gap-2"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                      Back
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setShowTutorial(false);
+                        const updatedUser = { ...currentUser, tutorialCompleted: true };
+                        setCurrentUser(updatedUser);
+                        await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+                        saveSession(updatedUser, 'dashboard');
+                      }}
+                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+                    >
+                      <Check className="w-5 h-5" />
+                      Complete Tutorial
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-center gap-2 mt-6">
+                {[0, 1, 2, 3, 4, 5].map((step) => (
+                  <div
+                    key={step}
+                    className={`h-2 rounded-full transition-all ${
+                      step === tutorialStep ? 'w-8 bg-blue-600' : 'w-2 bg-gray-300'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2191,6 +2642,7 @@ const ClientPortal = () => {
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [contentTypeFilter, setContentTypeFilter] = useState('all'); // 'all', 'social', 'blog', 'email', 'landing-page'
     const [selectedContent, setSelectedContent] = useState(null);
+    const [groupFilter, setGroupFilter] = useState('all'); // 'all' or group id
 
     useEffect(() => {
       loadVideos();
@@ -2496,18 +2948,50 @@ const ClientPortal = () => {
             <button onClick={() => setActiveTab('videos')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'videos' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               Video Production Queue
             </button>
+            <button onClick={() => setActiveTab('groups')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'groups' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
+              Groups
+            </button>
           </div>
 
           {activeTab === 'clients' && (
             <div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Group</label>
+                <select
+                  value={groupFilter}
+                  onChange={(e) => setGroupFilter(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="all">All Clients</option>
+                  <option value="ungrouped">Ungrouped</option>
+                  {groups.map(group => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="grid md:grid-cols-2 gap-6 mb-8">
-                {users.filter(u => !u.parentClientId).map(user => {
+                {users.filter(u => {
+                  if (u.parentClientId) return false; // Skip team members
+                  if (groupFilter === 'all') return true;
+                  if (groupFilter === 'ungrouped') return !u.groupId;
+                  return u.groupId === groupFilter;
+                }).map(user => {
                   const userContent = content.filter(c => c.clientId === user.id);
                   const teamMembers = users.filter(u => u.parentClientId === user.id);
+                  const userGroup = groups.find(g => g.id === user.groupId);
                   return (
                     <div key={user.id} className="bg-white rounded-lg shadow p-6">
-                      <h3 className="text-lg font-semibold">{user.firstName} {user.lastName || ''} - {user.companyName}</h3>
-                      <p className="text-sm text-gray-600">{user.email}</p>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold">{user.firstName} {user.lastName || ''} - {user.companyName}</h3>
+                          <p className="text-sm text-gray-600">{user.email}</p>
+                        </div>
+                        {userGroup && (
+                          <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full font-medium">
+                            {userGroup.name}
+                          </span>
+                        )}
+                      </div>
                       {teamMembers.length > 0 && (
                         <p className="text-xs text-gray-500 mt-1">{teamMembers.length} team member{teamMembers.length > 1 ? 's' : ''}</p>
                       )}
@@ -2772,6 +3256,162 @@ const ClientPortal = () => {
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'groups' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-semibold">Group Management</h3>
+                  <button
+                    onClick={async () => {
+                      const groupName = prompt('Enter group name:');
+                      if (groupName && groupName.trim()) {
+                        const newGroup = {
+                          id: Date.now().toString(),
+                          name: groupName.trim(),
+                          createdAt: new Date().toISOString()
+                        };
+                        await saveGroups([...groups, newGroup]);
+                      }
+                    }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Create Group
+                  </button>
+                </div>
+
+                {groups.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No groups created yet</p>
+                    <p className="text-sm text-gray-500 mt-2">Create a group to organize your clients</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {groups.map(group => {
+                      const groupUsers = users.filter(u => u.groupId === group.id && !u.parentClientId);
+                      return (
+                        <div key={group.id} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <h4 className="text-lg font-semibold text-gray-800">{group.name}</h4>
+                              <p className="text-sm text-gray-600">{groupUsers.length} client{groupUsers.length !== 1 ? 's' : ''}</p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={async () => {
+                                  const newName = prompt('Enter new group name:', group.name);
+                                  if (newName && newName.trim() && newName !== group.name) {
+                                    const updatedGroups = groups.map(g =>
+                                      g.id === group.id ? { ...g, name: newName.trim() } : g
+                                    );
+                                    await saveGroups(updatedGroups);
+                                  }
+                                }}
+                                className="text-blue-600 hover:text-blue-800 px-3 py-1 text-sm"
+                              >
+                                Rename
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Delete group "${group.name}"? Users in this group will be ungrouped.`)) {
+                                    // Remove group from all users
+                                    const updatedUsers = users.map(u =>
+                                      u.groupId === group.id ? { ...u, groupId: null } : u
+                                    );
+                                    await saveUsers(updatedUsers);
+                                    // Delete group
+                                    const updatedGroups = groups.filter(g => g.id !== group.id);
+                                    await saveGroups(updatedGroups);
+                                    if (db) {
+                                      await deleteDoc(doc(db, 'groups', group.id));
+                                    }
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-800 px-3 py-1 text-sm"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+
+                          {groupUsers.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Clients in this group:</p>
+                              {groupUsers.map(user => (
+                                <div key={user.id} className="flex justify-between items-center bg-gray-50 p-3 rounded">
+                                  <div>
+                                    <p className="font-medium text-sm">{user.firstName} {user.lastName}</p>
+                                    <p className="text-xs text-gray-600">{user.companyName}</p>
+                                  </div>
+                                  <button
+                                    onClick={async () => {
+                                      const updatedUsers = users.map(u =>
+                                        u.id === user.id ? { ...u, groupId: null } : u
+                                      );
+                                      await saveUsers(updatedUsers);
+                                    }}
+                                    className="text-red-600 hover:text-red-800 text-xs"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Assign Clients to Groups</h3>
+                {users.filter(u => !u.parentClientId).length === 0 ? (
+                  <p className="text-gray-600 text-center py-8">No clients available</p>
+                ) : (
+                  <div className="space-y-3">
+                    {users.filter(u => !u.parentClientId).map(user => {
+                      const userGroup = groups.find(g => g.id === user.groupId);
+                      return (
+                        <div key={user.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                          <div className="flex-1">
+                            <p className="font-medium">{user.firstName} {user.lastName} - {user.companyName}</p>
+                            <p className="text-sm text-gray-600">{user.email}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {userGroup && (
+                              <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full font-medium">
+                                {userGroup.name}
+                              </span>
+                            )}
+                            <select
+                              value={user.groupId || ''}
+                              onChange={async (e) => {
+                                const newGroupId = e.target.value || null;
+                                const updatedUsers = users.map(u =>
+                                  u.id === user.id ? { ...u, groupId: newGroupId } : u
+                                );
+                                await saveUsers(updatedUsers);
+                              }}
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                            >
+                              <option value="">No Group</option>
+                              {groups.map(group => (
+                                <option key={group.id} value={group.id}>{group.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

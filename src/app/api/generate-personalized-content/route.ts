@@ -45,7 +45,7 @@ ${adminNotes}
 Please take this feedback into account when creating new content.`;
     }
 
-    const prompt = `You are a professional marketing content creator. Generate 15 diverse, high-quality marketing content pieces for ${user.companyName}, a ${industry} business.
+    const prompt = `You are a professional marketing content creator. Generate a total of 15 marketing content pieces (5 social posts, 5 blog posts, 5 emails) for ${user.companyName}, a ${industry} business.
 
 SPEAKER INFORMATION (use these exact values when needed):
 - Speaker's Name: ${user.firstName} ${user.lastName || ''}
@@ -57,31 +57,40 @@ Brand Voice: ${brandVoice}
 ${onboardingAnswers.differentiators ? `What makes them unique: ${onboardingAnswers.differentiators}` : ''}
 ${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}${historyContext}${adminContext}
 
-Please create EXACTLY 5 pieces of each of the following types (15 total):
+CRITICAL: Create EXACTLY 5 pieces of EACH type below. NO MORE, NO LESS. Total output must be exactly 15 pieces.
 
-**Social Media Posts (5 pieces):**
+**Social Media Posts (EXACTLY 5 pieces - NOT 15):**
 - Each post MUST include three parts:
   1. Title: Catchy title for the content
-  2. Video Script: A complete 30-60 second video script (conversational, engaging, with hook, value, and CTA)
+  2. Video Script: A complete 45-90 second video script (conversational, engaging, with hook, value, and CTA)
   3. Caption: Instagram/Facebook caption with emojis, hooks, and hashtags
 - Vary the style: educational, inspirational, promotional, storytelling, engagement-focused
 - Make scripts natural and conversational as if speaking to camera
+- CRITICAL: Scripts must be PACKED with specific, actionable details and valuable information
+- Include CONCRETE examples, specific numbers, step-by-step advice, or insider tips
+- Don't just give surface-level advice - provide real depth and practical takeaways
 - IMPORTANT: DO NOT include self-introductions like "Hi, I'm [name]" or "I'm [name] with [company]" unless it's genuinely necessary for establishing credentials on a specific topic
 - Focus on delivering MEANINGFUL INFORMATION and ACTIONABLE ADVICE to the viewer immediately
 - Jump straight into the valuable content with a strong hook
 - Use the speaker's actual name (${user.firstName} ${user.lastName || ''}) and company name (${user.companyName}) if introductions are needed - NEVER use placeholders like "[first name]" or "[company name]"
 
-**Blog Posts (5 pieces):**
-- Full blog post with title, introduction, main points, and conclusion
+**Blog Posts (EXACTLY 5 pieces - NOT 15):**
+- Full, comprehensive blog post with title, engaging introduction, detailed main points with subheadings, and strong conclusion
 - Topics relevant to ${industry} and ${targetAudience}
-- SEO-friendly and valuable content
-- Aim for 300-500 words each
+- CRITICAL: Aim for 800-1200 words each - these need to be SUBSTANTIAL, in-depth articles
+- Make these genuinely valuable, SEO-optimized pieces that could rank on Google
+- Include specific examples, case studies, statistics, actionable steps, and expert insights
+- Use proper heading structure (H2, H3) for SEO
+- Provide real depth and practical value - not surface-level fluff
+- Write as if this is going to be a cornerstone piece of content for their website
 
-**Email Campaigns (5 pieces):**
+**Email Campaigns (EXACTLY 5 pieces - NOT 15):**
 - Subject lines and full email body
 - Various purposes: nurture, promotion, newsletter, re-engagement, event invitation
 - Personalized and conversion-focused
 - Include clear CTAs
+- IMPORTANT: DO NOT reference specific dates, months, or years (like "October 2023") - keep content evergreen
+- Use relative time references like "this month", "this season", "recently" instead of specific dates
 
 For each piece, provide:
 - type: "social", "blog", or "email"
@@ -91,7 +100,7 @@ For each piece, provide:
   * For blog/email: The full content text
 - description: Brief summary of the piece (for social posts, mention the topic/hook)
 
-Format as a JSON array with exactly 15 objects (5 social, 5 blog, 5 email).`;
+REMINDER: Return a JSON array with EXACTLY 15 total objects: 5 social + 5 blog + 5 email = 15 total.`;
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -105,14 +114,14 @@ Format as a JSON array with exactly 15 objects (5 social, 5 blog, 5 email).`;
         messages: [
           {
             role: 'system',
-            content: 'You are a professional marketing content writer specializing in real estate and mortgage industries. Always respond with valid JSON arrays containing exactly 15 content pieces (5 social posts, 5 blog posts, 5 email campaigns).'
+            content: 'You are a professional marketing content writer specializing in real estate and mortgage industries. Always respond with valid JSON arrays containing exactly 15 content pieces (5 social posts, 5 blog posts, 5 email campaigns). Create in-depth, valuable content with specific details and actionable insights.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 4000,
+        max_tokens: 12000,
         temperature: 0.8,
       }),
     });

@@ -134,30 +134,7 @@ const ClientPortal = () => {
       const eventsSnapshot = await getDocs(collection(db, 'calendarEvents'));
       const eventsData = eventsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       console.log(`✅ Loaded ${eventsData.length} calendar events from Firestore`);
-
-      // Auto-cleanup: Remove events older than 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const filteredEvents = eventsData.filter(event => {
-        const eventDate = parseDateLocal(event.date);
-        return eventDate >= thirtyDaysAgo;
-      });
-
-      // Delete old events from Firestore if any were filtered out
-      if (filteredEvents.length < eventsData.length) {
-        const oldEvents = eventsData.filter(e => !filteredEvents.includes(e));
-        console.log(`🗑️ Removing ${oldEvents.length} events older than 30 days`);
-        for (const oldEvent of oldEvents) {
-          try {
-            await deleteDoc(doc(db, 'calendarEvents', oldEvent.id));
-            console.log(`✅ Deleted old event: ${oldEvent.title}`);
-          } catch (err) {
-            console.error(`❌ Error deleting event ${oldEvent.id}:`, err);
-          }
-        }
-      }
-
-      setCalendarEvents(filteredEvents);
+      setCalendarEvents(eventsData);
 
       // Load groups from Firestore
       const groupsSnapshot = await getDocs(collection(db, 'groups'));
@@ -837,7 +814,15 @@ const ClientPortal = () => {
     const getEventsForDate = (date) => {
       if (!date) return [];
       const dateStr = formatDateLocal(date);
-      return calendarEvents.filter(event => event.date === dateStr && event.clientId === effectiveClientId);
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      return calendarEvents.filter(event => {
+        const eventDate = parseDateLocal(event.date);
+        return event.date === dateStr &&
+               event.clientId === effectiveClientId &&
+               eventDate >= thirtyDaysAgo;
+      });
     };
 
     const isToday = (date) => {

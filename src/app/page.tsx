@@ -649,6 +649,8 @@ const ClientPortal = () => {
     const [tutorialStep, setTutorialStep] = useState(0);
     const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
     const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
+    const [selectedEvent, setSelectedEvent] = useState(null);
+    const [showEventModal, setShowEventModal] = useState(false);
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', crm: ''
     });
@@ -1976,19 +1978,32 @@ const ClientPortal = () => {
                             {dayEvents.slice(0, 2).map(event => (
                               <div
                                 key={event.id}
-                                className={`text-xs p-1 rounded truncate ${
+                                className={`text-xs p-1 rounded truncate cursor-pointer hover:opacity-80 transition-opacity ${
                                   event.type === 'social' ? 'bg-blue-100 text-blue-800' :
                                   event.type === 'email' ? 'bg-green-100 text-green-800' :
                                   event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
                                   'bg-gray-100 text-gray-800'
                                 }`}
                                 title={`${event.title} - ${event.description}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedEvent(event);
+                                  setShowEventModal(true);
+                                }}
                               >
                                 {event.title}
                               </div>
                             ))}
                             {dayEvents.length > 2 && (
-                              <div className="text-xs text-gray-500 pl-1">
+                              <div
+                                className="text-xs text-gray-500 pl-1 cursor-pointer hover:text-gray-700"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Show first event beyond the 2 displayed
+                                  setSelectedEvent(dayEvents[2]);
+                                  setShowEventModal(true);
+                                }}
+                              >
                                 +{dayEvents.length - 2} more
                               </div>
                             )}
@@ -2013,6 +2028,74 @@ const ClientPortal = () => {
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 bg-green-100 rounded"></div>
                   <span className="text-sm text-gray-600">Email</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Event Details Modal */}
+          {showEventModal && selectedEvent && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowEventModal(false)}>
+              <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-8" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-2xl font-bold text-gray-800">{selectedEvent.title}</h3>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedEvent.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                      selectedEvent.type === 'email' ? 'bg-green-100 text-green-800' :
+                      selectedEvent.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {selectedEvent.type}
+                    </span>
+                  </div>
+                  <button onClick={() => setShowEventModal(false)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium mb-1">Scheduled Date</p>
+                    <p className="text-lg text-gray-800">
+                      {new Date(selectedEvent.date + 'T00:00:00').toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium mb-1">Description</p>
+                    <p className="text-gray-700 whitespace-pre-wrap">{selectedEvent.description}</p>
+                  </div>
+
+                  {selectedEvent.contentId && (
+                    <div className="mt-6 pt-6 border-t">
+                      <button
+                        onClick={() => {
+                          setShowEventModal(false);
+                          setActivePage('content');
+                          // Scroll to content item if needed
+                        }}
+                        className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2"
+                      >
+                        <FileText className="w-4 h-4" />
+                        View Full Content Details
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-8 flex justify-end">
+                  <button
+                    onClick={() => setShowEventModal(false)}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
             </div>

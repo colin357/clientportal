@@ -1940,10 +1940,10 @@ const ClientPortal = () => {
               </div>
 
               {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-1">
                 {/* Day headers */}
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="text-center font-semibold text-gray-600 py-2">
+                  <div key={day} className="text-center font-semibold text-gray-600 text-sm py-2">
                     {day}
                   </div>
                 ))}
@@ -1952,20 +1952,20 @@ const ClientPortal = () => {
                 {getDaysInMonth(currentCalendarMonth).map((date, idx) => {
                   const dayEvents = date ? getEventsForDate(date) : [];
                   const isPast = date && date < new Date().setHours(0, 0, 0, 0);
+                  const todayClass = isToday(date) ? 'bg-blue-50 border-blue-300' : '';
 
                   return (
                     <div
                       key={idx}
-                      className={`min-h-[100px] border rounded-lg p-2 ${
-                        !date ? 'bg-gray-50' :
-                        isToday(date) ? 'bg-blue-50 border-blue-500 border-2' :
-                        isPast ? 'bg-gray-100' :
+                      className={`min-h-[100px] border rounded p-1 ${
+                        !date ? 'bg-gray-100' :
+                        isPast ? 'bg-gray-50 hover:bg-gray-100' :
                         'bg-white hover:bg-gray-50'
-                      }`}
+                      } ${todayClass}`}
                     >
                       {date && (
                         <>
-                          <div className={`text-sm font-semibold mb-1 ${
+                          <div className={`text-sm font-medium mb-1 ${
                             isToday(date) ? 'text-blue-600' :
                             isPast ? 'text-gray-400' :
                             'text-gray-700'
@@ -1973,7 +1973,7 @@ const ClientPortal = () => {
                             {date.getDate()}
                           </div>
                           <div className="space-y-1">
-                            {dayEvents.map(event => (
+                            {dayEvents.slice(0, 2).map(event => (
                               <div
                                 key={event.id}
                                 className={`text-xs p-1 rounded truncate ${
@@ -1987,6 +1987,11 @@ const ClientPortal = () => {
                                 {event.title}
                               </div>
                             ))}
+                            {dayEvents.length > 2 && (
+                              <div className="text-xs text-gray-500 pl-1">
+                                +{dayEvents.length - 2} more
+                              </div>
+                            )}
                           </div>
                         </>
                       )}

@@ -134,7 +134,30 @@ const ClientPortal = () => {
       const eventsSnapshot = await getDocs(collection(db, 'calendarEvents'));
       const eventsData = eventsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       console.log(`✅ Loaded ${eventsData.length} calendar events from Firestore`);
-      setCalendarEvents(eventsData);
+
+      // Auto-cleanup: Remove events older than 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const filteredEvents = eventsData.filter(event => {
+        const eventDate = parseDateLocal(event.date);
+        return eventDate >= thirtyDaysAgo;
+      });
+
+      // Delete old events from Firestore if any were filtered out
+      if (filteredEvents.length < eventsData.length) {
+        const oldEvents = eventsData.filter(e => !filteredEvents.includes(e));
+        console.log(`🗑️ Removing ${oldEvents.length} events older than 30 days`);
+        for (const oldEvent of oldEvents) {
+          try {
+            await deleteDoc(doc(db, 'calendarEvents', oldEvent.id));
+            console.log(`✅ Deleted old event: ${oldEvent.title}`);
+          } catch (err) {
+            console.error(`❌ Error deleting event ${oldEvent.id}:`, err);
+          }
+        }
+      }
+
+      setCalendarEvents(filteredEvents);
 
       // Load groups from Firestore
       const groupsSnapshot = await getDocs(collection(db, 'groups'));
@@ -647,6 +670,7 @@ const ClientPortal = () => {
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
     const [showTutorial, setShowTutorial] = useState(!currentUser.tutorialCompleted);
     const [tutorialStep, setTutorialStep] = useState(0);
+    const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
     const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', crm: ''
     });
@@ -784,6 +808,44 @@ const ClientPortal = () => {
       { id: 'settings', label: 'Settings', icon: Settings }
     ];
 
+    // Calendar helper functions
+    const formatDateLocal = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const getDaysInMonth = (date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const daysInMonth = lastDay.getDate();
+      const startingDayOfWeek = firstDay.getDay();
+
+      const days = [];
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        days.push(null);
+      }
+      for (let i = 1; i <= daysInMonth; i++) {
+        days.push(new Date(year, month, i));
+      }
+      return days;
+    };
+
+    const getEventsForDate = (date) => {
+      if (!date) return [];
+      const dateStr = formatDateLocal(date);
+      return calendarEvents.filter(event => event.date === dateStr && event.clientId === effectiveClientId);
+    };
+
+    const isToday = (date) => {
+      if (!date) return false;
+      const today = new Date();
+      return date.toDateString() === today.toDateString();
+    };
+
     return (
       <div className="min-h-screen bg-gray-50">
         <nav className="bg-white shadow-sm">
@@ -908,7 +970,28 @@ const ClientPortal = () => {
             {navItems.map(item => {
               const Icon = item.icon;
               return (
-                <button key={item.id} onClick={() => setActivePage(item.id)} className={`p-3 rounded-lg transition ${activePage === item.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+                <button
+                  key={item.id}
+                  id={`nav-${item.id}`}
+                  onClick={() => {
+                    setActivePage(item.id);
+                    // Tutorial progression for calendar click
+                    if (showTutorial && tutorialStep === 3 && item.id === 'calendar') {
+                      setTutorialStep(4);
+                    }
+                    // Tutorial progression for settings click
+                    if (showTutorial && tutorialStep === 4 && item.id === 'settings') {
+                      setTutorialStep(5);
+                    }
+                  }}
+                  className={`p-3 rounded-lg transition ${
+                    activePage === item.id ? 'bg-blue-600 text-white shadow-lg' :
+                    'bg-white text-gray-700 hover:bg-gray-50'
+                  } ${
+                    showTutorial && ((tutorialStep === 3 && item.id === 'calendar') || (tutorialStep === 4 && item.id === 'settings')) ?
+                    'ring-4 ring-yellow-400 animate-pulse' : ''
+                  }`}
+                >
                   <Icon className={`w-5 h-5 mx-auto mb-1 ${activePage === item.id ? 'text-white' : 'text-gray-600'}`} />
                   <p className="text-xs font-medium text-center">{item.label}</p>
                 </button>
@@ -1800,39 +1883,99 @@ const ClientPortal = () => {
           )}
 
           {activePage === 'calendar' && (
-            <div className="bg-white rounded-lg shadow p-8">
-              <h3 className="text-2xl font-semibold mb-6">Content Calendar</h3>
-              <p className="text-gray-600 mb-6">View your upcoming content schedule</p>
+            <div id="calendar-section" className="bg-white rounded-lg shadow p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-semibold">Content Calendar</h3>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1))}
+                    className="p-2 hover:bg-gray-100 rounded"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="text-lg font-semibold min-w-[200px] text-center">
+                    {currentCalendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    onClick={() => setCurrentCalendarMonth(new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() + 1, 1))}
+                    className="p-2 hover:bg-gray-100 rounded"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
 
-              {calendarEvents.filter(e => e.clientId === effectiveClientId).length === 0 ? (
-                <div className="text-center py-12">
-                  <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No scheduled events yet</p>
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-2">
+                {/* Day headers */}
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-center font-semibold text-gray-600 py-2">
+                    {day}
+                  </div>
+                ))}
+
+                {/* Calendar days */}
+                {getDaysInMonth(currentCalendarMonth).map((date, idx) => {
+                  const dayEvents = date ? getEventsForDate(date) : [];
+                  const isPast = date && date < new Date().setHours(0, 0, 0, 0);
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`min-h-[100px] border rounded-lg p-2 ${
+                        !date ? 'bg-gray-50' :
+                        isToday(date) ? 'bg-blue-50 border-blue-500 border-2' :
+                        isPast ? 'bg-gray-100' :
+                        'bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      {date && (
+                        <>
+                          <div className={`text-sm font-semibold mb-1 ${
+                            isToday(date) ? 'text-blue-600' :
+                            isPast ? 'text-gray-400' :
+                            'text-gray-700'
+                          }`}>
+                            {date.getDate()}
+                          </div>
+                          <div className="space-y-1">
+                            {dayEvents.map(event => (
+                              <div
+                                key={event.id}
+                                className={`text-xs p-1 rounded truncate ${
+                                  event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                                  event.type === 'email' ? 'bg-green-100 text-green-800' :
+                                  event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}
+                                title={`${event.title} - ${event.description}`}
+                              >
+                                {event.title}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="mt-6 flex gap-4 justify-center flex-wrap">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-100 rounded"></div>
+                  <span className="text-sm text-gray-600">Social Media</span>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {calendarEvents
-                    .filter(e => e.clientId === effectiveClientId)
-                    .sort((a, b) => parseDateLocal(a.date) - parseDateLocal(b.date))
-                    .map(event => (
-                      <div key={event.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-semibold text-lg">{event.title}</h4>
-                          <span className="text-sm text-gray-600">{parseDateLocal(event.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                        </div>
-                        <p className="text-gray-600 text-sm mb-2">{event.description}</p>
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                          event.type === 'social' ? 'bg-blue-100 text-blue-800' :
-                          event.type === 'email' ? 'bg-green-100 text-green-800' :
-                          event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {event.type}
-                        </span>
-                      </div>
-                    ))}
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-purple-100 rounded"></div>
+                  <span className="text-sm text-gray-600">Blog Post</span>
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-green-100 rounded"></div>
+                  <span className="text-sm text-gray-600">Email</span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -2204,20 +2347,27 @@ const ClientPortal = () => {
 
         {/* Tutorial Overlay */}
         {showTutorial && (
-          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-8 relative">
-              <button
-                onClick={async () => {
-                  setShowTutorial(false);
-                  const updatedUser = { ...currentUser, tutorialCompleted: true };
-                  setCurrentUser(updatedUser);
-                  await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-                  saveSession(updatedUser, 'dashboard');
-                }}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
+          <>
+            {/* Spotlight dimming overlay */}
+            <div className="fixed inset-0 bg-black bg-opacity-70 z-40 pointer-events-none"></div>
+
+            {/* Tutorial dialog */}
+            <div className={`fixed flex items-center justify-center p-4 z-50 ${
+              tutorialStep >= 3 ? 'inset-x-0 top-0 h-[30%]' : 'inset-0'
+            }`}>
+              <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-8 relative">
+                <button
+                  onClick={async () => {
+                    setShowTutorial(false);
+                    const updatedUser = { ...currentUser, tutorialCompleted: true };
+                    setCurrentUser(updatedUser);
+                    await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+                    saveSession(updatedUser, 'dashboard');
+                  }}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
 
               {tutorialStep === 0 && (
                 <div>
@@ -2333,10 +2483,15 @@ const ClientPortal = () => {
               {tutorialStep === 3 && (
                 <div>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4">🗓️ Content Calendar</h2>
-                  <p className="text-gray-600 mb-6">
-                    Navigate to the <strong>Content Calendar</strong> tab to see when your approved content is scheduled to be published.
-                    This helps you visualize your entire content strategy at a glance.
+                  <p className="text-gray-600 mb-4">
+                    Now let's check out your content calendar. This helps you visualize your entire content strategy at a glance.
                   </p>
+                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                    <p className="text-yellow-800 font-semibold flex items-center gap-2">
+                      <Calendar className="w-5 h-5" />
+                      Click on the "Content Calendar" button above (it's highlighted in yellow!)
+                    </p>
+                  </div>
                   <div className="flex justify-between">
                     <button
                       onClick={() => setTutorialStep(2)}
@@ -2346,10 +2501,13 @@ const ClientPortal = () => {
                       Back
                     </button>
                     <button
-                      onClick={() => setTutorialStep(4)}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                      onClick={() => {
+                        setActivePage('calendar');
+                        setTutorialStep(4);
+                      }}
+                      className="bg-gray-400 text-white px-6 py-2 rounded-lg hover:bg-gray-500 flex items-center gap-2"
                     >
-                      Next
+                      Skip
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -2360,27 +2518,39 @@ const ClientPortal = () => {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4">⚙️ Manage Your Settings</h2>
                   <p className="text-gray-600 mb-4">
-                    In the <strong>Settings</strong> tab, you can:
+                    Great! Now let's explore the Settings tab where you can:
                   </p>
-                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
+                  <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
                     <li>Update your business information and preferences</li>
                     <li>Connect your social media accounts</li>
                     <li>Upload your headshot and company logo</li>
                     <li>Add team members to collaborate on content</li>
                   </ul>
+                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                    <p className="text-yellow-800 font-semibold flex items-center gap-2">
+                      <Settings className="w-5 h-5" />
+                      Click on the "Settings" button above (it's highlighted in yellow!)
+                    </p>
+                  </div>
                   <div className="flex justify-between">
                     <button
-                      onClick={() => setTutorialStep(3)}
+                      onClick={() => {
+                        setActivePage('content');
+                        setTutorialStep(3);
+                      }}
                       className="text-gray-600 hover:underline flex items-center gap-2"
                     >
                       <ChevronLeft className="w-5 h-5" />
                       Back
                     </button>
                     <button
-                      onClick={() => setTutorialStep(5)}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                      onClick={() => {
+                        setActivePage('settings');
+                        setTutorialStep(5);
+                      }}
+                      className="bg-gray-400 text-white px-6 py-2 rounded-lg hover:bg-gray-500 flex items-center gap-2"
                     >
-                      Next
+                      Skip
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -2438,7 +2608,8 @@ const ClientPortal = () => {
                 ))}
               </div>
             </div>
-          </div>
+            </div>
+          </>
         )}
       </div>
     );

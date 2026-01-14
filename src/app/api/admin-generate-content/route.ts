@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authenticateRequest, requireAdmin } from '@/lib/middleware';
+import { logApiCall, AuditEventType } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.authenticated) {
+      return authResult.response;
+    }
+
+    // Require admin access
+    const adminResult = await requireAdmin(request, authResult.user);
+    if (!adminResult.authorized) {
+      return adminResult.response;
+    }
+
     const { users, contentHistory = {} } = await request.json();
+
+    // Log admin action
+    await logApiCall(
+      '/api/admin-generate-content',
+      authResult.user.userId,
+      authResult.user.email,
+      'success',
+      { userCount: users?.length || 0 }
+    );
 
     // Validate required fields
     if (!users || !Array.isArray(users) || users.length === 0) {

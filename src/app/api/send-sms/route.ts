@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authenticateRequest, rateLimit } from '@/lib/middleware';
+import { logApiCall } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.authenticated) {
+      return authResult.response;
+    }
+
+    // Rate limiting - 10 SMS per hour per user
+    const rateLimitResult = await rateLimit(authResult.user.userId, 10, 60 * 60 * 1000);
+    if (!rateLimitResult.allowed) {
+      return rateLimitResult.response;
+    }
+
     const { to, message } = await request.json();
+
+    // Log API call
+    await logApiCall(
+      '/api/send-sms',
+      authResult.user.userId,
+      authResult.user.email,
+      'success',
+      { to: to.substring(0, 5) + '***' } // Partial phone number for privacy
+    );
 
     // Validate required fields
     if (!to || !message) {

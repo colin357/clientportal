@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authenticateRequest, rateLimit } from '@/lib/middleware';
+import { logApiCall } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Authenticate request
+    const authResult = await authenticateRequest(request);
+    if (!authResult.authenticated) {
+      return authResult.response;
+    }
+
+    // Rate limiting - 20 content generations per hour per user
+    const rateLimitResult = await rateLimit(authResult.user.userId, 20, 60 * 60 * 1000);
+    if (!rateLimitResult.allowed) {
+      return rateLimitResult.response;
+    }
+
     const { topic, contentType, audience, tone } = await request.json();
+
+    // Log API call
+    await logApiCall(
+      '/api/generate-content',
+      authResult.user.userId,
+      authResult.user.email,
+      'success',
+      { contentType, topic: topic.substring(0, 50) }
+    );
 
     // Validate required fields
     if (!topic || !contentType || !audience || !tone) {

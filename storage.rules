@@ -1,27 +1,65 @@
 rules_version = '2';
+
+// ============================================================================
+// FIREBASE STORAGE SECURITY RULES - SOC2 COMPLIANT
+// ============================================================================
+// ✅ Authenticated uploads only
+// ✅ File size and type validation
+// ✅ Path-based access control
+// ============================================================================
+
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow anyone to read files (for public images like headshots, logos)
+
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth.token.role == 'admin';
+    }
+
+    // Allow anyone to read files (for public images like headshots, logos, completed videos)
+    // This is acceptable for public-facing content
     match /{allPaths=**} {
       allow read: if true;
     }
 
-    // Allow uploads to headshots folder
-    match /headshots/{fileName} {
-      allow write: if request.resource.size < 5 * 1024 * 1024 // 5MB limit
-                   && request.resource.contentType.matches('image/.*');
+    // Allow authenticated uploads to headshots folder
+    match /headshots/{userId}/{fileName} {
+      // Users can only upload to their own folder, admins can upload anywhere
+      allow write: if isSignedIn() &&
+                      (request.auth.uid == userId || isAdmin()) &&
+                      request.resource.size < 5 * 1024 * 1024 && // 5MB limit
+                      request.resource.contentType.matches('image/.*');
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
-    // Allow uploads to logos folder
-    match /logos/{fileName} {
-      allow write: if request.resource.size < 5 * 1024 * 1024 // 5MB limit
-                   && request.resource.contentType.matches('image/.*');
+    // Allow authenticated uploads to logos folder
+    match /logos/{userId}/{fileName} {
+      // Users can only upload to their own folder, admins can upload anywhere
+      allow write: if isSignedIn() &&
+                      (request.auth.uid == userId || isAdmin()) &&
+                      request.resource.size < 5 * 1024 * 1024 && // 5MB limit
+                      request.resource.contentType.matches('image/.*');
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
-    // Allow uploads to videos folder
-    match /videos/{fileName} {
-      allow write: if request.resource.size < 500 * 1024 * 1024 // 500MB limit
-                   && request.resource.contentType.matches('video/.*');
+    // Allow authenticated uploads to videos folder
+    match /videos/{userId}/{fileName} {
+      // Users can only upload to their own folder, admins can upload anywhere
+      allow write: if isSignedIn() &&
+                      (request.auth.uid == userId || isAdmin()) &&
+                      request.resource.size < 500 * 1024 * 1024 && // 500MB limit
+                      request.resource.contentType.matches('video/.*');
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Deny all other paths
+    match /{document=**} {
+      allow write: if false;
     }
   }
 }

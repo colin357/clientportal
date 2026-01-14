@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2 } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, Bell } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -1298,7 +1298,7 @@ const ClientPortal = () => {
 
                       // Send SMS notification to admin
                       await sendSMS(
-                        '+18056379009',
+                        '+17867882699',
                         `📹 New video submitted by ${currentUser.companyName}. Check the admin portal to review!`
                       );
 
@@ -1554,7 +1554,7 @@ const ClientPortal = () => {
 
                                         // Send SMS notification
                                         await sendSMS(
-                                          '+18056379009',
+                                          '+17867882699',
                                           `📹 New video submitted by ${currentUser.companyName} for "${item.title}". Check the admin portal!`
                                         );
 
@@ -3088,9 +3088,34 @@ const ClientPortal = () => {
                           <p className="text-xs text-green-600">Approved</p>
                         </div>
                       </div>
-                      <button onClick={() => setSelectedUser(user)} className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
-                        <Eye className="w-4 h-4" />View Details
-                      </button>
+                      <div className="flex gap-2 mt-4">
+                        <button onClick={() => setSelectedUser(user)} className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                          <Eye className="w-4 h-4" />View Details
+                        </button>
+                        {userContent.filter(c => c.status === 'pending').length > 0 && user.phoneNumber && (
+                          <button
+                            onClick={async () => {
+                              const pendingCount = userContent.filter(c => c.status === 'pending').length;
+                              if (confirm(`Send notification to ${user.firstName} ${user.lastName || ''} about ${pendingCount} pending content item${pendingCount > 1 ? 's' : ''}?`)) {
+                                try {
+                                  await sendSMS(
+                                    user.phoneNumber,
+                                    `👋 Hi ${user.firstName}! You have ${pendingCount} new content piece${pendingCount > 1 ? 's' : ''} ready for review in your portal. Check them out and let us know what you think!`
+                                  );
+                                  alert('✅ Notification sent successfully!');
+                                } catch (error) {
+                                  console.error('Failed to send notification:', error);
+                                  alert('❌ Failed to send notification. Please try again.');
+                                }
+                              }
+                            }}
+                            className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                            title="Notify client about pending content"
+                          >
+                            <Bell className="w-4 h-4" />Notify
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -3618,16 +3643,6 @@ const ClientPortal = () => {
 
                     await saveContent([...content, ...newContentPieces]);
 
-                    // Send SMS notifications to all target users
-                    for (const user of targetUsers) {
-                      if (user.phoneNumber) {
-                        await sendSMS(
-                          user.phoneNumber,
-                          `📝 New ${newContent.type} ready for review: "${newContent.title}". Check your portal to approve or provide feedback!`
-                        );
-                      }
-                    }
-
                     alert(`✅ Successfully published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''}!`);
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
                     setPublishMode('single');
@@ -3636,15 +3651,6 @@ const ClientPortal = () => {
                   // Single client mode
                   else {
                     await saveContent([...content, { id: Date.now().toString(), ...newContent, status: 'pending', createdAt: new Date().toISOString() }]);
-
-                    // Send SMS notification to client
-                    const client = users.find(u => u.id === newContent.clientId);
-                    if (client?.phoneNumber) {
-                      await sendSMS(
-                        client.phoneNumber,
-                        `📝 New ${newContent.type} ready for review: "${newContent.title}". Check your portal to approve or provide feedback!`
-                      );
-                    }
 
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
                     setShowForm(false);

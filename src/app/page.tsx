@@ -291,6 +291,17 @@ const ClientPortal = () => {
         console.error('❌ Error updating content in Firestore:', error);
       }
     }
+
+    // Send SMS notification to admin when content is approved or denied
+    if (updatedItem && (action === 'approved' || action === 'rejected')) {
+      const client = users.find(u => u.id === updatedItem.clientId);
+      const actionText = action === 'approved' ? 'approved' : 'denied';
+      const emoji = action === 'approved' ? '✅' : '❌';
+      await sendSMS(
+        '+17867882699',
+        `${emoji} ${client?.companyName || 'Client'} ${actionText} content: "${updatedItem.title}" (${updatedItem.type})`
+      );
+    }
   };
 
   const formatPhoneE164 = (phone) => {
@@ -1298,7 +1309,7 @@ const ClientPortal = () => {
 
                       // Send SMS notification to admin
                       await sendSMS(
-                        '+18056379009',
+                        '+17867882699',
                         `📹 New video submitted by ${currentUser.companyName}. Check the admin portal to review!`
                       );
 
@@ -1554,7 +1565,7 @@ const ClientPortal = () => {
 
                                         // Send SMS notification
                                         await sendSMS(
-                                          '+18056379009',
+                                          '+17867882699',
                                           `📹 New video submitted by ${currentUser.companyName} for "${item.title}". Check the admin portal!`
                                         );
 
@@ -2727,6 +2738,44 @@ const ClientPortal = () => {
     const [selectedContent, setSelectedContent] = useState(null);
     const [groupFilter, setGroupFilter] = useState('all'); // 'all' or group id
 
+    // SMS state variables
+    const [smsSelectedClients, setSmsSelectedClients] = useState([]);
+    const [smsTemplate, setSmsTemplate] = useState('');
+    const [smsCustomMessage, setSmsCustomMessage] = useState('');
+    const [smsSending, setSmsSending] = useState(false);
+
+    // SMS Templates
+    const smsTemplates = {
+      'video-editing': {
+        name: 'Video Being Edited',
+        message: '🎬 Great news! We\'re currently editing your video and it\'s looking fantastic! We\'ll have it ready for you soon. Check your portal for updates!\n\n- The Team at Own It Social\nportal.ownitsocial.com'
+      },
+      'video-ready': {
+        name: 'Video Ready',
+        message: '🎥 Your video is ready! Check your portal to view and download it. We can\'t wait to see you share it!\n\n- The Team at Own It Social\nportal.ownitsocial.com'
+      },
+      'content-posted': {
+        name: 'Content Posted to Calendar',
+        message: '📅 New content has been added to your calendar! Log in to your portal to review your upcoming posts and schedule.\n\n- The Team at Own It Social\nportal.ownitsocial.com'
+      },
+      'content-pending': {
+        name: 'Content Pending Review',
+        message: '📝 You have new content waiting for your review in the portal. Please take a moment to approve or provide feedback!\n\n- The Team at Own It Social\nportal.ownitsocial.com'
+      },
+      'content-approved': {
+        name: 'Content Approved - Thank You',
+        message: '✅ Thank you for approving your content! We\'re working on getting everything scheduled and published for you.\n\n- The Team at Own It Social\nportal.ownitsocial.com'
+      },
+      'general-reminder': {
+        name: 'General Portal Reminder',
+        message: '👋 Just a friendly reminder to check your Own It Social portal for updates on your marketing content and videos!\n\n- The Team at Own It Social\nportal.ownitsocial.com'
+      },
+      'custom': {
+        name: 'Custom Message',
+        message: ''
+      }
+    };
+
     useEffect(() => {
       loadVideos();
     }, []);
@@ -2781,15 +2830,58 @@ const ClientPortal = () => {
       );
       await saveVideos(updated);
 
-      // Send SMS notification when video is completed
+      // Automatic client notifications are disabled - use manual SMS from admin portal
       if (status === 'completed' && video) {
-        const client = users.find(u => u.id === video.clientId);
-        if (client?.phoneNumber) {
-          await sendSMS(
-            client.phoneNumber,
-            `🎥 Great news! Your video "${video.description || 'submission'}" is ready! Check your portal to view it.`
-          );
+        console.log(`✅ Video marked as completed (SMS notifications to client disabled)`);
+      }
+    };
+
+    const handleSendManualSMS = async () => {
+      if (smsSelectedClients.length === 0) {
+        alert('⚠️ Please select at least one client to send SMS');
+        return;
+      }
+
+      const message = smsTemplate === 'custom' ? smsCustomMessage : (smsTemplates[smsTemplate]?.message || '');
+      if (!message.trim()) {
+        alert('⚠️ Please enter a message or select a template');
+        return;
+      }
+
+      if (!confirm(`Send SMS to ${smsSelectedClients.length} client${smsSelectedClients.length > 1 ? 's' : ''}?`)) {
+        return;
+      }
+
+      setSmsSending(true);
+      let successCount = 0;
+      let errorCount = 0;
+
+      try {
+        for (const clientId of smsSelectedClients) {
+          const client = users.find(u => u.id === clientId);
+          if (client?.phoneNumber) {
+            try {
+              await sendSMS(client.phoneNumber, message);
+              successCount++;
+              console.log(`✅ SMS sent to ${client.companyName}`);
+            } catch (error) {
+              console.error(`❌ Failed to send SMS to ${client.companyName}:`, error);
+              errorCount++;
+            }
+          }
         }
+
+        alert(`✅ SMS sent successfully to ${successCount} client${successCount > 1 ? 's' : ''}!${errorCount > 0 ? `\n⚠️ Failed to send to ${errorCount} client${errorCount > 1 ? 's' : ''}` : ''}`);
+
+        // Reset form
+        setSmsSelectedClients([]);
+        setSmsTemplate('');
+        setSmsCustomMessage('');
+      } catch (error) {
+        console.error('❌ Error sending SMS:', error);
+        alert('❌ Error sending SMS. Please try again.');
+      } finally {
+        setSmsSending(false);
       }
     };
 
@@ -3033,6 +3125,9 @@ const ClientPortal = () => {
             </button>
             <button onClick={() => setActiveTab('groups')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'groups' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               Groups
+            </button>
+            <button onClick={() => setActiveTab('sms')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'sms' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
+              📱 Send SMS
             </button>
           </div>
 
@@ -3502,6 +3597,147 @@ const ClientPortal = () => {
               </div>
             </div>
           )}
+
+          {activeTab === 'sms' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">📱 Send Manual SMS Notifications</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Select clients and choose a template or write a custom message to send SMS notifications.
+                  Automatic notifications have been disabled - all texts must be sent manually.
+                </p>
+
+                {/* Client Selection */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Select Clients ({smsSelectedClients.length} selected)
+                  </label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
+                    <label className="flex items-center gap-3 p-2 hover:bg-white rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={smsSelectedClients.length === users.filter(u => !u.parentClientId).length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSmsSelectedClients(users.filter(u => !u.parentClientId).map(u => u.id));
+                          } else {
+                            setSmsSelectedClients([]);
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="font-semibold text-gray-900">Select All Clients</span>
+                    </label>
+                    <div className="border-t pt-2 mt-2">
+                      {users.filter(u => !u.parentClientId).map(user => (
+                        <label key={user.id} className="flex items-center gap-3 p-2 hover:bg-white rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={smsSelectedClients.includes(user.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSmsSelectedClients([...smsSelectedClients, user.id]);
+                              } else {
+                                setSmsSelectedClients(smsSelectedClients.filter(id => id !== user.id));
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{user.companyName}</p>
+                            <p className="text-xs text-gray-600">{user.firstName} {user.lastName} - {user.phoneNumber}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Template Selection */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">Select Message Template</label>
+                  <select
+                    value={smsTemplate}
+                    onChange={(e) => {
+                      setSmsTemplate(e.target.value);
+                      if (e.target.value !== 'custom') {
+                        setSmsCustomMessage('');
+                      }
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">-- Select a template --</option>
+                    {Object.entries(smsTemplates).map(([key, template]) => (
+                      <option key={key} value={key}>{template.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Message Preview or Custom Message */}
+                {smsTemplate && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      {smsTemplate === 'custom' ? 'Custom Message' : 'Message Preview'}
+                    </label>
+                    {smsTemplate === 'custom' ? (
+                      <textarea
+                        value={smsCustomMessage}
+                        onChange={(e) => setSmsCustomMessage(e.target.value)}
+                        placeholder="Enter your custom message here..."
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        rows="6"
+                      />
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{smsTemplates[smsTemplate]?.message}</p>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      Character count: {(smsTemplate === 'custom' ? smsCustomMessage : smsTemplates[smsTemplate]?.message || '').length} / 160 (1 SMS)
+                    </p>
+                  </div>
+                )}
+
+                {/* Send Button */}
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleSendManualSMS}
+                    disabled={smsSending || smsSelectedClients.length === 0 || !smsTemplate}
+                    className={`flex-1 px-6 py-3 rounded-lg font-medium ${
+                      smsSending || smsSelectedClients.length === 0 || !smsTemplate
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {smsSending ? '📤 Sending...' : `📱 Send SMS to ${smsSelectedClients.length} Client${smsSelectedClients.length !== 1 ? 's' : ''}`}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSmsSelectedClients([]);
+                      setSmsTemplate('');
+                      setSmsCustomMessage('');
+                    }}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* SMS Templates Reference */}
+              <div className="bg-blue-50 rounded-lg p-6">
+                <h4 className="font-semibold text-blue-900 mb-3">📋 Available Templates</h4>
+                <div className="space-y-3">
+                  {Object.entries(smsTemplates).filter(([key]) => key !== 'custom').map(([key, template]) => (
+                    <div key={key} className="bg-white rounded-lg p-3 border border-blue-200">
+                      <p className="font-medium text-sm text-blue-900 mb-1">{template.name}</p>
+                      <p className="text-xs text-gray-600 italic">{template.message.substring(0, 100)}...</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {showForm && (
@@ -3618,15 +3854,8 @@ const ClientPortal = () => {
 
                     await saveContent([...content, ...newContentPieces]);
 
-                    // Send SMS notifications to all target users
-                    for (const user of targetUsers) {
-                      if (user.phoneNumber) {
-                        await sendSMS(
-                          user.phoneNumber,
-                          `📝 New ${newContent.type} ready for review: "${newContent.title}". Check your portal to approve or provide feedback!`
-                        );
-                      }
-                    }
+                    // Automatic client notifications are disabled - use manual SMS from admin portal
+                    console.log(`✅ Published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''} (SMS notifications disabled)`);
 
                     alert(`✅ Successfully published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''}!`);
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
@@ -3637,14 +3866,8 @@ const ClientPortal = () => {
                   else {
                     await saveContent([...content, { id: Date.now().toString(), ...newContent, status: 'pending', createdAt: new Date().toISOString() }]);
 
-                    // Send SMS notification to client
-                    const client = users.find(u => u.id === newContent.clientId);
-                    if (client?.phoneNumber) {
-                      await sendSMS(
-                        client.phoneNumber,
-                        `📝 New ${newContent.type} ready for review: "${newContent.title}". Check your portal to approve or provide feedback!`
-                      );
-                    }
+                    // Automatic client notifications are disabled - use manual SMS from admin portal
+                    console.log(`✅ Content published to client (SMS notifications disabled)`);
 
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
                     setShowForm(false);

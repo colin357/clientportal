@@ -76,38 +76,9 @@ export async function POST(request: NextRequest) {
           }
 
           if (shouldSendReminder) {
-            // Send SMS via Twilio
-            const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-            const credentials = Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
-
-            const smsResponse = await fetch(twilioUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Basic ${credentials}`,
-                'Content-Type': 'application/x-www-form-urlencoded',
-              },
-              body: new URLSearchParams({
-                To: user.phoneNumber,
-                From: twilioPhone,
-                Body: message,
-              }),
-            });
-
-            if (smsResponse.ok) {
-              remindersSent.push({
-                userId: user.id,
-                companyName: user.companyName,
-                contentId: item.id,
-                contentTitle: item.title,
-                reminderType,
-                sentAt: now.toISOString(),
-              });
-
-              console.log(`✅ Sent ${reminderType} reminder to ${user.companyName} for "${item.title}"`);
-            } else {
-              const error = await smsResponse.text();
-              throw new Error(`Twilio error: ${error}`);
-            }
+            // Automatic reminders to clients are disabled
+            // SMS must be sent manually from the admin portal
+            console.log(`⏭️ Skipping automatic ${reminderType} reminder to ${user.companyName} for "${item.title}" - automatic client notifications disabled`);
           }
         } catch (error: any) {
           console.error(`❌ Error sending reminder for ${item.title}:`, error);

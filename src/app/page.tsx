@@ -662,8 +662,9 @@ const ClientPortal = () => {
     const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [showEventModal, setShowEventModal] = useState(false);
-    const [socialLogins, setSocialLogins] = useState(currentUser.socialLogins || {
-      instagram: '', facebook: '', youtube: '', x: '', linkedin: '', tiktok: '', crm: ''
+    const [socialLogins, setSocialLogins] = useState({
+      instagram: '', facebook: '', youtube: '', x: '', linkedin: '', tiktok: '', crm: '',
+      ...currentUser.socialLogins
     });
     const [headshot, setHeadshot] = useState(currentUser.headshot || '');
     const [companyLogo, setCompanyLogo] = useState(currentUser.companyLogo || '');

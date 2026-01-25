@@ -2739,6 +2739,12 @@ const ClientPortal = () => {
     const [selectedContent, setSelectedContent] = useState(null);
     const [groupFilter, setGroupFilter] = useState('all'); // 'all' or group id
 
+    // Calendar filter state variables
+    const [calendarClientFilter, setCalendarClientFilter] = useState('all'); // 'all' or client id
+    const [calendarTypeFilter, setCalendarTypeFilter] = useState('all'); // 'all', 'social', 'email', 'blog'
+    const [approvedContentSearch, setApprovedContentSearch] = useState('');
+    const [showOnlyUnscheduled, setShowOnlyUnscheduled] = useState(true);
+
     // SMS state variables
     const [smsSelectedClients, setSmsSelectedClients] = useState([]);
     const [smsTemplate, setSmsTemplate] = useState('');
@@ -2986,7 +2992,12 @@ const ClientPortal = () => {
     const getEventsForDate = (date) => {
       if (!date) return [];
       const dateStr = formatDateLocal(date);
-      return calendarEvents.filter(event => event.date === dateStr);
+      return calendarEvents.filter(event => {
+        if (event.date !== dateStr) return false;
+        if (calendarClientFilter !== 'all' && event.clientId !== calendarClientFilter) return false;
+        if (calendarTypeFilter !== 'all' && event.type !== calendarTypeFilter) return false;
+        return true;
+      });
     };
 
     const isToday = (date) => {
@@ -3272,6 +3283,38 @@ const ClientPortal = () => {
                   </div>
                 </div>
 
+                {/* Calendar Filters */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Client</label>
+                      <select
+                        value={calendarClientFilter}
+                        onChange={(e) => setCalendarClientFilter(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="all">All Clients</option>
+                        {users.filter(u => !u.parentClientId).map(user => (
+                          <option key={user.id} value={user.id}>{user.companyName}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Content Type</label>
+                      <select
+                        value={calendarTypeFilter}
+                        onChange={(e) => setCalendarTypeFilter(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="all">All Types</option>
+                        <option value="social">Social Media</option>
+                        <option value="email">Email</option>
+                        <option value="blog">Blog Post</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Calendar Grid */}
                 <div className="grid grid-cols-7 gap-1">
                   {/* Day headers */}
@@ -3306,7 +3349,7 @@ const ClientPortal = () => {
                               {events.slice(0, 2).map(event => (
                                 <div
                                   key={event.id}
-                                  className={`text-xs p-1 rounded truncate ${
+                                  className={`text-xs p-1 rounded flex items-start justify-between gap-1 group ${
                                     event.type === 'social' ? 'bg-blue-100 text-blue-800' :
                                     event.type === 'email' ? 'bg-green-100 text-green-800' :
                                     event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
@@ -3314,7 +3357,23 @@ const ClientPortal = () => {
                                   }`}
                                   title={event.title}
                                 >
-                                  {event.title}
+                                  <span className="truncate flex-1">{event.title}</span>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Unschedule "${event.title}"?`)) {
+                                        const updatedEvents = calendarEvents.filter(ev => ev.id !== event.id);
+                                        await saveCalendarEvents(updatedEvents);
+                                        if (db) {
+                                          await deleteDoc(doc(db, 'calendarEvents', event.id));
+                                        }
+                                      }
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white rounded px-1 transition-all flex-shrink-0"
+                                    title="Unschedule"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
                                 </div>
                               ))}
                               {events.length > 2 && (
@@ -3336,15 +3395,71 @@ const ClientPortal = () => {
                 <h3 className="text-lg font-semibold mb-4">Approved Content</h3>
                 <p className="text-sm text-gray-600 mb-4">Click on content to schedule it on the calendar</p>
 
+                {/* Search and Filter Controls */}
+                <div className="space-y-3 mb-4">
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Search by title..."
+                      value={approvedContentSearch}
+                      onChange={(e) => setApprovedContentSearch(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="showOnlyUnscheduled"
+                      checked={showOnlyUnscheduled}
+                      onChange={(e) => setShowOnlyUnscheduled(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="showOnlyUnscheduled" className="text-sm text-gray-700 cursor-pointer">
+                      Show only unscheduled
+                    </label>
+                  </div>
+                </div>
+
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                  {content.filter(item => item.status === 'approved').length === 0 ? (
-                    <div className="text-center py-8">
-                      <Check className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500 text-sm">No approved content yet</p>
-                    </div>
-                  ) : (
-                    content.filter(item => item.status === 'approved').map(item => {
+                  {(() => {
+                    // Filter approved content
+                    let filteredContent = content.filter(item => item.status === 'approved');
+
+                    // Apply client filter
+                    if (calendarClientFilter !== 'all') {
+                      filteredContent = filteredContent.filter(item => item.clientId === calendarClientFilter);
+                    }
+
+                    // Apply search filter
+                    if (approvedContentSearch.trim()) {
+                      const searchLower = approvedContentSearch.toLowerCase();
+                      filteredContent = filteredContent.filter(item =>
+                        item.title.toLowerCase().includes(searchLower) ||
+                        item.description?.toLowerCase().includes(searchLower)
+                      );
+                    }
+
+                    // Apply unscheduled filter
+                    if (showOnlyUnscheduled) {
+                      filteredContent = filteredContent.filter(item => {
+                        const scheduleCount = calendarEvents.filter(event => event.contentId === item.id).length;
+                        return scheduleCount === 0;
+                      });
+                    }
+
+                    if (filteredContent.length === 0) {
+                      return (
+                        <div className="text-center py-8">
+                          <Check className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                          <p className="text-gray-500 text-sm">No matching content found</p>
+                        </div>
+                      );
+                    }
+
+                    return filteredContent.map(item => {
                       const client = users.find(u => u.id === item.clientId);
+                      const scheduleCount = calendarEvents.filter(event => event.contentId === item.id).length;
+
                       return (
                         <div
                           key={item.id}
@@ -3363,11 +3478,17 @@ const ClientPortal = () => {
                               'bg-gray-100 text-gray-800'
                             }`}>{item.type}</span>
                           </div>
-                          <p className="text-xs text-gray-600">{client?.companyName}</p>
+                          <p className="text-xs text-gray-600 mb-2">{client?.companyName}</p>
+                          {scheduleCount > 0 && (
+                            <div className="flex items-center gap-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded">
+                              <Check className="w-3 h-3" />
+                              <span>Scheduled {scheduleCount} time{scheduleCount !== 1 ? 's' : ''}</span>
+                            </div>
+                          )}
                         </div>
                       );
-                    })
-                  )}
+                    });
+                  })()}
                 </div>
               </div>
             </div>
@@ -3963,6 +4084,57 @@ const ClientPortal = () => {
                     Select content to schedule for <strong>{selectedDate.toLocaleDateString()}</strong>
                   </p>
 
+                  {/* Existing events for this date */}
+                  {(() => {
+                    const dateEvents = getEventsForDate(selectedDate);
+                    if (dateEvents.length > 0) {
+                      return (
+                        <div className="mb-4">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-2">Already Scheduled ({dateEvents.length})</h3>
+                          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                            {dateEvents.map(event => {
+                              const client = users.find(u => u.id === event.clientId);
+                              return (
+                                <div
+                                  key={event.id}
+                                  className={`border rounded p-3 flex items-start justify-between ${
+                                    event.type === 'social' ? 'bg-blue-50 border-blue-200' :
+                                    event.type === 'email' ? 'bg-green-50 border-green-200' :
+                                    event.type === 'blog' ? 'bg-purple-50 border-purple-200' :
+                                    'bg-gray-50 border-gray-200'
+                                  }`}
+                                >
+                                  <div className="flex-1">
+                                    <h4 className="font-medium text-sm text-gray-800">{event.title}</h4>
+                                    <p className="text-xs text-gray-600">{client?.companyName} • {event.type}</p>
+                                  </div>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Unschedule "${event.title}"?`)) {
+                                        const updatedEvents = calendarEvents.filter(ev => ev.id !== event.id);
+                                        await saveCalendarEvents(updatedEvents);
+                                        if (db) {
+                                          await deleteDoc(doc(db, 'calendarEvents', event.id));
+                                        }
+                                      }
+                                    }}
+                                    className="text-red-600 hover:text-red-800 hover:bg-red-100 p-1 rounded transition-colors"
+                                    title="Unschedule"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Schedule New Content</h3>
                   <div className="max-h-[400px] overflow-y-auto space-y-2">
                     {content.filter(item => item.status === 'approved').length === 0 ? (
                       <div className="text-center py-8">

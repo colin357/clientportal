@@ -2744,6 +2744,10 @@ const ClientPortal = () => {
     const [approvedContentSearch, setApprovedContentSearch] = useState('');
     const [showOnlyUnscheduled, setShowOnlyUnscheduled] = useState(true);
 
+    // Drag and drop state
+    const [draggedContent, setDraggedContent] = useState(null);
+    const [dragOverDate, setDragOverDate] = useState(null);
+
     // SMS state variables
     const [smsSelectedClients, setSmsSelectedClients] = useState([]);
     const [smsTemplate, setSmsTemplate] = useState('');
@@ -3294,7 +3298,9 @@ const ClientPortal = () => {
                       >
                         <option value="all">All Clients</option>
                         {users.filter(u => !u.parentClientId).map(user => (
-                          <option key={user.id} value={user.id}>{user.companyName}</option>
+                          <option key={user.id} value={user.id}>
+                            {user.companyName} - {user.firstName} {user.lastName || ''}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -3328,14 +3334,50 @@ const ClientPortal = () => {
                     const events = getEventsForDate(date);
                     const todayClass = isToday(date) ? 'bg-blue-50 border-blue-300' : '';
 
+                    const isDragOver = dragOverDate && date && formatDateLocal(dragOverDate) === formatDateLocal(date);
+
                     return (
                       <div
                         key={idx}
-                        className={`min-h-[100px] border rounded p-1 ${date ? 'cursor-pointer hover:bg-gray-50' : 'bg-gray-100'} ${todayClass}`}
+                        className={`min-h-[100px] border rounded p-1 ${date ? 'cursor-pointer hover:bg-gray-50' : 'bg-gray-100'} ${todayClass} ${isDragOver ? 'bg-blue-100 border-blue-400 border-2' : ''}`}
                         onClick={() => {
                           if (date) {
                             setSelectedDate(date);
                             setShowScheduleModal(true);
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          if (date && draggedContent) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'copy';
+                          }
+                        }}
+                        onDragEnter={(e) => {
+                          if (date && draggedContent) {
+                            e.preventDefault();
+                            setDragOverDate(date);
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          if (date && e.currentTarget === e.target) {
+                            setDragOverDate(null);
+                          }
+                        }}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          if (date && draggedContent) {
+                            await saveCalendarEvents([...calendarEvents, {
+                              id: Date.now().toString(),
+                              clientId: draggedContent.clientId,
+                              title: draggedContent.title,
+                              description: draggedContent.description,
+                              date: formatDateLocal(date),
+                              type: draggedContent.type,
+                              contentId: draggedContent.id,
+                              createdAt: new Date().toISOString()
+                            }]);
+                            setDraggedContent(null);
+                            setDragOverDate(null);
                           }
                         }}
                       >
@@ -3368,7 +3410,7 @@ const ClientPortal = () => {
                                         }
                                       }
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:text-white rounded px-1 transition-all flex-shrink-0"
+                                    className="hover:bg-red-500 hover:text-white bg-white/50 rounded px-1 transition-all flex-shrink-0"
                                     title="Unschedule"
                                   >
                                     <X className="w-3 h-3" />
@@ -3392,7 +3434,7 @@ const ClientPortal = () => {
               {/* Approved Content Sidebar */}
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Approved Content</h3>
-                <p className="text-sm text-gray-600 mb-4">Click on content to schedule it on the calendar</p>
+                <p className="text-sm text-gray-600 mb-4">Drag content to a calendar day or click to schedule</p>
 
                 {/* Search and Filter Controls */}
                 <div className="space-y-3 mb-4">
@@ -3462,7 +3504,16 @@ const ClientPortal = () => {
                       return (
                         <div
                           key={item.id}
-                          className="border rounded p-3 cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                          draggable={true}
+                          onDragStart={(e) => {
+                            setDraggedContent(item);
+                            e.dataTransfer.effectAllowed = 'copy';
+                          }}
+                          onDragEnd={() => {
+                            setDraggedContent(null);
+                            setDragOverDate(null);
+                          }}
+                          className="border rounded p-3 cursor-move hover:bg-blue-50 hover:border-blue-300 transition-colors"
                           onClick={() => {
                             setSelectedContent(item);
                             setShowScheduleModal(true);
@@ -4059,7 +4110,6 @@ const ClientPortal = () => {
                         setShowScheduleModal(false);
                         setSelectedContent(null);
                         setSelectedDate(null);
-                        alert('Content scheduled successfully!');
                       }}
                       className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
                     >

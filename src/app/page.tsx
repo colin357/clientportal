@@ -758,6 +758,7 @@ const ClientPortal = () => {
     const [tutorialStep, setTutorialStep] = useState(0);
     const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
     const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
+    const [generationTakingLong, setGenerationTakingLong] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [showEventModal, setShowEventModal] = useState(false);
     const [socialLogins, setSocialLogins] = useState({
@@ -815,17 +816,32 @@ const ClientPortal = () => {
       };
     }, [effectiveClientId]);
 
+    // Track when content generation is taking too long (show skip option after 90 seconds)
+    useEffect(() => {
+      if (!isGeneratingInitialContent) {
+        setGenerationTakingLong(false);
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        setGenerationTakingLong(true);
+      }, 90000); // 90 seconds
+
+      return () => clearTimeout(timeout);
+    }, [isGeneratingInitialContent]);
+
     const generatePersonalizedContent = async () => {
       // Only generate content if this is the first time (account creation)
-      // Check both Firestore data AND localStorage to prevent duplicate generation
       const lastGenerated = currentUser.lastContentGeneration;
-      let localStorageGenerated = false;
-      try {
-        localStorageGenerated = localStorage.getItem(`contentGenerated_${currentUser.id}`) === 'true';
-      } catch {}
 
-      if (lastGenerated || localStorageGenerated) {
-        console.log('⏭️ Skipping content generation - already generated on:', lastGenerated || 'localStorage');
+      if (lastGenerated) {
+        console.log('⏭️ Skipping content generation - already generated on:', lastGenerated);
+        return;
+      }
+
+      // Check if user already has content (handles case where generation succeeded but user field wasn't updated)
+      if (clientContent.length > 0) {
+        console.log('⏭️ Skipping content generation - user already has', clientContent.length, 'content items');
         return;
       }
 
@@ -834,8 +850,6 @@ const ClientPortal = () => {
         return;
       }
 
-      // Mark as generating in localStorage immediately to prevent race conditions
-      try { localStorage.setItem(`contentGenerated_${currentUser.id}`, 'true'); } catch {}
 
       try {
         setIsGeneratingInitialContent(true);
@@ -1030,7 +1044,20 @@ const ClientPortal = () => {
               <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
             </div>
 
-            <p className="text-sm text-gray-500">This usually takes 1-2 minutes. Please don't close this window.</p>
+            {generationTakingLong ? (
+              <div className="space-y-3">
+                <p className="text-sm text-amber-600 font-medium">This is taking longer than expected...</p>
+                <p className="text-sm text-gray-500">You can skip for now and we'll continue in the background, or wait a bit longer.</p>
+                <button
+                  onClick={() => setIsGeneratingInitialContent(false)}
+                  className="mt-2 px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Skip for now
+                </button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">This usually takes 1-2 minutes. Please don't close this window.</p>
+            )}
           </div>
         </div>
       );

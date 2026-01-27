@@ -744,7 +744,17 @@ const ClientPortal = () => {
     const [expanded, setExpanded] = useState(null);
     const [expandedContentType, setExpandedContentType] = useState(null); // For content review sections
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
-    const [showTutorial, setShowTutorial] = useState(!currentUser.tutorialCompleted);
+    // Check both Firestore data AND localStorage to prevent tutorial from showing multiple times
+    // localStorage acts as a backup in case of race conditions with real-time sync
+    const getTutorialCompleted = () => {
+      if (currentUser.tutorialCompleted) return true;
+      try {
+        return localStorage.getItem(`tutorialCompleted_${currentUser.id}`) === 'true';
+      } catch {
+        return false;
+      }
+    };
+    const [showTutorial, setShowTutorial] = useState(!getTutorialCompleted());
     const [tutorialStep, setTutorialStep] = useState(0);
     const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
     const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
@@ -807,10 +817,15 @@ const ClientPortal = () => {
 
     const generatePersonalizedContent = async () => {
       // Only generate content if this is the first time (account creation)
+      // Check both Firestore data AND localStorage to prevent duplicate generation
       const lastGenerated = currentUser.lastContentGeneration;
+      let localStorageGenerated = false;
+      try {
+        localStorageGenerated = localStorage.getItem(`contentGenerated_${currentUser.id}`) === 'true';
+      } catch {}
 
-      if (lastGenerated) {
-        console.log('⏭️ Skipping content generation - already generated on:', lastGenerated);
+      if (lastGenerated || localStorageGenerated) {
+        console.log('⏭️ Skipping content generation - already generated on:', lastGenerated || 'localStorage');
         return;
       }
 
@@ -818,6 +833,9 @@ const ClientPortal = () => {
         console.log('⏭️ Skipping content generation - no onboarding answers');
         return;
       }
+
+      // Mark as generating in localStorage immediately to prevent race conditions
+      try { localStorage.setItem(`contentGenerated_${currentUser.id}`, 'true'); } catch {}
 
       try {
         setIsGeneratingInitialContent(true);
@@ -2597,6 +2615,8 @@ const ClientPortal = () => {
                 <button
                   onClick={async () => {
                     setShowTutorial(false);
+                    // Save to localStorage immediately to prevent race conditions
+                    try { localStorage.setItem(`tutorialCompleted_${currentUser.id}`, 'true'); } catch {}
                     const updatedUser = { ...currentUser, tutorialCompleted: true };
                     setCurrentUser(updatedUser);
                     await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
@@ -2617,6 +2637,8 @@ const ClientPortal = () => {
                     <button
                       onClick={async () => {
                         setShowTutorial(false);
+                        // Save to localStorage immediately to prevent race conditions
+                        try { localStorage.setItem(`tutorialCompleted_${currentUser.id}`, 'true'); } catch {}
                         const updatedUser = { ...currentUser, tutorialCompleted: true };
                         setCurrentUser(updatedUser);
                         await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
@@ -2801,6 +2823,8 @@ const ClientPortal = () => {
                     <button
                       onClick={async () => {
                         setShowTutorial(false);
+                        // Save to localStorage immediately to prevent race conditions
+                        try { localStorage.setItem(`tutorialCompleted_${currentUser.id}`, 'true'); } catch {}
                         const updatedUser = { ...currentUser, tutorialCompleted: true };
                         setCurrentUser(updatedUser);
                         await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));

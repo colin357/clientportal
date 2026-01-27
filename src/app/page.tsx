@@ -2736,6 +2736,7 @@ const ClientPortal = () => {
     const [selectedDate, setSelectedDate] = useState(null);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [contentTypeFilter, setContentTypeFilter] = useState('all'); // 'all', 'social', 'blog', 'email', 'landing-page'
+    const [contentClientFilter, setContentClientFilter] = useState('all'); // 'all' or client id
     const [selectedContent, setSelectedContent] = useState(null);
     const [groupFilter, setGroupFilter] = useState('all'); // 'all' or group id
 
@@ -3211,20 +3212,36 @@ const ClientPortal = () => {
                 <div className="bg-white rounded-lg shadow p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">All Content</h3>
-                    <select
-                      value={contentTypeFilter}
-                      onChange={(e) => setContentTypeFilter(e.target.value)}
-                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    >
-                      <option value="all">All Types</option>
-                      <option value="social">Social Media</option>
-                      <option value="blog">Blog Posts</option>
-                      <option value="email">Email Campaigns</option>
-                      <option value="landing-page">Landing Pages</option>
-                    </select>
+                    <div className="flex gap-3">
+                      <select
+                        value={contentClientFilter}
+                        onChange={(e) => setContentClientFilter(e.target.value)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="all">All Clients</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.id}>{user.companyName || user.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={contentTypeFilter}
+                        onChange={(e) => setContentTypeFilter(e.target.value)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="all">All Types</option>
+                        <option value="social">Social Media</option>
+                        <option value="blog">Blog Posts</option>
+                        <option value="email">Email Campaigns</option>
+                        <option value="landing-page">Landing Pages</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="space-y-3">
-                    {content.filter(item => contentTypeFilter === 'all' || item.type === contentTypeFilter).map(item => {
+                    {content
+                      .filter(item => contentTypeFilter === 'all' || item.type === contentTypeFilter)
+                      .filter(item => contentClientFilter === 'all' || item.clientId === contentClientFilter)
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map(item => {
                       const client = users.find(u => u.id === item.clientId);
                       return (
                         <div key={item.id} className="p-4 bg-gray-50 rounded">

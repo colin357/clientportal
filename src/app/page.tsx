@@ -2583,7 +2583,7 @@ const ClientPortal = () => {
                             console.log(`🗑️ Removing team member: ${member.email}`);
                             await deleteDoc(doc(db, 'users', member.id));
                             console.log('✅ Team member deleted from Firestore');
-                            await saveUsers(users.filter(u => u.id !== member.id));
+                            // onSnapshot will automatically update local state
                           } catch (e) {
                             console.error('❌ Error removing team member:', e);
                             console.error('Error details:', e.message);
@@ -3522,10 +3522,13 @@ const ClientPortal = () => {
                               <button
                                 onClick={async () => {
                                   if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
-                                    const updatedContent = content.filter(c => c.id !== item.id);
-                                    await saveContent(updatedContent);
+                                    // Delete from Firestore - onSnapshot will automatically update local state
                                     if (db) {
                                       await deleteDoc(doc(db, 'content', item.id));
+                                    } else {
+                                      // Fallback for when db is not available
+                                      const updatedContent = content.filter(c => c.id !== item.id);
+                                      setContent(updatedContent);
                                     }
                                   }
                                 }}
@@ -3688,10 +3691,12 @@ const ClientPortal = () => {
                                     onClick={async (e) => {
                                       e.stopPropagation();
                                       if (confirm(`Unschedule "${event.title}"?`)) {
-                                        const updatedEvents = calendarEvents.filter(ev => ev.id !== event.id);
-                                        await saveCalendarEvents(updatedEvents);
+                                        // Delete from Firestore - onSnapshot will automatically update local state
                                         if (db) {
                                           await deleteDoc(doc(db, 'calendarEvents', event.id));
+                                        } else {
+                                          const updatedEvents = calendarEvents.filter(ev => ev.id !== event.id);
+                                          setCalendarEvents(updatedEvents);
                                         }
                                       }
                                     }}
@@ -3963,11 +3968,12 @@ const ClientPortal = () => {
                                       u.groupId === group.id ? { ...u, groupId: null } : u
                                     );
                                     await saveUsers(updatedUsers);
-                                    // Delete group
-                                    const updatedGroups = groups.filter(g => g.id !== group.id);
-                                    await saveGroups(updatedGroups);
+                                    // Delete group from Firestore - onSnapshot will automatically update local state
                                     if (db) {
                                       await deleteDoc(doc(db, 'groups', group.id));
+                                    } else {
+                                      const updatedGroups = groups.filter(g => g.id !== group.id);
+                                      setGroups(updatedGroups);
                                     }
                                   }
                                 }}
@@ -4446,10 +4452,12 @@ const ClientPortal = () => {
                                     onClick={async (e) => {
                                       e.stopPropagation();
                                       if (confirm(`Unschedule "${event.title}"?`)) {
-                                        const updatedEvents = calendarEvents.filter(ev => ev.id !== event.id);
-                                        await saveCalendarEvents(updatedEvents);
+                                        // Delete from Firestore - onSnapshot will automatically update local state
                                         if (db) {
                                           await deleteDoc(doc(db, 'calendarEvents', event.id));
+                                        } else {
+                                          const updatedEvents = calendarEvents.filter(ev => ev.id !== event.id);
+                                          setCalendarEvents(updatedEvents);
                                         }
                                       }
                                     }}

@@ -3164,10 +3164,7 @@ const ClientPortal = () => {
                   {/* Client Info */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-sm text-gray-500 font-medium mb-1">Client</p>
-                    <p className="text-lg text-gray-800 font-semibold">{selectedTodayContent.client?.companyName || 'Unknown Client'}</p>
-                    {selectedTodayContent.client?.name && (
-                      <p className="text-sm text-gray-600">{selectedTodayContent.client.name}</p>
-                    )}
+                    <p className="text-lg text-gray-800 font-semibold">{selectedTodayContent.client?.firstName} {selectedTodayContent.client?.lastName || ''} - {selectedTodayContent.client?.companyName || 'Unknown Client'}</p>
                   </div>
 
                   {/* Scheduled Date */}
@@ -3329,7 +3326,7 @@ const ClientPortal = () => {
                       >
                         <option value="all">All Clients</option>
                         {users.map(user => (
-                          <option key={user.id} value={user.id}>{user.name} - {user.companyName}</option>
+                          <option key={user.id} value={user.id}>{user.firstName} {user.lastName || ''} - {user.companyName}</option>
                         ))}
                       </select>
                       <select
@@ -3357,7 +3354,7 @@ const ClientPortal = () => {
                           <div className="flex justify-between mb-2">
                             <div className="flex-1">
                               <p className="font-medium">{item.title}</p>
-                              <p className="text-sm text-gray-600">{client?.companyName} ({client?.name}) • {item.type}</p>
+                              <p className="text-sm text-gray-600">{client?.firstName} {client?.lastName || ''} - {client?.companyName} • {item.type}</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className={`px-3 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>

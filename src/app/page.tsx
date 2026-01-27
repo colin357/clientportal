@@ -2890,24 +2890,88 @@ const ClientPortal = () => {
     });
     const [publishMode, setPublishMode] = useState('single'); // 'single', 'all-realtors', 'all-loan-officers'
     const [videos, setVideos] = useState([]);
-    const [activeTab, setActiveTab] = useState('clients');
+
+    // Helper functions for persisting filter state to sessionStorage
+    const getStoredFilter = (key: string, defaultValue: string | boolean) => {
+      if (typeof window === 'undefined') return defaultValue;
+      try {
+        const stored = sessionStorage.getItem(`adminFilter_${key}`);
+        if (stored === null) return defaultValue;
+        if (typeof defaultValue === 'boolean') return stored === 'true';
+        return stored;
+      } catch {
+        return defaultValue;
+      }
+    };
+
+    const setStoredFilter = (key: string, value: string | boolean) => {
+      if (typeof window === 'undefined') return;
+      try {
+        sessionStorage.setItem(`adminFilter_${key}`, String(value));
+      } catch {
+        // Ignore storage errors
+      }
+    };
+
+    // Initialize filter states from sessionStorage to persist across re-renders/actions
+    const [activeTab, setActiveTabState] = useState(() => getStoredFilter('activeTab', 'clients') as string);
+    const setActiveTab = (tab: string) => {
+      setActiveTabState(tab);
+      setStoredFilter('activeTab', tab);
+    };
+
     const [selectedUser, setSelectedUser] = useState(null);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [aiGenerationResult, setAiGenerationResult] = useState(null);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(null);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
-    const [contentTypeFilter, setContentTypeFilter] = useState('all'); // 'all', 'social', 'blog', 'email', 'landing-page'
-    const [contentClientFilter, setContentClientFilter] = useState('all'); // 'all' or client id
+
+    const [contentTypeFilter, setContentTypeFilterState] = useState(() => getStoredFilter('contentTypeFilter', 'all') as string);
+    const setContentTypeFilter = (filter: string) => {
+      setContentTypeFilterState(filter);
+      setStoredFilter('contentTypeFilter', filter);
+    };
+
+    const [contentClientFilter, setContentClientFilterState] = useState(() => getStoredFilter('contentClientFilter', 'all') as string);
+    const setContentClientFilter = (filter: string) => {
+      setContentClientFilterState(filter);
+      setStoredFilter('contentClientFilter', filter);
+    };
+
     const [selectedContent, setSelectedContent] = useState(null);
     const [selectedTodayContent, setSelectedTodayContent] = useState(null); // For today's scheduled content modal
-    const [groupFilter, setGroupFilter] = useState('all'); // 'all' or group id
 
-    // Calendar filter state variables
-    const [calendarClientFilter, setCalendarClientFilter] = useState('all'); // 'all' or client id
-    const [calendarTypeFilter, setCalendarTypeFilter] = useState('all'); // 'all', 'social', 'email', 'blog'
-    const [approvedContentSearch, setApprovedContentSearch] = useState('');
-    const [showOnlyUnscheduled, setShowOnlyUnscheduled] = useState(true);
+    const [groupFilter, setGroupFilterState] = useState(() => getStoredFilter('groupFilter', 'all') as string);
+    const setGroupFilter = (filter: string) => {
+      setGroupFilterState(filter);
+      setStoredFilter('groupFilter', filter);
+    };
+
+    // Calendar filter state variables - persisted to sessionStorage
+    const [calendarClientFilter, setCalendarClientFilterState] = useState(() => getStoredFilter('calendarClientFilter', 'all') as string);
+    const setCalendarClientFilter = (filter: string) => {
+      setCalendarClientFilterState(filter);
+      setStoredFilter('calendarClientFilter', filter);
+    };
+
+    const [calendarTypeFilter, setCalendarTypeFilterState] = useState(() => getStoredFilter('calendarTypeFilter', 'all') as string);
+    const setCalendarTypeFilter = (filter: string) => {
+      setCalendarTypeFilterState(filter);
+      setStoredFilter('calendarTypeFilter', filter);
+    };
+
+    const [approvedContentSearch, setApprovedContentSearchState] = useState(() => getStoredFilter('approvedContentSearch', '') as string);
+    const setApprovedContentSearch = (search: string) => {
+      setApprovedContentSearchState(search);
+      setStoredFilter('approvedContentSearch', search);
+    };
+
+    const [showOnlyUnscheduled, setShowOnlyUnscheduledState] = useState(() => getStoredFilter('showOnlyUnscheduled', true) as boolean);
+    const setShowOnlyUnscheduled = (show: boolean) => {
+      setShowOnlyUnscheduledState(show);
+      setStoredFilter('showOnlyUnscheduled', show);
+    };
 
     // Drag and drop state
     const [draggedContent, setDraggedContent] = useState(null);

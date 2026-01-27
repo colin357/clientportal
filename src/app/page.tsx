@@ -4,7 +4,7 @@ import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, Che
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 // Firebase configuration - Replace with your Firebase project credentials
@@ -76,9 +76,97 @@ const ClientPortal = () => {
   const [groups, setGroups] = useState([]);
 
   useEffect(() => {
-    loadData();
+    // Set up real-time listeners for data sync across devices/tabs
+    const unsubscribers: (() => void)[] = [];
+
+    if (db) {
+      console.log('🔄 Setting up real-time data sync...');
+
+      // Real-time listener for users
+      const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        const usersData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Users synced: ${usersData.length} users`);
+        setUsers(usersData);
+      }, (error) => {
+        console.error('❌ Error syncing users:', error);
+      });
+      unsubscribers.push(unsubUsers);
+
+      // Real-time listener for content
+      const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
+        const contentData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Content synced: ${contentData.length} items`);
+        setContent(contentData);
+      }, (error) => {
+        console.error('❌ Error syncing content:', error);
+      });
+      unsubscribers.push(unsubContent);
+
+      // Real-time listener for calendar events
+      const unsubEvents = onSnapshot(collection(db, 'calendarEvents'), (snapshot) => {
+        const eventsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Calendar events synced: ${eventsData.length} events`);
+        setCalendarEvents(eventsData);
+      }, (error) => {
+        console.error('❌ Error syncing calendar events:', error);
+      });
+      unsubscribers.push(unsubEvents);
+
+      // Real-time listener for groups
+      const unsubGroups = onSnapshot(collection(db, 'groups'), (snapshot) => {
+        const groupsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Groups synced: ${groupsData.length} groups`);
+        setGroups(groupsData);
+      }, (error) => {
+        console.error('❌ Error syncing groups:', error);
+      });
+      unsubscribers.push(unsubGroups);
+    } else {
+      // Fallback to one-time load if db not available
+      loadData();
+    }
+
     restoreSession();
+
+    // Cleanup listeners on unmount
+    return () => {
+      console.log('🧹 Cleaning up real-time listeners...');
+      unsubscribers.forEach(unsub => unsub());
+    };
   }, []);
+
+  // Keep currentUser in sync when users data changes from another device/tab
+  useEffect(() => {
+    if (currentUser && users.length > 0) {
+      const updatedUser = users.find(u => u.id === currentUser.id);
+      if (updatedUser && JSON.stringify(updatedUser) !== JSON.stringify(currentUser)) {
+        console.log('🔄 Updating current user session with latest data');
+        setCurrentUser(updatedUser);
+        saveSession(updatedUser, view);
+      }
+    }
+  }, [users, currentUser?.id]);
+
+  // Refresh session data when user returns to the tab (for browsers that don't maintain WebSocket connections)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && currentUser) {
+        console.log('👁️ Tab became visible - checking for session updates');
+        // The onSnapshot listeners will automatically sync data
+        // But we also update the saved session with current user data
+        const updatedUser = users.find(u => u.id === currentUser.id);
+        if (updatedUser) {
+          setCurrentUser(updatedUser);
+          saveSession(updatedUser, view);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentUser, users, view]);
 
   const restoreSession = () => {
     try {
@@ -690,9 +778,32 @@ const ClientPortal = () => {
     const [ideaFeedback, setIdeaFeedback] = useState('');
 
     useEffect(() => {
-      loadUserVideos();
       generatePersonalizedContent();
-    }, []);
+
+      // Set up real-time listener for videos
+      if (!db) {
+        console.warn('⚠️ Firestore not available - skipping videos sync');
+        setUserVideos([]);
+        return;
+      }
+
+      console.log('🔄 Setting up real-time video sync for user...');
+      const unsubVideos = onSnapshot(collection(db, 'videos'), (snapshot) => {
+        const videosData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        // Team members should see videos for their parent client
+        const clientVideos = videosData.filter(v => v.clientId === effectiveClientId);
+        console.log(`🔄 Videos synced: ${clientVideos.length} videos for current user`);
+        setUserVideos(clientVideos);
+      }, (error) => {
+        console.error('❌ Error syncing videos:', error);
+        setUserVideos([]);
+      });
+
+      return () => {
+        console.log('🧹 Cleaning up video listener...');
+        unsubVideos();
+      };
+    }, [effectiveClientId]);
 
     const generatePersonalizedContent = async () => {
       // Only generate content if this is the first time (account creation)
@@ -2790,29 +2901,28 @@ const ClientPortal = () => {
     };
 
     useEffect(() => {
-      loadVideos();
-    }, []);
-
-    const loadVideos = async () => {
+      // Set up real-time listener for videos
       if (!db) {
-        console.warn('⚠️ Firestore not available - skipping videos load');
+        console.warn('⚠️ Firestore not available - skipping videos sync');
         setVideos([]);
         return;
       }
 
-      try {
-        console.log('📥 Loading videos from Firestore...');
-        // Load videos from Firestore
-        const videosSnapshot = await getDocs(collection(db, 'videos'));
-        const videosData = videosSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`✅ Loaded ${videosData.length} videos from Firestore`);
+      console.log('🔄 Setting up real-time video sync for admin...');
+      const unsubVideos = onSnapshot(collection(db, 'videos'), (snapshot) => {
+        const videosData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Admin videos synced: ${videosData.length} videos`);
         setVideos(videosData);
-      } catch (e) {
-        console.error('❌ Error loading videos from cloud:', e);
-        console.error('Error details:', e.message);
+      }, (error) => {
+        console.error('❌ Error syncing videos:', error);
         setVideos([]);
-      }
-    };
+      });
+
+      return () => {
+        console.log('🧹 Cleaning up admin video listener...');
+        unsubVideos();
+      };
+    }, []);
 
     const saveVideos = async (v) => {
       setVideos(v);

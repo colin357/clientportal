@@ -2738,6 +2738,7 @@ const ClientPortal = () => {
     const [contentTypeFilter, setContentTypeFilter] = useState('all'); // 'all', 'social', 'blog', 'email', 'landing-page'
     const [contentClientFilter, setContentClientFilter] = useState('all'); // 'all' or client id
     const [selectedContent, setSelectedContent] = useState(null);
+    const [selectedTodayContent, setSelectedTodayContent] = useState(null); // For today's scheduled content modal
     const [groupFilter, setGroupFilter] = useState('all'); // 'all' or group id
 
     // Calendar filter state variables
@@ -3105,8 +3106,13 @@ const ClientPortal = () => {
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {todaysEvents.map(event => {
                       const client = users.find(u => u.id === event.clientId);
+                      const linkedContent = content.find(c => c.id === event.contentId);
                       return (
-                        <div key={event.id} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                        <div
+                          key={event.id}
+                          className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
+                          onClick={() => setSelectedTodayContent({ event, client, linkedContent })}
+                        >
                           <div className="flex items-start justify-between mb-2">
                             <h4 className="font-semibold text-gray-800 text-sm">{event.title}</h4>
                             <span className={`inline-block px-2 py-1 rounded text-xs ${
@@ -3120,6 +3126,7 @@ const ClientPortal = () => {
                           {event.description && (
                             <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
                           )}
+                          <p className="text-xs text-blue-600 mt-2 font-medium">Click for details →</p>
                         </div>
                       );
                     })}
@@ -3129,6 +3136,108 @@ const ClientPortal = () => {
             }
             return null;
           })()}
+
+          {/* Today's Content Details Modal */}
+          {selectedTodayContent && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTodayContent(null)}>
+              <div className="bg-white rounded-lg shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-2xl font-bold text-gray-800">{selectedTodayContent.event.title}</h3>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        selectedTodayContent.event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                        selectedTodayContent.event.type === 'email' ? 'bg-green-100 text-green-800' :
+                        selectedTodayContent.event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {selectedTodayContent.event.type}
+                      </span>
+                    </div>
+                    <button onClick={() => setSelectedTodayContent(null)} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Client Info */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-500 font-medium mb-1">Client</p>
+                    <p className="text-lg text-gray-800 font-semibold">{selectedTodayContent.client?.companyName || 'Unknown Client'}</p>
+                    {selectedTodayContent.client?.name && (
+                      <p className="text-sm text-gray-600">{selectedTodayContent.client.name}</p>
+                    )}
+                  </div>
+
+                  {/* Scheduled Date */}
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium mb-1">Scheduled Date</p>
+                    <p className="text-lg text-gray-800">
+                      {new Date(selectedTodayContent.event.date + 'T00:00:00').toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                  </div>
+
+                  {/* Description */}
+                  {selectedTodayContent.event.description && (
+                    <div>
+                      <p className="text-sm text-gray-500 font-medium mb-1">Description</p>
+                      <p className="text-gray-700">{selectedTodayContent.event.description}</p>
+                    </div>
+                  )}
+
+                  {/* Full Content (if linked) */}
+                  {selectedTodayContent.linkedContent && (
+                    <div className="border-t pt-6">
+                      <p className="text-sm text-gray-500 font-medium mb-3">Full Content</p>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="prose prose-sm max-w-none">
+                          <div className="whitespace-pre-wrap text-gray-700">{selectedTodayContent.linkedContent.content}</div>
+                        </div>
+                      </div>
+                      {selectedTodayContent.linkedContent.fileLink && (
+                        <div className="mt-4">
+                          <p className="text-sm text-gray-500 font-medium mb-1">Attached File</p>
+                          <a
+                            href={selectedTodayContent.linkedContent.fileLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700 underline"
+                          >
+                            View Attachment
+                          </a>
+                        </div>
+                      )}
+                      <div className="mt-4 flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Status:</span>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          selectedTodayContent.linkedContent.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          selectedTodayContent.linkedContent.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {selectedTodayContent.linkedContent.status}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-6 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={() => setSelectedTodayContent(null)}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4 mb-8">
             <button onClick={() => setActiveTab('clients')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>

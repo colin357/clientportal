@@ -3357,7 +3357,7 @@ const ClientPortal = () => {
                           <div className="flex justify-between mb-2">
                             <div className="flex-1">
                               <p className="font-medium">{item.title}</p>
-                              <p className="text-sm text-gray-600">{client?.companyName} • {item.type}</p>
+                              <p className="text-sm text-gray-600">{client?.companyName} ({client?.name}) • {item.type}</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className={`px-3 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>

@@ -257,10 +257,85 @@ const ClientPortal = () => {
     }
   };
 
-  const saveContent = async (c) => {
-    setContent(c);
+  // Helper function to save a single item with retry logic
+  const saveContentItemWithRetry = async (item, maxRetries = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await setDoc(doc(db, 'content', item.id), item);
+        console.log(`✅ Saved content: ${item.title} (ID: ${item.id})`);
+        return true;
+      } catch (error) {
+        console.error(`❌ Attempt ${attempt}/${maxRetries} failed for ${item.id}:`, error.message);
+        if (attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          console.log(`⏳ Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          throw error;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Save only specific content items to Firestore (not all)
+  // This is more efficient and avoids race conditions with real-time sync
+  const saveContentItems = async (items, options = {}) => {
+    const { showAlert = false, alertMessage = '' } = options;
 
     if (!db) {
+      console.warn('⚠️ Firestore not available - content not saved to cloud');
+      if (showAlert) {
+        alert('⚠️ Cloud storage not configured. Content not saved.');
+      }
+      return false;
+    }
+
+    if (!items || items.length === 0) {
+      console.warn('⚠️ No items to save');
+      return false;
+    }
+
+    try {
+      console.log(`💾 Saving ${items.length} content item(s) to Firestore...`);
+
+      // Save items in parallel for better performance
+      const savePromises = items.map(item => saveContentItemWithRetry(item));
+      const results = await Promise.allSettled(savePromises);
+
+      const failures = results.filter(r => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.error(`❌ Failed to save ${failures.length} item(s)`);
+        if (showAlert) {
+          alert(`⚠️ Failed to save ${failures.length} content item(s). Please try again.`);
+        }
+        return false;
+      }
+
+      console.log(`✅ Successfully saved ${items.length} content item(s)`);
+      if (showAlert && alertMessage) {
+        alert(alertMessage);
+      }
+      return true;
+    } catch (e) {
+      console.error('❌ Error saving content to cloud:', e);
+      console.error('Error details:', e.message);
+      if (showAlert) {
+        alert('❌ Failed to save content. Please try again.');
+      }
+      return false;
+    }
+  };
+
+  // Legacy function - saves all content (use sparingly, prefer saveContentItems)
+  const saveContent = async (c) => {
+    // Don't update state manually - let the onSnapshot listener handle it
+    // This prevents race conditions between manual updates and real-time sync
+
+    if (!db) {
+      // Only update local state if there's no real-time sync
+      setContent(c);
       console.warn('⚠️ Firestore not available - content not saved to cloud');
       return;
     }
@@ -269,8 +344,7 @@ const ClientPortal = () => {
       console.log(`💾 Saving ${c.length} content items to Firestore...`);
       // Save each content item to Firestore
       for (const item of c) {
-        await setDoc(doc(db, 'content', item.id), item);
-        console.log(`✅ Saved content: ${item.title} (ID: ${item.id})`);
+        await saveContentItemWithRetry(item);
       }
       console.log('✅ All content saved successfully');
     } catch (e) {
@@ -360,28 +434,31 @@ const ClientPortal = () => {
   };
 
   const handleContentAction = async (contentId, action, feedback = '') => {
-    const updatedContent = content.map(c =>
-      c.id === contentId ? { ...c, status: action, feedback, reviewedAt: new Date().toISOString() } : c
-    );
+    // Create the updated item
+    const existingItem = content.find(c => c.id === contentId);
+    if (!existingItem) {
+      console.error(`❌ Content item not found: ${contentId}`);
+      return;
+    }
 
-    // Find the updated item for logging
-    const updatedItem = updatedContent.find(c => c.id === contentId);
-    console.log(`📝 Content ${action}:`, updatedItem?.title, 'Status:', updatedItem?.status);
+    const updatedItem = {
+      ...existingItem,
+      status: action,
+      feedback,
+      reviewedAt: new Date().toISOString()
+    };
 
-    await saveContent(updatedContent);
+    console.log(`📝 Content ${action}:`, updatedItem.title, 'Status:', updatedItem.status);
 
-    // Also update individual document in Firestore to ensure it's saved
-    if (db && updatedItem) {
-      try {
-        await setDoc(doc(db, 'content', contentId), updatedItem);
-        console.log('✅ Content status updated in Firestore:', contentId);
-      } catch (error) {
-        console.error('❌ Error updating content in Firestore:', error);
-      }
+    // Save only the updated item (not all content) - let real-time sync update state
+    const saved = await saveContentItems([updatedItem]);
+    if (!saved) {
+      alert('⚠️ Failed to save content status. Please try again.');
+      return;
     }
 
     // Send SMS notification to admin when content is approved or denied
-    if (updatedItem && (action === 'approved' || action === 'rejected')) {
+    if (action === 'approved' || action === 'rejected') {
       const client = users.find(u => u.id === updatedItem.clientId);
       const actionText = action === 'approved' ? 'approved' : 'denied';
       const emoji = action === 'approved' ? '✅' : '❌';
@@ -475,9 +552,18 @@ const ClientPortal = () => {
   };
 
   const handleVideoUpload = async (contentId, file) => {
-    await saveContent(content.map(c =>
-      c.id === contentId ? { ...c, videoUploaded: true, videoName: file.name, uploadedAt: new Date().toISOString() } : c
-    ));
+    const existingItem = content.find(c => c.id === contentId);
+    if (!existingItem) {
+      console.error(`❌ Content item not found: ${contentId}`);
+      return;
+    }
+    const updatedItem = {
+      ...existingItem,
+      videoUploaded: true,
+      videoName: file.name,
+      uploadedAt: new Date().toISOString()
+    };
+    await saveContentItems([updatedItem]);
   };
 
   if (view === 'login') return <LoginView />;
@@ -900,8 +986,12 @@ const ClientPortal = () => {
           reminders: [] // Initialize empty reminders array
         }));
 
-        // Save the new content
-        await saveContent([...content, ...newContent]);
+        // Save only the new content items - let real-time sync update state
+        const saved = await saveContentItems(newContent);
+        if (!saved) {
+          console.error('❌ Failed to save generated content');
+          throw new Error('Failed to save generated content');
+        }
 
         // Mark that content has been generated - this prevents future auto-generation
         const todayString = new Date().toISOString();
@@ -2043,22 +2133,19 @@ const ClientPortal = () => {
                             source: 'ai-generator'
                           };
 
-                          try {
-                            if (db) {
-                              await setDoc(doc(db, 'content', newContent.id), newContent);
-                            }
-                            await saveContent([...content, newContent]);
-                            alert('✅ Content idea approved and added to your library!');
+                          // Save only the new item - let real-time sync update state
+                          const saved = await saveContentItems([newContent], {
+                            showAlert: true,
+                            alertMessage: '✅ Content idea approved and added to your library!'
+                          });
 
+                          if (saved) {
                             // Reset form
                             setGeneratedIdea(null);
                             setIdeaFeedback('');
                             setAiTopic('');
                             setAiPurpose('');
                             setAiAudience('');
-                          } catch (error) {
-                            console.error('Error saving content:', error);
-                            alert('Failed to save content. Please try again.');
                           }
                         }}
                         className="flex-1 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
@@ -3114,8 +3201,11 @@ const ClientPortal = () => {
           allNewContent.push(...userContent);
         }
 
-        // Save all content at once
-        await saveContent([...content, ...allNewContent]);
+        // Save only the new content items - let real-time sync update state
+        const saved = await saveContentItems(allNewContent);
+        if (!saved) {
+          console.error('❌ Failed to save some generated content');
+        }
 
         setAiGenerationResult(result);
         alert(`✅ Successfully generated content for ${result.generated} users!\n\nTotal pieces: ${allNewContent.length}\nFailed: ${result.failed}`);
@@ -3209,21 +3299,24 @@ const ClientPortal = () => {
                     if (response.ok) {
                       alert(`✅ Reminders sent: ${result.remindersSent}\n\nDetails:\n${result.details.map(d => `- ${d.companyName}: ${d.reminderType} reminder for "${d.contentTitle}"`).join('\n')}`);
 
-                      // Update content with reminder tracking
-                      const updatedContent = [...content];
+                      // Update content with reminder tracking - only save modified items
+                      const modifiedItems = [];
                       result.details.forEach(detail => {
-                        const contentIndex = updatedContent.findIndex(c => c.id === detail.contentId);
-                        if (contentIndex !== -1) {
-                          if (!updatedContent[contentIndex].reminders) {
-                            updatedContent[contentIndex].reminders = [];
-                          }
-                          updatedContent[contentIndex].reminders.push({
-                            type: detail.reminderType,
-                            sentAt: detail.sentAt
-                          });
+                        const existingItem = content.find(c => c.id === detail.contentId);
+                        if (existingItem) {
+                          const updatedItem = {
+                            ...existingItem,
+                            reminders: [
+                              ...(existingItem.reminders || []),
+                              { type: detail.reminderType, sentAt: detail.sentAt }
+                            ]
+                          };
+                          modifiedItems.push(updatedItem);
                         }
                       });
-                      await saveContent(updatedContent);
+                      if (modifiedItems.length > 0) {
+                        await saveContentItems(modifiedItems);
+                      }
                     } else {
                       alert(`❌ Error: ${result.error}`);
                     }
@@ -4315,7 +4408,12 @@ const ClientPortal = () => {
                       createdAt: new Date().toISOString()
                     }));
 
-                    await saveContent([...content, ...newContentPieces]);
+                    // Save only the new content items - let real-time sync update state
+                    const saved = await saveContentItems(newContentPieces);
+                    if (!saved) {
+                      alert('⚠️ Failed to save some content. Please try again.');
+                      return;
+                    }
 
                     // Automatic client notifications are disabled - use manual SMS from admin portal
                     console.log(`✅ Published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''} (SMS notifications disabled)`);
@@ -4327,7 +4425,12 @@ const ClientPortal = () => {
                   }
                   // Single client mode
                   else {
-                    await saveContent([...content, { id: Date.now().toString(), ...newContent, status: 'pending', createdAt: new Date().toISOString() }]);
+                    const singleContent = { id: Date.now().toString(), ...newContent, status: 'pending', createdAt: new Date().toISOString() };
+                    const saved = await saveContentItems([singleContent]);
+                    if (!saved) {
+                      alert('⚠️ Failed to save content. Please try again.');
+                      return;
+                    }
 
                     // Automatic client notifications are disabled - use manual SMS from admin portal
                     console.log(`✅ Content published to client (SMS notifications disabled)`);

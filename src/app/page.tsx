@@ -3329,7 +3329,7 @@ const ClientPortal = () => {
                       >
                         <option value="all">All Clients</option>
                         {users.map(user => (
-                          <option key={user.id} value={user.id}>{user.companyName || user.name}</option>
+                          <option key={user.id} value={user.id}>{user.name} - {user.companyName}</option>
                         ))}
                       </select>
                       <select

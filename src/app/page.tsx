@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2 } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -74,6 +74,10 @@ const ClientPortal = () => {
   const [content, setContent] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [dailyTasks, setDailyTasks] = useState([]);
+  const [dailyTaskCompletions, setDailyTaskCompletions] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminActivities, setAdminActivities] = useState([]);
 
   useEffect(() => {
     // Set up real-time listeners for data sync across devices/tabs
@@ -121,6 +125,46 @@ const ClientPortal = () => {
         console.error('❌ Error syncing groups:', error);
       });
       unsubscribers.push(unsubGroups);
+
+      // Real-time listener for daily tasks
+      const unsubDailyTasks = onSnapshot(collection(db, 'dailyTasks'), (snapshot) => {
+        const tasksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Daily tasks synced: ${tasksData.length} tasks`);
+        setDailyTasks(tasksData);
+      }, (error) => {
+        console.error('❌ Error syncing daily tasks:', error);
+      });
+      unsubscribers.push(unsubDailyTasks);
+
+      // Real-time listener for daily task completions
+      const unsubTaskCompletions = onSnapshot(collection(db, 'dailyTaskCompletions'), (snapshot) => {
+        const completionsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Task completions synced: ${completionsData.length} completions`);
+        setDailyTaskCompletions(completionsData);
+      }, (error) => {
+        console.error('❌ Error syncing task completions:', error);
+      });
+      unsubscribers.push(unsubTaskCompletions);
+
+      // Real-time listener for admin users
+      const unsubAdminUsers = onSnapshot(collection(db, 'adminUsers'), (snapshot) => {
+        const adminData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Admin users synced: ${adminData.length} admins`);
+        setAdminUsers(adminData);
+      }, (error) => {
+        console.error('❌ Error syncing admin users:', error);
+      });
+      unsubscribers.push(unsubAdminUsers);
+
+      // Real-time listener for admin activities
+      const unsubActivities = onSnapshot(collection(db, 'adminActivities'), (snapshot) => {
+        const activitiesData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Admin activities synced: ${activitiesData.length} activities`);
+        setAdminActivities(activitiesData);
+      }, (error) => {
+        console.error('❌ Error syncing admin activities:', error);
+      });
+      unsubscribers.push(unsubActivities);
     } else {
       // Fallback to one-time load if db not available
       loadData();
@@ -656,43 +700,209 @@ const ClientPortal = () => {
   }
 
   function AdminLoginView() {
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [isSetupMode, setIsSetupMode] = useState(false);
+    const [setupName, setSetupName] = useState('');
+    const [setupEmail, setSetupEmail] = useState('');
+    const [setupPassword, setSetupPassword] = useState('');
+    const [setupCode, setSetupCode] = useState('');
 
     const handleSubmit = () => {
-      if (password === 'admin123') {
-        const adminUser = { id: 'admin', email: 'admin', role: 'admin' };
-        setCurrentUser(adminUser);
+      // Find admin user by email
+      const adminUser = adminUsers.find(
+        (admin) => admin.email.toLowerCase() === email.toLowerCase() && admin.password === password
+      );
+
+      if (adminUser) {
+        const userSession = {
+          id: adminUser.id,
+          email: adminUser.email,
+          name: adminUser.name,
+          role: 'admin'
+        };
+        setCurrentUser(userSession);
         setView('admin');
-        saveSession(adminUser, 'admin');
+        saveSession(userSession, 'admin');
+        setError('');
       } else {
-        setError('Invalid admin password');
+        setError('Invalid email or password');
       }
     };
+
+    const handleSetup = async () => {
+      // Setup code for creating first admin (use a simple setup code for security)
+      if (setupCode !== 'SETUP2024') {
+        setError('Invalid setup code');
+        return;
+      }
+
+      if (!setupName.trim() || !setupEmail.trim() || !setupPassword.trim()) {
+        setError('Please fill in all fields');
+        return;
+      }
+
+      if (!db) {
+        setError('Database not available');
+        return;
+      }
+
+      try {
+        const adminId = Date.now().toString();
+        await setDoc(doc(db, 'adminUsers', adminId), {
+          id: adminId,
+          name: setupName.trim(),
+          email: setupEmail.trim().toLowerCase(),
+          password: setupPassword, // In production, this should be hashed
+          createdAt: new Date().toISOString(),
+          isOwner: adminUsers.length === 0 // First admin is the owner
+        });
+
+        // Auto-login after setup
+        const userSession = {
+          id: adminId,
+          email: setupEmail.trim().toLowerCase(),
+          name: setupName.trim(),
+          role: 'admin'
+        };
+        setCurrentUser(userSession);
+        setView('admin');
+        saveSession(userSession, 'admin');
+      } catch (e) {
+        console.error('Error creating admin user:', e);
+        setError('Failed to create admin user');
+      }
+    };
+
+    // Show setup mode if no admin users exist, or if user clicks setup link
+    const showSetup = adminUsers.length === 0 || isSetupMode;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Login</h1>
-          <p className="text-gray-600 mb-6">Access your client management dashboard</p>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Admin Password</label>
-              <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10" />
-                <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          {showSetup ? (
+            <>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                {adminUsers.length === 0 ? 'Admin Setup' : 'Add Admin Account'}
+              </h1>
+              <p className="text-gray-600 mb-6">
+                {adminUsers.length === 0
+                  ? 'Create your first admin account to get started'
+                  : 'Enter the setup code to create a new admin account'}
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Setup Code</label>
+                  <input
+                    type="text"
+                    value={setupCode}
+                    onChange={(e) => setSetupCode(e.target.value)}
+                    placeholder="Enter setup code"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+                  <input
+                    type="text"
+                    value={setupName}
+                    onChange={(e) => setSetupName(e.target.value)}
+                    placeholder="John Smith"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={setupEmail}
+                    onChange={(e) => setSetupEmail(e.target.value)}
+                    placeholder="john@company.com"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={setupPassword}
+                      onChange={(e) => setSetupPassword(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10"
+                    />
+                    <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <button
+                  onClick={handleSetup}
+                  className="w-full bg-gray-800 text-white py-2 rounded-lg hover:bg-gray-900 transition"
+                >
+                  Create Admin Account
                 </button>
               </div>
-            </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleSubmit} className="w-full bg-gray-800 text-white py-2 rounded-lg hover:bg-gray-900 transition">Access Admin Panel</button>
-          </div>
-          
-          <button onClick={() => setView('login')} className="w-full mt-4 text-gray-600 hover:underline">← Back to Client Login</button>
+              {adminUsers.length > 0 && (
+                <button
+                  onClick={() => { setIsSetupMode(false); setError(''); }}
+                  className="w-full mt-4 text-gray-600 hover:underline"
+                >
+                  ← Back to Login
+                </button>
+              )}
+              <button onClick={() => setView('login')} className="w-full mt-2 text-gray-600 hover:underline">← Back to Client Login</button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Login</h1>
+              <p className="text-gray-600 mb-6">Access your client management dashboard</p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="admin@company.com"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10"
+                    />
+                    <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <button onClick={handleSubmit} className="w-full bg-gray-800 text-white py-2 rounded-lg hover:bg-gray-900 transition">Sign In</button>
+              </div>
+
+              <button
+                onClick={() => { setIsSetupMode(true); setError(''); }}
+                className="w-full mt-4 text-sm text-blue-600 hover:underline"
+              >
+                Need to create an account? Enter setup code
+              </button>
+              <button onClick={() => setView('login')} className="w-full mt-2 text-gray-600 hover:underline">← Back to Client Login</button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -3102,6 +3312,154 @@ const ClientPortal = () => {
       }
     };
 
+    // Daily Tasks state
+    const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+    const [newTask, setNewTask] = useState({ clientId: 'all', name: '', description: '' });
+
+    // Log admin activity
+    const logAdminActivity = async (action: string, details: string, metadata?: Record<string, any>) => {
+      if (!db || !currentUser) return;
+
+      try {
+        const activityId = Date.now().toString();
+        await setDoc(doc(db, 'adminActivities', activityId), {
+          id: activityId,
+          adminId: currentUser.id,
+          adminName: currentUser.name || currentUser.email,
+          action,
+          details,
+          metadata: metadata || {},
+          timestamp: new Date().toISOString()
+        });
+        console.log(`📝 Logged activity: ${action}`);
+      } catch (e) {
+        console.error('❌ Error logging activity:', e);
+      }
+    };
+
+    // Toggle scheduled content completion
+    const toggleContentCompletion = async (eventId: string, currentStatus: boolean, eventTitle?: string, clientName?: string) => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available');
+        return;
+      }
+
+      try {
+        const eventRef = doc(db, 'calendarEvents', eventId);
+        await updateDoc(eventRef, {
+          completed: !currentStatus,
+          completedBy: !currentStatus ? currentUser?.id : null,
+          completedByName: !currentStatus ? (currentUser?.name || currentUser?.email) : null,
+          completedAt: !currentStatus ? new Date().toISOString() : null
+        });
+        console.log(`✅ Toggled content completion for event ${eventId}`);
+
+        // Log activity
+        if (!currentStatus) {
+          await logAdminActivity(
+            'content_completed',
+            `Marked "${eventTitle || 'content'}" as completed${clientName ? ` for ${clientName}` : ''}`,
+            { eventId, eventTitle, clientName }
+          );
+        }
+      } catch (e) {
+        console.error('❌ Error toggling content completion:', e);
+      }
+    };
+
+    // Get today's date string for task completions
+    const getTodayDateString = () => formatDateLocal(new Date());
+
+    // Check if a daily task is completed for today
+    const isTaskCompletedToday = (taskId: string, clientId: string) => {
+      const today = getTodayDateString();
+      return dailyTaskCompletions.some(
+        completion => completion.taskId === taskId &&
+                     completion.clientId === clientId &&
+                     completion.date === today
+      );
+    };
+
+    // Toggle daily task completion for today
+    const toggleDailyTaskCompletion = async (taskId: string, clientId: string, taskName?: string, clientName?: string) => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available');
+        return;
+      }
+
+      const today = getTodayDateString();
+      const completionId = `${taskId}_${clientId}_${today}`;
+      const isCompleted = isTaskCompletedToday(taskId, clientId);
+
+      try {
+        if (isCompleted) {
+          // Remove completion
+          await deleteDoc(doc(db, 'dailyTaskCompletions', completionId));
+          console.log(`✅ Removed task completion for ${completionId}`);
+        } else {
+          // Add completion
+          await setDoc(doc(db, 'dailyTaskCompletions', completionId), {
+            taskId,
+            clientId,
+            date: today,
+            completedAt: new Date().toISOString(),
+            completedBy: currentUser?.id,
+            completedByName: currentUser?.name || currentUser?.email
+          });
+          console.log(`✅ Added task completion for ${completionId}`);
+
+          // Log activity
+          await logAdminActivity(
+            'daily_task_completed',
+            `Completed "${taskName || 'task'}"${clientName ? ` for ${clientName}` : ''}`,
+            { taskId, clientId, taskName, clientName }
+          );
+        }
+      } catch (e) {
+        console.error('❌ Error toggling task completion:', e);
+      }
+    };
+
+    // Add a new daily task
+    const addDailyTask = async () => {
+      if (!db || !newTask.name.trim()) {
+        return;
+      }
+
+      try {
+        const taskId = Date.now().toString();
+        await setDoc(doc(db, 'dailyTasks', taskId), {
+          id: taskId,
+          clientId: newTask.clientId,
+          name: newTask.name.trim(),
+          description: newTask.description.trim(),
+          createdAt: new Date().toISOString()
+        });
+        console.log(`✅ Added daily task: ${newTask.name}`);
+        setNewTask({ clientId: 'all', name: '', description: '' });
+        setShowAddTaskModal(false);
+      } catch (e) {
+        console.error('❌ Error adding daily task:', e);
+      }
+    };
+
+    // Delete a daily task
+    const deleteDailyTask = async (taskId: string) => {
+      if (!db) return;
+
+      try {
+        await deleteDoc(doc(db, 'dailyTasks', taskId));
+        // Also delete all completions for this task
+        const completionsToDelete = dailyTaskCompletions.filter(c => c.taskId === taskId);
+        for (const completion of completionsToDelete) {
+          await deleteDoc(doc(db, 'dailyTaskCompletions', completion.id));
+        }
+        console.log(`✅ Deleted daily task: ${taskId}`);
+      } catch (e) {
+        console.error('❌ Error deleting daily task:', e);
+      }
+    };
+
     useEffect(() => {
       // Set up real-time listener for videos
       if (!db) {
@@ -3412,6 +3770,7 @@ const ClientPortal = () => {
           {(() => {
             const today = formatDateLocal(new Date());
             const todaysEvents = calendarEvents.filter(event => event.date === today);
+            const completedCount = todaysEvents.filter(e => e.completed).length;
 
             if (todaysEvents.length > 0) {
               return (
@@ -3419,32 +3778,61 @@ const ClientPortal = () => {
                   <div className="flex items-center gap-2 mb-4">
                     <Calendar className="w-6 h-6 text-blue-600" />
                     <h3 className="text-xl font-semibold text-gray-800">Today's Scheduled Content</h3>
-                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{todaysEvents.length}</span>
+                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{completedCount}/{todaysEvents.length}</span>
+                    {completedCount === todaysEvents.length && todaysEvents.length > 0 && (
+                      <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">All Done!</span>
+                    )}
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {todaysEvents.map(event => {
                       const client = users.find(u => u.id === event.clientId);
                       const linkedContent = content.find(c => c.id === event.contentId);
+                      const isCompleted = event.completed || false;
                       return (
                         <div
                           key={event.id}
-                          className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
-                          onClick={() => setSelectedTodayContent({ event, client, linkedContent })}
+                          className={`bg-white rounded-lg p-4 shadow-sm border transition-all ${
+                            isCompleted
+                              ? 'border-green-300 bg-green-50/50'
+                              : 'border-gray-200 hover:shadow-md hover:border-blue-300'
+                          }`}
                         >
-                          <div className="flex items-start justify-between mb-2">
-                            <h4 className="font-semibold text-gray-800 text-sm">{event.title}</h4>
-                            <span className={`inline-block px-2 py-1 rounded text-xs ${
-                              event.type === 'social' ? 'bg-blue-100 text-blue-800' :
-                              event.type === 'email' ? 'bg-green-100 text-green-800' :
-                              event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>{event.type}</span>
+                          <div className="flex items-start gap-3">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleContentCompletion(event.id, isCompleted, event.title, client?.companyName);
+                              }}
+                              className={`mt-0.5 flex-shrink-0 transition-colors ${
+                                isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-blue-600'
+                              }`}
+                            >
+                              {isCompleted ? (
+                                <CheckSquare className="w-5 h-5" />
+                              ) : (
+                                <Square className="w-5 h-5" />
+                              )}
+                            </button>
+                            <div
+                              className="flex-1 cursor-pointer"
+                              onClick={() => setSelectedTodayContent({ event, client, linkedContent })}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <h4 className={`font-semibold text-sm ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{event.title}</h4>
+                                <span className={`inline-block px-2 py-1 rounded text-xs ${
+                                  event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                                  event.type === 'email' ? 'bg-green-100 text-green-800' :
+                                  event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>{event.type}</span>
+                              </div>
+                              <p className={`text-xs mb-2 ${isCompleted ? 'text-gray-400' : 'text-gray-600'}`}>{client?.companyName || 'Unknown Client'}</p>
+                              {event.description && (
+                                <p className={`text-xs line-clamp-2 ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>{event.description}</p>
+                              )}
+                              <p className="text-xs text-blue-600 mt-2 font-medium">Click for details →</p>
+                            </div>
                           </div>
-                          <p className="text-xs text-gray-600 mb-2">{client?.companyName || 'Unknown Client'}</p>
-                          {event.description && (
-                            <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
-                          )}
-                          <p className="text-xs text-blue-600 mt-2 font-medium">Click for details →</p>
                         </div>
                       );
                     })}
@@ -3542,7 +3930,38 @@ const ClientPortal = () => {
                   )}
                 </div>
 
-                <div className="p-6 border-t border-gray-200 flex justify-end">
+                <div className="p-6 border-t border-gray-200 flex justify-between items-center">
+                  <button
+                    onClick={() => {
+                      toggleContentCompletion(
+                        selectedTodayContent.event.id,
+                        selectedTodayContent.event.completed || false,
+                        selectedTodayContent.event.title,
+                        selectedTodayContent.client?.companyName
+                      );
+                      setSelectedTodayContent({
+                        ...selectedTodayContent,
+                        event: { ...selectedTodayContent.event, completed: !selectedTodayContent.event.completed }
+                      });
+                    }}
+                    className={`px-6 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                      selectedTodayContent.event.completed
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {selectedTodayContent.event.completed ? (
+                      <>
+                        <CheckSquare className="w-5 h-5" />
+                        Completed
+                      </>
+                    ) : (
+                      <>
+                        <Square className="w-5 h-5" />
+                        Mark as Done
+                      </>
+                    )}
+                  </button>
                   <button
                     onClick={() => setSelectedTodayContent(null)}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -3554,7 +3973,235 @@ const ClientPortal = () => {
             </div>
           )}
 
-          <div className="flex gap-4 mb-8">
+          {/* Daily Tasks Section */}
+          {(() => {
+            const today = getTodayDateString();
+            // Get all clients (excluding team members)
+            const clients = users.filter(u => !u.parentClientId);
+            // Get tasks that apply to all clients or specific clients
+            const allClientTasks = dailyTasks.filter(t => t.clientId === 'all');
+
+            // Build task list: for each client, show their specific tasks + all-client tasks
+            const tasksByClient = clients.map(client => {
+              const clientSpecificTasks = dailyTasks.filter(t => t.clientId === client.id);
+              const tasksForClient = [...clientSpecificTasks, ...allClientTasks];
+              const completedCount = tasksForClient.filter(task =>
+                isTaskCompletedToday(task.id, client.id)
+              ).length;
+              return {
+                client,
+                tasks: tasksForClient,
+                completedCount,
+                totalCount: tasksForClient.length
+              };
+            }).filter(c => c.tasks.length > 0);
+
+            const totalTasks = tasksByClient.reduce((sum, c) => sum + c.totalCount, 0);
+            const totalCompleted = tasksByClient.reduce((sum, c) => sum + c.completedCount, 0);
+
+            return (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-6 mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <ListTodo className="w-6 h-6 text-amber-600" />
+                    <h3 className="text-xl font-semibold text-gray-800">Daily Tasks</h3>
+                    {totalTasks > 0 && (
+                      <>
+                        <span className="bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                          {totalCompleted}/{totalTasks}
+                        </span>
+                        {totalCompleted === totalTasks && totalTasks > 0 && (
+                          <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">All Done!</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowAddTaskModal(true)}
+                    className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 flex items-center gap-2 text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Task
+                  </button>
+                </div>
+
+                {tasksByClient.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <ListTodo className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No daily tasks yet. Add repeating tasks to track for each client.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {tasksByClient.map(({ client, tasks, completedCount, totalCount }) => (
+                      <div key={client.id} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-gray-800">{client.companyName || `${client.firstName} ${client.lastName || ''}`}</h4>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              completedCount === totalCount ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {completedCount}/{totalCount}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {tasks.map(task => {
+                            const isCompleted = isTaskCompletedToday(task.id, client.id);
+                            return (
+                              <div
+                                key={`${task.id}-${client.id}`}
+                                className={`flex items-start gap-3 p-2 rounded-lg transition-colors ${
+                                  isCompleted ? 'bg-green-50' : 'hover:bg-gray-50'
+                                }`}
+                              >
+                                <button
+                                  onClick={() => toggleDailyTaskCompletion(task.id, client.id, task.name, client.companyName || `${client.firstName} ${client.lastName || ''}`)}
+                                  className={`mt-0.5 flex-shrink-0 transition-colors ${
+                                    isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-amber-600'
+                                  }`}
+                                >
+                                  {isCompleted ? (
+                                    <CheckSquare className="w-5 h-5" />
+                                  ) : (
+                                    <Square className="w-5 h-5" />
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                                    {task.name}
+                                    {task.clientId === 'all' && (
+                                      <span className="ml-2 text-xs text-amber-600 font-normal">(all clients)</span>
+                                    )}
+                                  </p>
+                                  {task.description && (
+                                    <p className={`text-xs mt-0.5 ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
+                                      {task.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Manage Tasks Link */}
+                {dailyTasks.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-amber-200">
+                    <details className="group">
+                      <summary className="text-sm text-amber-700 cursor-pointer hover:text-amber-800 font-medium">
+                        Manage task templates ({dailyTasks.length})
+                      </summary>
+                      <div className="mt-3 space-y-2">
+                        {dailyTasks.map(task => {
+                          const taskClient = task.clientId === 'all' ? null : users.find(u => u.id === task.clientId);
+                          return (
+                            <div key={task.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{task.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {task.clientId === 'all' ? 'Applies to all clients' : `For: ${taskClient?.companyName || 'Unknown'}`}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => deleteDailyTask(task.id)}
+                                className="text-red-500 hover:text-red-700 p-1"
+                                title="Delete task"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Add Daily Task Modal */}
+          {showAddTaskModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddTaskModal(false)}>
+              <div className="bg-white rounded-lg shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-gray-800">Add Daily Task</h3>
+                    <button onClick={() => setShowAddTaskModal(false)} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Task Name *</label>
+                    <input
+                      type="text"
+                      value={newTask.name}
+                      onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                      placeholder="e.g., Post to Instagram"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                    <textarea
+                      value={newTask.description}
+                      onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                      placeholder="Add any notes or details..."
+                      rows={2}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Apply to</label>
+                    <select
+                      value={newTask.clientId}
+                      onChange={(e) => setNewTask({ ...newTask, clientId: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    >
+                      <option value="all">All Clients</option>
+                      {users.filter(u => !u.parentClientId).map(user => (
+                        <option key={user.id} value={user.id}>
+                          {user.companyName || `${user.firstName} ${user.lastName || ''}`}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {newTask.clientId === 'all'
+                        ? 'This task will appear for every client'
+                        : 'This task will only appear for the selected client'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowAddTaskModal(false)}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={addDailyTask}
+                    disabled={!newTask.name.trim()}
+                    className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Add Task
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-4 mb-8">
             <button onClick={() => setActiveTab('clients')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               Clients & Content
             </button>
@@ -3569,6 +4216,12 @@ const ClientPortal = () => {
             </button>
             <button onClick={() => setActiveTab('sms')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'sms' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               📱 Send SMS
+            </button>
+            <button onClick={() => setActiveTab('activity')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'activity' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
+              Activity Log
+            </button>
+            <button onClick={() => setActiveTab('team')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'team' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
+              Team
             </button>
           </div>
 
@@ -4354,6 +5007,213 @@ const ClientPortal = () => {
                       <p className="text-xs text-gray-600 italic">{template.message.substring(0, 100)}...</p>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Activity Log Tab */}
+          {activeTab === 'activity' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold">Activity Log</h3>
+                    <p className="text-sm text-gray-600">Track what your team has accomplished</p>
+                  </div>
+                </div>
+
+                {adminActivities.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No activity recorded yet</p>
+                    <p className="text-sm mt-1">Activities will appear here as team members complete tasks</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {[...adminActivities]
+                      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                      .slice(0, 100)
+                      .map(activity => {
+                        const activityDate = new Date(activity.timestamp);
+                        const isToday = formatDateLocal(activityDate) === formatDateLocal(new Date());
+                        const isYesterday = formatDateLocal(activityDate) === formatDateLocal(new Date(Date.now() - 86400000));
+
+                        return (
+                          <div key={activity.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              activity.action === 'content_completed' ? 'bg-green-100 text-green-600' :
+                              activity.action === 'daily_task_completed' ? 'bg-amber-100 text-amber-600' :
+                              activity.action === 'content_approved' ? 'bg-blue-100 text-blue-600' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {activity.action === 'content_completed' ? <Check className="w-5 h-5" /> :
+                               activity.action === 'daily_task_completed' ? <CheckSquare className="w-5 h-5" /> :
+                               activity.action === 'content_approved' ? <Sparkles className="w-5 h-5" /> :
+                               <Clock className="w-5 h-5" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium text-gray-900">{activity.adminName}</span>
+                                <span className="text-xs text-gray-500">
+                                  {isToday ? 'Today' : isYesterday ? 'Yesterday' : activityDate.toLocaleDateString()}
+                                  {' at '}
+                                  {activityDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700">{activity.details}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+
+              {/* Activity Summary by Team Member */}
+              {adminActivities.length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-lg font-semibold mb-4">Team Summary (Last 7 Days)</h3>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {(() => {
+                      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+                      const recentActivities = adminActivities.filter(a => new Date(a.timestamp) >= sevenDaysAgo);
+
+                      // Group by admin
+                      const byAdmin = recentActivities.reduce((acc, activity) => {
+                        const adminId = activity.adminId;
+                        if (!acc[adminId]) {
+                          acc[adminId] = {
+                            name: activity.adminName,
+                            contentCompleted: 0,
+                            tasksCompleted: 0,
+                            total: 0
+                          };
+                        }
+                        acc[adminId].total++;
+                        if (activity.action === 'content_completed') acc[adminId].contentCompleted++;
+                        if (activity.action === 'daily_task_completed') acc[adminId].tasksCompleted++;
+                        return acc;
+                      }, {});
+
+                      const adminStats = Object.values(byAdmin);
+                      if (adminStats.length === 0) {
+                        return <p className="text-gray-500 col-span-full">No activity in the last 7 days</p>;
+                      }
+
+                      return adminStats.map((admin: any) => (
+                        <div key={admin.name} className="bg-gray-50 rounded-lg p-4">
+                          <h4 className="font-semibold text-gray-800 mb-3">{admin.name}</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Content completed</span>
+                              <span className="font-medium text-green-600">{admin.contentCompleted}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Tasks completed</span>
+                              <span className="font-medium text-amber-600">{admin.tasksCompleted}</span>
+                            </div>
+                            <div className="flex justify-between pt-2 border-t">
+                              <span className="text-gray-700 font-medium">Total actions</span>
+                              <span className="font-bold text-gray-900">{admin.total}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Team Management Tab */}
+          {activeTab === 'team' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold">Team Management</h3>
+                    <p className="text-sm text-gray-600">Manage admin users who can access the portal</p>
+                  </div>
+                </div>
+
+                {/* Current User Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                      {currentUser?.name?.charAt(0) || currentUser?.email?.charAt(0) || 'A'}
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">Logged in as: {currentUser?.name || currentUser?.email}</p>
+                      <p className="text-sm text-gray-600">{currentUser?.email}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Admin Users List */}
+                <h4 className="font-medium text-gray-800 mb-3">Team Members ({adminUsers.length})</h4>
+                <div className="space-y-3">
+                  {adminUsers.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No team members found</p>
+                    </div>
+                  ) : (
+                    adminUsers.map(admin => (
+                      <div key={admin.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold">
+                            {admin.name?.charAt(0) || admin.email?.charAt(0) || 'A'}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{admin.name}</p>
+                            <p className="text-sm text-gray-600">{admin.email}</p>
+                          </div>
+                          {admin.isOwner && (
+                            <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">Owner</span>
+                          )}
+                          {admin.id === currentUser?.id && (
+                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">You</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            Joined {new Date(admin.createdAt).toLocaleDateString()}
+                          </span>
+                          {admin.id !== currentUser?.id && !admin.isOwner && (
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Remove ${admin.name} from the team?`)) {
+                                  if (db) {
+                                    await deleteDoc(doc(db, 'adminUsers', admin.id));
+                                  }
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Remove team member"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Add Team Member Instructions */}
+                <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <h4 className="font-medium text-amber-900 mb-2">Adding New Team Members</h4>
+                  <p className="text-sm text-amber-800 mb-2">
+                    To add a new team member, have them visit the admin login page and click "Need to create an account? Enter setup code".
+                  </p>
+                  <p className="text-sm text-amber-800">
+                    <strong>Setup Code:</strong> <code className="bg-amber-100 px-2 py-1 rounded">SETUP2024</code>
+                  </p>
+                  <p className="text-xs text-amber-700 mt-2">
+                    Share this code only with trusted team members who should have admin access.
+                  </p>
                 </div>
               </div>
             </div>

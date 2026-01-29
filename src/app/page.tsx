@@ -76,6 +76,8 @@ const ClientPortal = () => {
   const [groups, setGroups] = useState([]);
   const [dailyTasks, setDailyTasks] = useState([]);
   const [dailyTaskCompletions, setDailyTaskCompletions] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminActivities, setAdminActivities] = useState([]);
 
   useEffect(() => {
     // Set up real-time listeners for data sync across devices/tabs
@@ -143,6 +145,26 @@ const ClientPortal = () => {
         console.error('❌ Error syncing task completions:', error);
       });
       unsubscribers.push(unsubTaskCompletions);
+
+      // Real-time listener for admin users
+      const unsubAdminUsers = onSnapshot(collection(db, 'adminUsers'), (snapshot) => {
+        const adminData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Admin users synced: ${adminData.length} admins`);
+        setAdminUsers(adminData);
+      }, (error) => {
+        console.error('❌ Error syncing admin users:', error);
+      });
+      unsubscribers.push(unsubAdminUsers);
+
+      // Real-time listener for admin activities
+      const unsubActivities = onSnapshot(collection(db, 'adminActivities'), (snapshot) => {
+        const activitiesData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Admin activities synced: ${activitiesData.length} activities`);
+        setAdminActivities(activitiesData);
+      }, (error) => {
+        console.error('❌ Error syncing admin activities:', error);
+      });
+      unsubscribers.push(unsubActivities);
     } else {
       // Fallback to one-time load if db not available
       loadData();
@@ -678,43 +700,209 @@ const ClientPortal = () => {
   }
 
   function AdminLoginView() {
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [isSetupMode, setIsSetupMode] = useState(false);
+    const [setupName, setSetupName] = useState('');
+    const [setupEmail, setSetupEmail] = useState('');
+    const [setupPassword, setSetupPassword] = useState('');
+    const [setupCode, setSetupCode] = useState('');
 
     const handleSubmit = () => {
-      if (password === 'admin123') {
-        const adminUser = { id: 'admin', email: 'admin', role: 'admin' };
-        setCurrentUser(adminUser);
+      // Find admin user by email
+      const adminUser = adminUsers.find(
+        (admin) => admin.email.toLowerCase() === email.toLowerCase() && admin.password === password
+      );
+
+      if (adminUser) {
+        const userSession = {
+          id: adminUser.id,
+          email: adminUser.email,
+          name: adminUser.name,
+          role: 'admin'
+        };
+        setCurrentUser(userSession);
         setView('admin');
-        saveSession(adminUser, 'admin');
+        saveSession(userSession, 'admin');
+        setError('');
       } else {
-        setError('Invalid admin password');
+        setError('Invalid email or password');
       }
     };
+
+    const handleSetup = async () => {
+      // Setup code for creating first admin (use a simple setup code for security)
+      if (setupCode !== 'SETUP2024') {
+        setError('Invalid setup code');
+        return;
+      }
+
+      if (!setupName.trim() || !setupEmail.trim() || !setupPassword.trim()) {
+        setError('Please fill in all fields');
+        return;
+      }
+
+      if (!db) {
+        setError('Database not available');
+        return;
+      }
+
+      try {
+        const adminId = Date.now().toString();
+        await setDoc(doc(db, 'adminUsers', adminId), {
+          id: adminId,
+          name: setupName.trim(),
+          email: setupEmail.trim().toLowerCase(),
+          password: setupPassword, // In production, this should be hashed
+          createdAt: new Date().toISOString(),
+          isOwner: adminUsers.length === 0 // First admin is the owner
+        });
+
+        // Auto-login after setup
+        const userSession = {
+          id: adminId,
+          email: setupEmail.trim().toLowerCase(),
+          name: setupName.trim(),
+          role: 'admin'
+        };
+        setCurrentUser(userSession);
+        setView('admin');
+        saveSession(userSession, 'admin');
+      } catch (e) {
+        console.error('Error creating admin user:', e);
+        setError('Failed to create admin user');
+      }
+    };
+
+    // Show setup mode if no admin users exist, or if user clicks setup link
+    const showSetup = adminUsers.length === 0 || isSetupMode;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Login</h1>
-          <p className="text-gray-600 mb-6">Access your client management dashboard</p>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Admin Password</label>
-              <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10" />
-                <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          {showSetup ? (
+            <>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                {adminUsers.length === 0 ? 'Admin Setup' : 'Add Admin Account'}
+              </h1>
+              <p className="text-gray-600 mb-6">
+                {adminUsers.length === 0
+                  ? 'Create your first admin account to get started'
+                  : 'Enter the setup code to create a new admin account'}
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Setup Code</label>
+                  <input
+                    type="text"
+                    value={setupCode}
+                    onChange={(e) => setSetupCode(e.target.value)}
+                    placeholder="Enter setup code"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+                  <input
+                    type="text"
+                    value={setupName}
+                    onChange={(e) => setSetupName(e.target.value)}
+                    placeholder="John Smith"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={setupEmail}
+                    onChange={(e) => setSetupEmail(e.target.value)}
+                    placeholder="john@company.com"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={setupPassword}
+                      onChange={(e) => setSetupPassword(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10"
+                    />
+                    <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <button
+                  onClick={handleSetup}
+                  className="w-full bg-gray-800 text-white py-2 rounded-lg hover:bg-gray-900 transition"
+                >
+                  Create Admin Account
                 </button>
               </div>
-            </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleSubmit} className="w-full bg-gray-800 text-white py-2 rounded-lg hover:bg-gray-900 transition">Access Admin Panel</button>
-          </div>
-          
-          <button onClick={() => setView('login')} className="w-full mt-4 text-gray-600 hover:underline">← Back to Client Login</button>
+              {adminUsers.length > 0 && (
+                <button
+                  onClick={() => { setIsSetupMode(false); setError(''); }}
+                  className="w-full mt-4 text-gray-600 hover:underline"
+                >
+                  ← Back to Login
+                </button>
+              )}
+              <button onClick={() => setView('login')} className="w-full mt-2 text-gray-600 hover:underline">← Back to Client Login</button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Login</h1>
+              <p className="text-gray-600 mb-6">Access your client management dashboard</p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="admin@company.com"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10"
+                    />
+                    <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <button onClick={handleSubmit} className="w-full bg-gray-800 text-white py-2 rounded-lg hover:bg-gray-900 transition">Sign In</button>
+              </div>
+
+              <button
+                onClick={() => { setIsSetupMode(true); setError(''); }}
+                className="w-full mt-4 text-sm text-blue-600 hover:underline"
+              >
+                Need to create an account? Enter setup code
+              </button>
+              <button onClick={() => setView('login')} className="w-full mt-2 text-gray-600 hover:underline">← Back to Client Login</button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -3128,8 +3316,29 @@ const ClientPortal = () => {
     const [showAddTaskModal, setShowAddTaskModal] = useState(false);
     const [newTask, setNewTask] = useState({ clientId: 'all', name: '', description: '' });
 
+    // Log admin activity
+    const logAdminActivity = async (action: string, details: string, metadata?: Record<string, any>) => {
+      if (!db || !currentUser) return;
+
+      try {
+        const activityId = Date.now().toString();
+        await setDoc(doc(db, 'adminActivities', activityId), {
+          id: activityId,
+          adminId: currentUser.id,
+          adminName: currentUser.name || currentUser.email,
+          action,
+          details,
+          metadata: metadata || {},
+          timestamp: new Date().toISOString()
+        });
+        console.log(`📝 Logged activity: ${action}`);
+      } catch (e) {
+        console.error('❌ Error logging activity:', e);
+      }
+    };
+
     // Toggle scheduled content completion
-    const toggleContentCompletion = async (eventId: string, currentStatus: boolean) => {
+    const toggleContentCompletion = async (eventId: string, currentStatus: boolean, eventTitle?: string, clientName?: string) => {
       if (!db) {
         console.warn('⚠️ Firestore not available');
         return;
@@ -3138,9 +3347,21 @@ const ClientPortal = () => {
       try {
         const eventRef = doc(db, 'calendarEvents', eventId);
         await updateDoc(eventRef, {
-          completed: !currentStatus
+          completed: !currentStatus,
+          completedBy: !currentStatus ? currentUser?.id : null,
+          completedByName: !currentStatus ? (currentUser?.name || currentUser?.email) : null,
+          completedAt: !currentStatus ? new Date().toISOString() : null
         });
         console.log(`✅ Toggled content completion for event ${eventId}`);
+
+        // Log activity
+        if (!currentStatus) {
+          await logAdminActivity(
+            'content_completed',
+            `Marked "${eventTitle || 'content'}" as completed${clientName ? ` for ${clientName}` : ''}`,
+            { eventId, eventTitle, clientName }
+          );
+        }
       } catch (e) {
         console.error('❌ Error toggling content completion:', e);
       }
@@ -3160,7 +3381,7 @@ const ClientPortal = () => {
     };
 
     // Toggle daily task completion for today
-    const toggleDailyTaskCompletion = async (taskId: string, clientId: string) => {
+    const toggleDailyTaskCompletion = async (taskId: string, clientId: string, taskName?: string, clientName?: string) => {
       if (!db) {
         console.warn('⚠️ Firestore not available');
         return;
@@ -3181,9 +3402,18 @@ const ClientPortal = () => {
             taskId,
             clientId,
             date: today,
-            completedAt: new Date().toISOString()
+            completedAt: new Date().toISOString(),
+            completedBy: currentUser?.id,
+            completedByName: currentUser?.name || currentUser?.email
           });
           console.log(`✅ Added task completion for ${completionId}`);
+
+          // Log activity
+          await logAdminActivity(
+            'daily_task_completed',
+            `Completed "${taskName || 'task'}"${clientName ? ` for ${clientName}` : ''}`,
+            { taskId, clientId, taskName, clientName }
+          );
         }
       } catch (e) {
         console.error('❌ Error toggling task completion:', e);
@@ -3571,7 +3801,7 @@ const ClientPortal = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleContentCompletion(event.id, isCompleted);
+                                toggleContentCompletion(event.id, isCompleted, event.title, client?.companyName);
                               }}
                               className={`mt-0.5 flex-shrink-0 transition-colors ${
                                 isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-blue-600'
@@ -3703,7 +3933,12 @@ const ClientPortal = () => {
                 <div className="p-6 border-t border-gray-200 flex justify-between items-center">
                   <button
                     onClick={() => {
-                      toggleContentCompletion(selectedTodayContent.event.id, selectedTodayContent.event.completed || false);
+                      toggleContentCompletion(
+                        selectedTodayContent.event.id,
+                        selectedTodayContent.event.completed || false,
+                        selectedTodayContent.event.title,
+                        selectedTodayContent.client?.companyName
+                      );
                       setSelectedTodayContent({
                         ...selectedTodayContent,
                         event: { ...selectedTodayContent.event, completed: !selectedTodayContent.event.completed }
@@ -3820,7 +4055,7 @@ const ClientPortal = () => {
                                 }`}
                               >
                                 <button
-                                  onClick={() => toggleDailyTaskCompletion(task.id, client.id)}
+                                  onClick={() => toggleDailyTaskCompletion(task.id, client.id, task.name, client.companyName || `${client.firstName} ${client.lastName || ''}`)}
                                   className={`mt-0.5 flex-shrink-0 transition-colors ${
                                     isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-amber-600'
                                   }`}
@@ -3966,7 +4201,7 @@ const ClientPortal = () => {
             </div>
           )}
 
-          <div className="flex gap-4 mb-8">
+          <div className="flex flex-wrap gap-4 mb-8">
             <button onClick={() => setActiveTab('clients')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               Clients & Content
             </button>
@@ -3981,6 +4216,12 @@ const ClientPortal = () => {
             </button>
             <button onClick={() => setActiveTab('sms')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'sms' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
               📱 Send SMS
+            </button>
+            <button onClick={() => setActiveTab('activity')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'activity' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
+              Activity Log
+            </button>
+            <button onClick={() => setActiveTab('team')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'team' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
+              Team
             </button>
           </div>
 
@@ -4766,6 +5007,213 @@ const ClientPortal = () => {
                       <p className="text-xs text-gray-600 italic">{template.message.substring(0, 100)}...</p>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Activity Log Tab */}
+          {activeTab === 'activity' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold">Activity Log</h3>
+                    <p className="text-sm text-gray-600">Track what your team has accomplished</p>
+                  </div>
+                </div>
+
+                {adminActivities.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No activity recorded yet</p>
+                    <p className="text-sm mt-1">Activities will appear here as team members complete tasks</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {[...adminActivities]
+                      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                      .slice(0, 100)
+                      .map(activity => {
+                        const activityDate = new Date(activity.timestamp);
+                        const isToday = formatDateLocal(activityDate) === formatDateLocal(new Date());
+                        const isYesterday = formatDateLocal(activityDate) === formatDateLocal(new Date(Date.now() - 86400000));
+
+                        return (
+                          <div key={activity.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              activity.action === 'content_completed' ? 'bg-green-100 text-green-600' :
+                              activity.action === 'daily_task_completed' ? 'bg-amber-100 text-amber-600' :
+                              activity.action === 'content_approved' ? 'bg-blue-100 text-blue-600' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {activity.action === 'content_completed' ? <Check className="w-5 h-5" /> :
+                               activity.action === 'daily_task_completed' ? <CheckSquare className="w-5 h-5" /> :
+                               activity.action === 'content_approved' ? <Sparkles className="w-5 h-5" /> :
+                               <Clock className="w-5 h-5" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium text-gray-900">{activity.adminName}</span>
+                                <span className="text-xs text-gray-500">
+                                  {isToday ? 'Today' : isYesterday ? 'Yesterday' : activityDate.toLocaleDateString()}
+                                  {' at '}
+                                  {activityDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-700">{activity.details}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+
+              {/* Activity Summary by Team Member */}
+              {adminActivities.length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-lg font-semibold mb-4">Team Summary (Last 7 Days)</h3>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {(() => {
+                      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+                      const recentActivities = adminActivities.filter(a => new Date(a.timestamp) >= sevenDaysAgo);
+
+                      // Group by admin
+                      const byAdmin = recentActivities.reduce((acc, activity) => {
+                        const adminId = activity.adminId;
+                        if (!acc[adminId]) {
+                          acc[adminId] = {
+                            name: activity.adminName,
+                            contentCompleted: 0,
+                            tasksCompleted: 0,
+                            total: 0
+                          };
+                        }
+                        acc[adminId].total++;
+                        if (activity.action === 'content_completed') acc[adminId].contentCompleted++;
+                        if (activity.action === 'daily_task_completed') acc[adminId].tasksCompleted++;
+                        return acc;
+                      }, {});
+
+                      const adminStats = Object.values(byAdmin);
+                      if (adminStats.length === 0) {
+                        return <p className="text-gray-500 col-span-full">No activity in the last 7 days</p>;
+                      }
+
+                      return adminStats.map((admin: any) => (
+                        <div key={admin.name} className="bg-gray-50 rounded-lg p-4">
+                          <h4 className="font-semibold text-gray-800 mb-3">{admin.name}</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Content completed</span>
+                              <span className="font-medium text-green-600">{admin.contentCompleted}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Tasks completed</span>
+                              <span className="font-medium text-amber-600">{admin.tasksCompleted}</span>
+                            </div>
+                            <div className="flex justify-between pt-2 border-t">
+                              <span className="text-gray-700 font-medium">Total actions</span>
+                              <span className="font-bold text-gray-900">{admin.total}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Team Management Tab */}
+          {activeTab === 'team' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold">Team Management</h3>
+                    <p className="text-sm text-gray-600">Manage admin users who can access the portal</p>
+                  </div>
+                </div>
+
+                {/* Current User Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                      {currentUser?.name?.charAt(0) || currentUser?.email?.charAt(0) || 'A'}
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">Logged in as: {currentUser?.name || currentUser?.email}</p>
+                      <p className="text-sm text-gray-600">{currentUser?.email}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Admin Users List */}
+                <h4 className="font-medium text-gray-800 mb-3">Team Members ({adminUsers.length})</h4>
+                <div className="space-y-3">
+                  {adminUsers.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No team members found</p>
+                    </div>
+                  ) : (
+                    adminUsers.map(admin => (
+                      <div key={admin.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold">
+                            {admin.name?.charAt(0) || admin.email?.charAt(0) || 'A'}
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{admin.name}</p>
+                            <p className="text-sm text-gray-600">{admin.email}</p>
+                          </div>
+                          {admin.isOwner && (
+                            <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">Owner</span>
+                          )}
+                          {admin.id === currentUser?.id && (
+                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">You</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">
+                            Joined {new Date(admin.createdAt).toLocaleDateString()}
+                          </span>
+                          {admin.id !== currentUser?.id && !admin.isOwner && (
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Remove ${admin.name} from the team?`)) {
+                                  if (db) {
+                                    await deleteDoc(doc(db, 'adminUsers', admin.id));
+                                  }
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Remove team member"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Add Team Member Instructions */}
+                <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <h4 className="font-medium text-amber-900 mb-2">Adding New Team Members</h4>
+                  <p className="text-sm text-amber-800 mb-2">
+                    To add a new team member, have them visit the admin login page and click "Need to create an account? Enter setup code".
+                  </p>
+                  <p className="text-sm text-amber-800">
+                    <strong>Setup Code:</strong> <code className="bg-amber-100 px-2 py-1 rounded">SETUP2024</code>
+                  </p>
+                  <p className="text-xs text-amber-700 mt-2">
+                    Share this code only with trusted team members who should have admin access.
+                  </p>
                 </div>
               </div>
             </div>

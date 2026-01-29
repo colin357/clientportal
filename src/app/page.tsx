@@ -3024,6 +3024,26 @@ const ClientPortal = () => {
       setStoredFilter('activeTab', tab);
     };
 
+    // Expandable sections - allows multiple sections open at once
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+      if (typeof window === 'undefined') return new Set(['clients']);
+      try {
+        const stored = sessionStorage.getItem('adminExpandedSections');
+        if (stored) return new Set(JSON.parse(stored));
+      } catch {}
+      return new Set(['clients']);
+    });
+
+    const toggleSection = (section: string) => {
+      setExpandedSections(prev => {
+        const next = new Set(prev);
+        if (next.has(section)) next.delete(section);
+        else next.add(section);
+        try { sessionStorage.setItem('adminExpandedSections', JSON.stringify([...next])); } catch {}
+        return next;
+      });
+    };
+
     const [selectedUser, setSelectedUser] = useState(null);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [aiGenerationResult, setAiGenerationResult] = useState(null);
@@ -3080,6 +3100,17 @@ const ClientPortal = () => {
     // Drag and drop state
     const [draggedContent, setDraggedContent] = useState(null);
     const [dragOverDate, setDragOverDate] = useState(null);
+
+    // Admin video attachment state
+    const [attachVideoModal, setAttachVideoModal] = useState<{
+      isOpen: boolean;
+      event: any;
+      contentItem: any;
+    }>({ isOpen: false, event: null, contentItem: null });
+    const [adminVideoFile, setAdminVideoFile] = useState<File | null>(null);
+    const [adminVideoLink, setAdminVideoLink] = useState('');
+    const [adminVideoUploading, setAdminVideoUploading] = useState(false);
+    const [adminVideoProgress, setAdminVideoProgress] = useState(0);
 
     // SMS state variables
     const [smsSelectedClients, setSmsSelectedClients] = useState([]);
@@ -3644,6 +3675,17 @@ const ClientPortal = () => {
                                   {isPast ? '⚠️ OVERDUE: ' : isToday ? '📅 TODAY: ' : ''}
                                   {new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                                 </p>
+                                <button
+                                  onClick={() => setAttachVideoModal({
+                                    isOpen: true,
+                                    event: event,
+                                    contentItem: linkedContent
+                                  })}
+                                  className="mt-2 w-full text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center justify-center gap-1"
+                                >
+                                  <Upload className="w-3 h-3" />
+                                  Attach Video
+                                </button>
                               </div>
                             );
                           })}
@@ -4091,31 +4133,14 @@ const ClientPortal = () => {
             </div>
           )}
 
-          <div className="flex flex-wrap gap-4 mb-8">
-            <button onClick={() => setActiveTab('clients')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'clients' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
-              Clients & Content
+          {/* Expandable Section Headers */}
+          <div className="space-y-2">
+            {/* Clients & Content */}
+            <button onClick={() => toggleSection('clients')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('clients') ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2"><Users className="w-4 h-4" />Clients & Content <span className="text-xs opacity-70">({users.filter(u => !u.parentClientId).length})</span></div>
+              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('clients') ? 'rotate-90' : ''}`} />
             </button>
-            <button onClick={() => setActiveTab('calendar')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'calendar' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
-              Content Calendar
-            </button>
-            <button onClick={() => setActiveTab('videos')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'videos' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
-              Video Production Queue
-            </button>
-            <button onClick={() => setActiveTab('groups')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'groups' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
-              Groups
-            </button>
-            <button onClick={() => setActiveTab('sms')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'sms' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
-              📱 Send SMS
-            </button>
-            <button onClick={() => setActiveTab('activity')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'activity' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
-              Activity Log
-            </button>
-            <button onClick={() => setActiveTab('team')} className={`px-6 py-3 rounded-lg font-medium ${activeTab === 'team' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700'}`}>
-              Team
-            </button>
-          </div>
-
-          {activeTab === 'clients' && (
+            {expandedSections.has('clients') && (
             <div>
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Group</label>
@@ -4249,7 +4274,12 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {activeTab === 'calendar' && (
+            {/* Content Calendar */}
+            <button onClick={() => toggleSection('calendar')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('calendar') ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2"><Calendar className="w-4 h-4" />Content Calendar <span className="text-xs opacity-70">({calendarEvents.length})</span></div>
+              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('calendar') ? 'rotate-90' : ''}`} />
+            </button>
+          {expandedSections.has('calendar') && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Visual Calendar */}
               <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
@@ -4534,9 +4564,13 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {activeTab === 'videos' && (
+            {/* Video Production Queue */}
+            <button onClick={() => toggleSection('videos')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('videos') ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2"><Video className="w-4 h-4" />Video Production Queue <span className="text-xs opacity-70">({videos.filter(v => v.status !== 'completed').length} pending)</span></div>
+              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('videos') ? 'rotate-90' : ''}`} />
+            </button>
+          {expandedSections.has('videos') && (
             <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4">Video Production Queue</h3>
               {videos.length === 0 ? (
                 <div className="text-center py-12">
                   <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -4604,7 +4638,12 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {activeTab === 'groups' && (
+            {/* Groups */}
+            <button onClick={() => toggleSection('groups')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('groups') ? 'bg-teal-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2"><Users className="w-4 h-4" />Groups <span className="text-xs opacity-70">({groups.length})</span></div>
+              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('groups') ? 'rotate-90' : ''}`} />
+            </button>
+          {expandedSections.has('groups') && (
             <div className="space-y-6">
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex justify-between items-center mb-6">
@@ -4761,7 +4800,12 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {activeTab === 'sms' && (
+            {/* Send SMS */}
+            <button onClick={() => toggleSection('sms')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('sms') ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2"><Mail className="w-4 h-4" />📱 Send SMS</div>
+              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('sms') ? 'rotate-90' : ''}`} />
+            </button>
+          {expandedSections.has('sms') && (
             <div className="space-y-6">
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">📱 Send Manual SMS Notifications</h3>
@@ -4902,16 +4946,15 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {/* Activity Log Tab */}
-          {activeTab === 'activity' && (
+            {/* Activity Log */}
+            <button onClick={() => toggleSection('activity')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('activity') ? 'bg-amber-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2"><Clock className="w-4 h-4" />Activity Log <span className="text-xs opacity-70">({adminActivities.length})</span></div>
+              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('activity') ? 'rotate-90' : ''}`} />
+            </button>
+          {expandedSections.has('activity') && (
             <div className="space-y-6">
               <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg font-semibold">Activity Log</h3>
-                    <p className="text-sm text-gray-600">Track what your team has accomplished</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-600 mb-6">Track what your team has accomplished</p>
 
                 {adminActivities.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
@@ -5017,16 +5060,15 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {/* Team Management Tab */}
-          {activeTab === 'team' && (
+            {/* Team */}
+            <button onClick={() => toggleSection('team')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('team') ? 'bg-gray-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+              <div className="flex items-center gap-2"><Users className="w-4 h-4" />Team <span className="text-xs opacity-70">({adminUsers.length})</span></div>
+              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('team') ? 'rotate-90' : ''}`} />
+            </button>
+          {expandedSections.has('team') && (
             <div className="space-y-6">
               <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg font-semibold">Team Management</h3>
-                    <p className="text-sm text-gray-600">Manage admin users who can access the portal</p>
-                  </div>
-                </div>
+                <p className="text-sm text-gray-600 mb-6">Manage admin users who can access the portal</p>
 
                 {/* Current User Info */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -5108,6 +5150,7 @@ const ClientPortal = () => {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {showForm && (
@@ -5259,6 +5302,174 @@ const ClientPortal = () => {
                   setShowForm(false);
                   setPublishMode('single');
                 }} className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300">Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Attach Video Modal */}
+        {attachVideoModal.isOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Attach Video to Content</h2>
+                <button
+                  onClick={() => {
+                    setAttachVideoModal({ isOpen: false, event: null, contentItem: null });
+                    setAdminVideoFile(null);
+                    setAdminVideoLink('');
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {attachVideoModal.event && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                  <p className="font-medium text-gray-800">{attachVideoModal.event.title}</p>
+                  <p className="text-sm text-gray-600">
+                    Scheduled: {new Date(attachVideoModal.event.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Client: {users.find(u => u.id === attachVideoModal.event.clientId)?.companyName || 'Unknown'}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {/* File Upload Option */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Video File</label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => setAdminVideoFile(e.target.files?.[0] || null)}
+                      className="w-full text-sm"
+                    />
+                    {adminVideoFile && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        Selected: {adminVideoFile.name} ({(adminVideoFile.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* OR divider */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t border-gray-300"></div>
+                  <span className="text-gray-500 text-sm">OR</span>
+                  <div className="flex-1 border-t border-gray-300"></div>
+                </div>
+
+                {/* Link Option */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Video Link</label>
+                  <input
+                    type="text"
+                    value={adminVideoLink}
+                    onChange={(e) => setAdminVideoLink(e.target.value)}
+                    placeholder="Google Drive, Dropbox, or direct video link"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Upload Progress */}
+                {adminVideoUploading && (
+                  <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                    <div
+                      className="bg-blue-600 h-4 transition-all duration-300 flex items-center justify-center text-xs text-white font-semibold"
+                      style={{ width: `${adminVideoProgress}%` }}
+                    >
+                      {adminVideoProgress > 5 && `${Math.round(adminVideoProgress)}%`}
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Button */}
+                <button
+                  onClick={async () => {
+                    if (!adminVideoFile && !adminVideoLink.trim()) {
+                      alert('Please upload a video file or provide a link');
+                      return;
+                    }
+
+                    setAdminVideoUploading(true);
+                    setAdminVideoProgress(0);
+
+                    try {
+                      let finalVideoLink = adminVideoLink;
+
+                      // If a file is selected, upload it to Firebase Storage
+                      if (adminVideoFile) {
+                        if (!storage) {
+                          alert('❌ Firebase Storage is not configured.');
+                          setAdminVideoUploading(false);
+                          return;
+                        }
+
+                        finalVideoLink = await uploadFileToStorage(
+                          adminVideoFile,
+                          'videos',
+                          (progress) => setAdminVideoProgress(progress)
+                        );
+                      }
+
+                      if (finalVideoLink && finalVideoLink.trim()) {
+                        const newVideo = {
+                          id: Date.now().toString(),
+                          clientId: attachVideoModal.event.clientId,
+                          contentId: attachVideoModal.event.contentId,
+                          contentTitle: attachVideoModal.event.title,
+                          videoLink: finalVideoLink,
+                          description: `Video for: ${attachVideoModal.event.title}`,
+                          status: 'pending',
+                          submittedAt: new Date().toISOString(),
+                          fileName: adminVideoFile ? adminVideoFile.name : null,
+                          uploadedByAdmin: true
+                        };
+
+                        if (!db) {
+                          alert('⚠️ Database not configured.');
+                          setAdminVideoUploading(false);
+                          return;
+                        }
+
+                        await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+
+                        // Log admin activity
+                        await logAdminActivity('video_attached', `Attached video to "${attachVideoModal.event.title}"`, {
+                          contentId: attachVideoModal.event.contentId,
+                          clientId: attachVideoModal.event.clientId
+                        });
+
+                        // Reset and close modal
+                        setAdminVideoFile(null);
+                        setAdminVideoLink('');
+                        setAttachVideoModal({ isOpen: false, event: null, contentItem: null });
+                        alert('Video attached successfully!');
+                      }
+                    } catch (error) {
+                      console.error('❌ Error attaching video:', error);
+                      alert('Error attaching video. Please try again.');
+                    } finally {
+                      setAdminVideoUploading(false);
+                      setAdminVideoProgress(0);
+                    }
+                  }}
+                  disabled={(!adminVideoFile && !adminVideoLink.trim()) || adminVideoUploading}
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {adminVideoUploading ? (
+                    <>Uploading...</>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Attach Video
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>

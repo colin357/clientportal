@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2 } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -74,6 +74,8 @@ const ClientPortal = () => {
   const [content, setContent] = useState([]);
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [dailyTasks, setDailyTasks] = useState([]);
+  const [dailyTaskCompletions, setDailyTaskCompletions] = useState([]);
 
   useEffect(() => {
     // Set up real-time listeners for data sync across devices/tabs
@@ -121,6 +123,26 @@ const ClientPortal = () => {
         console.error('❌ Error syncing groups:', error);
       });
       unsubscribers.push(unsubGroups);
+
+      // Real-time listener for daily tasks
+      const unsubDailyTasks = onSnapshot(collection(db, 'dailyTasks'), (snapshot) => {
+        const tasksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Daily tasks synced: ${tasksData.length} tasks`);
+        setDailyTasks(tasksData);
+      }, (error) => {
+        console.error('❌ Error syncing daily tasks:', error);
+      });
+      unsubscribers.push(unsubDailyTasks);
+
+      // Real-time listener for daily task completions
+      const unsubTaskCompletions = onSnapshot(collection(db, 'dailyTaskCompletions'), (snapshot) => {
+        const completionsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        console.log(`🔄 Task completions synced: ${completionsData.length} completions`);
+        setDailyTaskCompletions(completionsData);
+      }, (error) => {
+        console.error('❌ Error syncing task completions:', error);
+      });
+      unsubscribers.push(unsubTaskCompletions);
     } else {
       // Fallback to one-time load if db not available
       loadData();
@@ -3102,6 +3124,112 @@ const ClientPortal = () => {
       }
     };
 
+    // Daily Tasks state
+    const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+    const [newTask, setNewTask] = useState({ clientId: 'all', name: '', description: '' });
+
+    // Toggle scheduled content completion
+    const toggleContentCompletion = async (eventId: string, currentStatus: boolean) => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available');
+        return;
+      }
+
+      try {
+        const eventRef = doc(db, 'calendarEvents', eventId);
+        await updateDoc(eventRef, {
+          completed: !currentStatus
+        });
+        console.log(`✅ Toggled content completion for event ${eventId}`);
+      } catch (e) {
+        console.error('❌ Error toggling content completion:', e);
+      }
+    };
+
+    // Get today's date string for task completions
+    const getTodayDateString = () => formatDateLocal(new Date());
+
+    // Check if a daily task is completed for today
+    const isTaskCompletedToday = (taskId: string, clientId: string) => {
+      const today = getTodayDateString();
+      return dailyTaskCompletions.some(
+        completion => completion.taskId === taskId &&
+                     completion.clientId === clientId &&
+                     completion.date === today
+      );
+    };
+
+    // Toggle daily task completion for today
+    const toggleDailyTaskCompletion = async (taskId: string, clientId: string) => {
+      if (!db) {
+        console.warn('⚠️ Firestore not available');
+        return;
+      }
+
+      const today = getTodayDateString();
+      const completionId = `${taskId}_${clientId}_${today}`;
+      const isCompleted = isTaskCompletedToday(taskId, clientId);
+
+      try {
+        if (isCompleted) {
+          // Remove completion
+          await deleteDoc(doc(db, 'dailyTaskCompletions', completionId));
+          console.log(`✅ Removed task completion for ${completionId}`);
+        } else {
+          // Add completion
+          await setDoc(doc(db, 'dailyTaskCompletions', completionId), {
+            taskId,
+            clientId,
+            date: today,
+            completedAt: new Date().toISOString()
+          });
+          console.log(`✅ Added task completion for ${completionId}`);
+        }
+      } catch (e) {
+        console.error('❌ Error toggling task completion:', e);
+      }
+    };
+
+    // Add a new daily task
+    const addDailyTask = async () => {
+      if (!db || !newTask.name.trim()) {
+        return;
+      }
+
+      try {
+        const taskId = Date.now().toString();
+        await setDoc(doc(db, 'dailyTasks', taskId), {
+          id: taskId,
+          clientId: newTask.clientId,
+          name: newTask.name.trim(),
+          description: newTask.description.trim(),
+          createdAt: new Date().toISOString()
+        });
+        console.log(`✅ Added daily task: ${newTask.name}`);
+        setNewTask({ clientId: 'all', name: '', description: '' });
+        setShowAddTaskModal(false);
+      } catch (e) {
+        console.error('❌ Error adding daily task:', e);
+      }
+    };
+
+    // Delete a daily task
+    const deleteDailyTask = async (taskId: string) => {
+      if (!db) return;
+
+      try {
+        await deleteDoc(doc(db, 'dailyTasks', taskId));
+        // Also delete all completions for this task
+        const completionsToDelete = dailyTaskCompletions.filter(c => c.taskId === taskId);
+        for (const completion of completionsToDelete) {
+          await deleteDoc(doc(db, 'dailyTaskCompletions', completion.id));
+        }
+        console.log(`✅ Deleted daily task: ${taskId}`);
+      } catch (e) {
+        console.error('❌ Error deleting daily task:', e);
+      }
+    };
+
     useEffect(() => {
       // Set up real-time listener for videos
       if (!db) {
@@ -3412,6 +3540,7 @@ const ClientPortal = () => {
           {(() => {
             const today = formatDateLocal(new Date());
             const todaysEvents = calendarEvents.filter(event => event.date === today);
+            const completedCount = todaysEvents.filter(e => e.completed).length;
 
             if (todaysEvents.length > 0) {
               return (
@@ -3419,32 +3548,61 @@ const ClientPortal = () => {
                   <div className="flex items-center gap-2 mb-4">
                     <Calendar className="w-6 h-6 text-blue-600" />
                     <h3 className="text-xl font-semibold text-gray-800">Today's Scheduled Content</h3>
-                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{todaysEvents.length}</span>
+                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{completedCount}/{todaysEvents.length}</span>
+                    {completedCount === todaysEvents.length && todaysEvents.length > 0 && (
+                      <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">All Done!</span>
+                    )}
                   </div>
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {todaysEvents.map(event => {
                       const client = users.find(u => u.id === event.clientId);
                       const linkedContent = content.find(c => c.id === event.contentId);
+                      const isCompleted = event.completed || false;
                       return (
                         <div
                           key={event.id}
-                          className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all"
-                          onClick={() => setSelectedTodayContent({ event, client, linkedContent })}
+                          className={`bg-white rounded-lg p-4 shadow-sm border transition-all ${
+                            isCompleted
+                              ? 'border-green-300 bg-green-50/50'
+                              : 'border-gray-200 hover:shadow-md hover:border-blue-300'
+                          }`}
                         >
-                          <div className="flex items-start justify-between mb-2">
-                            <h4 className="font-semibold text-gray-800 text-sm">{event.title}</h4>
-                            <span className={`inline-block px-2 py-1 rounded text-xs ${
-                              event.type === 'social' ? 'bg-blue-100 text-blue-800' :
-                              event.type === 'email' ? 'bg-green-100 text-green-800' :
-                              event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>{event.type}</span>
+                          <div className="flex items-start gap-3">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleContentCompletion(event.id, isCompleted);
+                              }}
+                              className={`mt-0.5 flex-shrink-0 transition-colors ${
+                                isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-blue-600'
+                              }`}
+                            >
+                              {isCompleted ? (
+                                <CheckSquare className="w-5 h-5" />
+                              ) : (
+                                <Square className="w-5 h-5" />
+                              )}
+                            </button>
+                            <div
+                              className="flex-1 cursor-pointer"
+                              onClick={() => setSelectedTodayContent({ event, client, linkedContent })}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <h4 className={`font-semibold text-sm ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{event.title}</h4>
+                                <span className={`inline-block px-2 py-1 rounded text-xs ${
+                                  event.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                                  event.type === 'email' ? 'bg-green-100 text-green-800' :
+                                  event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>{event.type}</span>
+                              </div>
+                              <p className={`text-xs mb-2 ${isCompleted ? 'text-gray-400' : 'text-gray-600'}`}>{client?.companyName || 'Unknown Client'}</p>
+                              {event.description && (
+                                <p className={`text-xs line-clamp-2 ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>{event.description}</p>
+                              )}
+                              <p className="text-xs text-blue-600 mt-2 font-medium">Click for details →</p>
+                            </div>
                           </div>
-                          <p className="text-xs text-gray-600 mb-2">{client?.companyName || 'Unknown Client'}</p>
-                          {event.description && (
-                            <p className="text-xs text-gray-500 line-clamp-2">{event.description}</p>
-                          )}
-                          <p className="text-xs text-blue-600 mt-2 font-medium">Click for details →</p>
                         </div>
                       );
                     })}
@@ -3542,12 +3700,266 @@ const ClientPortal = () => {
                   )}
                 </div>
 
-                <div className="p-6 border-t border-gray-200 flex justify-end">
+                <div className="p-6 border-t border-gray-200 flex justify-between items-center">
+                  <button
+                    onClick={() => {
+                      toggleContentCompletion(selectedTodayContent.event.id, selectedTodayContent.event.completed || false);
+                      setSelectedTodayContent({
+                        ...selectedTodayContent,
+                        event: { ...selectedTodayContent.event, completed: !selectedTodayContent.event.completed }
+                      });
+                    }}
+                    className={`px-6 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                      selectedTodayContent.event.completed
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {selectedTodayContent.event.completed ? (
+                      <>
+                        <CheckSquare className="w-5 h-5" />
+                        Completed
+                      </>
+                    ) : (
+                      <>
+                        <Square className="w-5 h-5" />
+                        Mark as Done
+                      </>
+                    )}
+                  </button>
                   <button
                     onClick={() => setSelectedTodayContent(null)}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Daily Tasks Section */}
+          {(() => {
+            const today = getTodayDateString();
+            // Get all clients (excluding team members)
+            const clients = users.filter(u => !u.parentClientId);
+            // Get tasks that apply to all clients or specific clients
+            const allClientTasks = dailyTasks.filter(t => t.clientId === 'all');
+
+            // Build task list: for each client, show their specific tasks + all-client tasks
+            const tasksByClient = clients.map(client => {
+              const clientSpecificTasks = dailyTasks.filter(t => t.clientId === client.id);
+              const tasksForClient = [...clientSpecificTasks, ...allClientTasks];
+              const completedCount = tasksForClient.filter(task =>
+                isTaskCompletedToday(task.id, client.id)
+              ).length;
+              return {
+                client,
+                tasks: tasksForClient,
+                completedCount,
+                totalCount: tasksForClient.length
+              };
+            }).filter(c => c.tasks.length > 0);
+
+            const totalTasks = tasksByClient.reduce((sum, c) => sum + c.totalCount, 0);
+            const totalCompleted = tasksByClient.reduce((sum, c) => sum + c.completedCount, 0);
+
+            return (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-6 mb-8">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <ListTodo className="w-6 h-6 text-amber-600" />
+                    <h3 className="text-xl font-semibold text-gray-800">Daily Tasks</h3>
+                    {totalTasks > 0 && (
+                      <>
+                        <span className="bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                          {totalCompleted}/{totalTasks}
+                        </span>
+                        {totalCompleted === totalTasks && totalTasks > 0 && (
+                          <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">All Done!</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowAddTaskModal(true)}
+                    className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 flex items-center gap-2 text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Task
+                  </button>
+                </div>
+
+                {tasksByClient.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <ListTodo className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No daily tasks yet. Add repeating tasks to track for each client.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {tasksByClient.map(({ client, tasks, completedCount, totalCount }) => (
+                      <div key={client.id} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-gray-800">{client.companyName || `${client.firstName} ${client.lastName || ''}`}</h4>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              completedCount === totalCount ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {completedCount}/{totalCount}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {tasks.map(task => {
+                            const isCompleted = isTaskCompletedToday(task.id, client.id);
+                            return (
+                              <div
+                                key={`${task.id}-${client.id}`}
+                                className={`flex items-start gap-3 p-2 rounded-lg transition-colors ${
+                                  isCompleted ? 'bg-green-50' : 'hover:bg-gray-50'
+                                }`}
+                              >
+                                <button
+                                  onClick={() => toggleDailyTaskCompletion(task.id, client.id)}
+                                  className={`mt-0.5 flex-shrink-0 transition-colors ${
+                                    isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-amber-600'
+                                  }`}
+                                >
+                                  {isCompleted ? (
+                                    <CheckSquare className="w-5 h-5" />
+                                  ) : (
+                                    <Square className="w-5 h-5" />
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                                    {task.name}
+                                    {task.clientId === 'all' && (
+                                      <span className="ml-2 text-xs text-amber-600 font-normal">(all clients)</span>
+                                    )}
+                                  </p>
+                                  {task.description && (
+                                    <p className={`text-xs mt-0.5 ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
+                                      {task.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Manage Tasks Link */}
+                {dailyTasks.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-amber-200">
+                    <details className="group">
+                      <summary className="text-sm text-amber-700 cursor-pointer hover:text-amber-800 font-medium">
+                        Manage task templates ({dailyTasks.length})
+                      </summary>
+                      <div className="mt-3 space-y-2">
+                        {dailyTasks.map(task => {
+                          const taskClient = task.clientId === 'all' ? null : users.find(u => u.id === task.clientId);
+                          return (
+                            <div key={task.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">{task.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {task.clientId === 'all' ? 'Applies to all clients' : `For: ${taskClient?.companyName || 'Unknown'}`}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => deleteDailyTask(task.id)}
+                                className="text-red-500 hover:text-red-700 p-1"
+                                title="Delete task"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Add Daily Task Modal */}
+          {showAddTaskModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddTaskModal(false)}>
+              <div className="bg-white rounded-lg shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-gray-800">Add Daily Task</h3>
+                    <button onClick={() => setShowAddTaskModal(false)} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Task Name *</label>
+                    <input
+                      type="text"
+                      value={newTask.name}
+                      onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+                      placeholder="e.g., Post to Instagram"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                    <textarea
+                      value={newTask.description}
+                      onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                      placeholder="Add any notes or details..."
+                      rows={2}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Apply to</label>
+                    <select
+                      value={newTask.clientId}
+                      onChange={(e) => setNewTask({ ...newTask, clientId: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                    >
+                      <option value="all">All Clients</option>
+                      {users.filter(u => !u.parentClientId).map(user => (
+                        <option key={user.id} value={user.id}>
+                          {user.companyName || `${user.firstName} ${user.lastName || ''}`}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {newTask.clientId === 'all'
+                        ? 'This task will appear for every client'
+                        : 'This task will only appear for the selected client'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowAddTaskModal(false)}
+                    className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={addDailyTask}
+                    disabled={!newTask.name.trim()}
+                    className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Add Task
                   </button>
                 </div>
               </div>

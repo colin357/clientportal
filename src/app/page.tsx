@@ -1650,199 +1650,6 @@ const ClientPortal = () => {
                 <p className="text-gray-600">Manage your approved social content and video production</p>
               </div>
 
-              <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Submit Video for Editing</h3>
-                <p className="text-sm text-gray-600 mb-4">Upload your video file directly or provide a link to Google Drive/Dropbox</p>
-                <div className="space-y-4">
-                  {/* File Upload Option */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload Video File</label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
-                      <input
-                        type="file"
-                        accept="video/*"
-                        onChange={(e) => setSelectedVideoFile(e.target.files[0])}
-                        className="w-full"
-                      />
-                      {selectedVideoFile && (
-                        <p className="text-sm text-gray-600 mt-2">
-                          Selected: {selectedVideoFile.name} ({(selectedVideoFile.size / 1024 / 1024).toFixed(2)} MB)
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* OR divider */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 border-t border-gray-300"></div>
-                    <span className="text-gray-500 text-sm">OR</span>
-                    <div className="flex-1 border-t border-gray-300"></div>
-                  </div>
-
-                  {/* Link Option */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Video Link</label>
-                    <input
-                      type="text"
-                      value={videoLink}
-                      onChange={(e) => setVideoLink(e.target.value)}
-                      placeholder="Google Drive or Dropbox link to your video"
-                      className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <textarea value={videoDescription} onChange={(e) => setVideoDescription(e.target.value)} placeholder="Brief description or notes about the video" className="w-full px-4 py-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 resize-none" rows="3" />
-
-                  {uploadingVideo && (
-                    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
-                      <div
-                        className="bg-blue-600 h-4 transition-all duration-300 flex items-center justify-center text-xs text-white font-semibold"
-                        style={{ width: `${uploadProgress}%` }}
-                      >
-                        {uploadProgress > 5 && `${Math.round(uploadProgress)}%`}
-                      </div>
-                    </div>
-                  )}
-
-                  <button onClick={async () => {
-                    if (!selectedVideoFile && !videoLink.trim()) {
-                      alert('Please upload a video file or provide a link');
-                      return;
-                    }
-
-                    setUploadingVideo(true);
-                    setUploadProgress(0);
-
-                    try {
-                      let finalVideoLink = videoLink;
-
-                      // If a file is selected, upload it to Firebase Storage
-                      if (selectedVideoFile) {
-                        if (!storage) {
-                          alert('❌ Firebase Storage is not configured. Please contact support or use a link instead.');
-                          setUploadingVideo(false);
-                          return;
-                        }
-
-                        console.log('📤 Uploading video file to storage...');
-                        console.log('File name:', selectedVideoFile.name);
-                        console.log('File size:', selectedVideoFile.size, 'bytes');
-
-                        try {
-                          finalVideoLink = await uploadFileToStorage(
-                            selectedVideoFile,
-                            'videos',
-                            (progress) => setUploadProgress(progress)
-                          );
-                          console.log('✅ Video uploaded successfully:', finalVideoLink);
-                        } catch (uploadError) {
-                          console.error('❌ Upload error:', uploadError);
-                          throw new Error(`Upload failed: ${uploadError.message}`);
-                        }
-                      }
-
-                    if (finalVideoLink && finalVideoLink.trim()) {
-                      const newVideo = {
-                        id: Date.now().toString(),
-                        clientId: effectiveClientId,
-                        videoLink: finalVideoLink,
-                        description: videoDescription,
-                        status: 'pending',
-                        submittedAt: new Date().toISOString(),
-                        fileName: selectedVideoFile ? selectedVideoFile.name : null
-                      };
-
-                      if (!db) {
-                        alert('⚠️ Cloud storage not configured. Video not saved.');
-                        console.error('❌ Firestore not available');
-                        setUploadingVideo(false);
-                        return;
-                      }
-
-                      // Save video to Firestore
-                      console.log('💾 Submitting video to Firestore...');
-                      await setDoc(doc(db, 'videos', newVideo.id), newVideo);
-                      console.log('✅ Video submitted successfully:', newVideo.id);
-
-                      // Send SMS notification to admin
-                      await sendSMS(
-                        '+17867882699',
-                        `📹 New video submitted by ${currentUser.companyName}. Check the admin portal to review!`
-                      );
-
-                      setVideoLink('');
-                      setVideoDescription('');
-                      setSelectedVideoFile(null);
-                      await loadUserVideos();
-                      alert('Video submitted successfully!');
-                    }
-                    } catch (error) {
-                      console.error('❌ Error submitting video:', error);
-                      console.error('Error details:', error.message);
-                      alert('Error submitting video. Please try again.');
-                    } finally {
-                      setUploadingVideo(false);
-                      setUploadProgress(0);
-                    }
-                  }} disabled={(!selectedVideoFile && !videoLink.trim()) || uploadingVideo} className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
-                    {uploadingVideo ? 'Uploading...' : 'Submit Video'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Video Submissions</h3>
-                {userVideos.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-600">No videos submitted yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {userVideos.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)).map(video => (
-                      <div key={video.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-semibold text-gray-800">
-                                {video.description || 'Video Submission'}
-                              </h4>
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                video.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                video.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
-                                'bg-green-100 text-green-800'
-                              }`}>
-                                {video.status === 'in-progress' ? 'In Progress' : video.status.charAt(0).toUpperCase() + video.status.slice(1)}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600">
-                              Submitted {new Date(video.submittedAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div>
-                            <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
-                              <FileText className="w-4 h-4" />Raw Video File
-                            </a>
-                          </div>
-
-                          {video.status === 'completed' && video.completedLink && (
-                            <div className="mt-2 p-3 bg-green-50 rounded">
-                              <p className="text-sm font-medium text-green-800 mb-1">Completed!</p>
-                              <a href={video.completedLink} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline text-sm flex items-center gap-2">
-                                <FileText className="w-4 h-4" />Download Edited Video
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Approved Social Content</h3>
                 {clientContent.filter(c => c.status === 'approved' && c.type === 'social').length === 0 ? (
@@ -3765,6 +3572,89 @@ const ClientPortal = () => {
               </button>
             </div>
           </div>
+
+          {/* Alert: Scheduled Social Posts Without Videos */}
+          {(() => {
+            // Find all scheduled social posts
+            const scheduledSocialEvents = calendarEvents.filter(event => event.type === 'social');
+
+            // Find which ones don't have a video attached
+            const postsWithoutVideos = scheduledSocialEvents.filter(event => {
+              // Check if there's a video linked to the content
+              const linkedVideo = videos.find(v => v.contentId === event.contentId);
+              return !linkedVideo;
+            });
+
+            if (postsWithoutVideos.length === 0) return null;
+
+            // Group by client for better organization
+            const groupedByClient = postsWithoutVideos.reduce((acc, event) => {
+              const clientId = event.clientId;
+              if (!acc[clientId]) {
+                acc[clientId] = [];
+              }
+              acc[clientId].push(event);
+              return acc;
+            }, {} as Record<string, typeof postsWithoutVideos>);
+
+            return (
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 rounded-lg p-6 mb-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Video className="w-6 h-6 text-red-600" />
+                  <h3 className="text-xl font-semibold text-red-800">Scheduled Posts Missing Videos</h3>
+                  <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">{postsWithoutVideos.length}</span>
+                </div>
+                <p className="text-sm text-red-700 mb-4">
+                  The following social media posts are scheduled but don't have a video attached. Follow up with clients to get their videos.
+                </p>
+                <div className="space-y-4">
+                  {Object.entries(groupedByClient).map(([clientId, events]) => {
+                    const client = users.find(u => u.id === clientId);
+                    return (
+                      <div key={clientId} className="bg-white rounded-lg p-4 shadow-sm border border-red-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="font-semibold text-gray-800">{client?.companyName || 'Unknown Client'}</span>
+                          <span className="text-sm text-gray-500">({client?.firstName} {client?.lastName || ''})</span>
+                          {client?.phoneNumber && (
+                            <a href={`tel:${client.phoneNumber}`} className="text-blue-600 hover:underline text-sm ml-2">
+                              {client.phoneNumber}
+                            </a>
+                          )}
+                        </div>
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(event => {
+                            const linkedContent = content.find(c => c.id === event.contentId);
+                            const eventDate = new Date(event.date + 'T00:00:00');
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const isPast = eventDate < today;
+                            const isToday = eventDate.getTime() === today.getTime();
+
+                            return (
+                              <div
+                                key={event.id}
+                                className={`p-3 rounded border ${
+                                  isPast ? 'bg-red-100 border-red-300' :
+                                  isToday ? 'bg-yellow-100 border-yellow-300' :
+                                  'bg-gray-50 border-gray-200'
+                                }`}
+                              >
+                                <p className="font-medium text-sm text-gray-800 truncate" title={event.title}>{event.title}</p>
+                                <p className={`text-xs ${isPast ? 'text-red-700 font-semibold' : isToday ? 'text-yellow-700 font-semibold' : 'text-gray-500'}`}>
+                                  {isPast ? '⚠️ OVERDUE: ' : isToday ? '📅 TODAY: ' : ''}
+                                  {new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Today's Scheduled Content */}
           {(() => {

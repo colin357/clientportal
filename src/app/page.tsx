@@ -3101,6 +3101,17 @@ const ClientPortal = () => {
     const [draggedContent, setDraggedContent] = useState(null);
     const [dragOverDate, setDragOverDate] = useState(null);
 
+    // Admin video attachment state
+    const [attachVideoModal, setAttachVideoModal] = useState<{
+      isOpen: boolean;
+      event: any;
+      contentItem: any;
+    }>({ isOpen: false, event: null, contentItem: null });
+    const [adminVideoFile, setAdminVideoFile] = useState<File | null>(null);
+    const [adminVideoLink, setAdminVideoLink] = useState('');
+    const [adminVideoUploading, setAdminVideoUploading] = useState(false);
+    const [adminVideoProgress, setAdminVideoProgress] = useState(0);
+
     // SMS state variables
     const [smsSelectedClients, setSmsSelectedClients] = useState([]);
     const [smsTemplate, setSmsTemplate] = useState('');
@@ -3664,6 +3675,17 @@ const ClientPortal = () => {
                                   {isPast ? '⚠️ OVERDUE: ' : isToday ? '📅 TODAY: ' : ''}
                                   {new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                                 </p>
+                                <button
+                                  onClick={() => setAttachVideoModal({
+                                    isOpen: true,
+                                    event: event,
+                                    contentItem: linkedContent
+                                  })}
+                                  className="mt-2 w-full text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center justify-center gap-1"
+                                >
+                                  <Upload className="w-3 h-3" />
+                                  Attach Video
+                                </button>
                               </div>
                             );
                           })}
@@ -5280,6 +5302,174 @@ const ClientPortal = () => {
                   setShowForm(false);
                   setPublishMode('single');
                 }} className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300">Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Attach Video Modal */}
+        {attachVideoModal.isOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Attach Video to Content</h2>
+                <button
+                  onClick={() => {
+                    setAttachVideoModal({ isOpen: false, event: null, contentItem: null });
+                    setAdminVideoFile(null);
+                    setAdminVideoLink('');
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {attachVideoModal.event && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+                  <p className="font-medium text-gray-800">{attachVideoModal.event.title}</p>
+                  <p className="text-sm text-gray-600">
+                    Scheduled: {new Date(attachVideoModal.event.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Client: {users.find(u => u.id === attachVideoModal.event.clientId)?.companyName || 'Unknown'}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {/* File Upload Option */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Video File</label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => setAdminVideoFile(e.target.files?.[0] || null)}
+                      className="w-full text-sm"
+                    />
+                    {adminVideoFile && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        Selected: {adminVideoFile.name} ({(adminVideoFile.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* OR divider */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t border-gray-300"></div>
+                  <span className="text-gray-500 text-sm">OR</span>
+                  <div className="flex-1 border-t border-gray-300"></div>
+                </div>
+
+                {/* Link Option */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Video Link</label>
+                  <input
+                    type="text"
+                    value={adminVideoLink}
+                    onChange={(e) => setAdminVideoLink(e.target.value)}
+                    placeholder="Google Drive, Dropbox, or direct video link"
+                    className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Upload Progress */}
+                {adminVideoUploading && (
+                  <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                    <div
+                      className="bg-blue-600 h-4 transition-all duration-300 flex items-center justify-center text-xs text-white font-semibold"
+                      style={{ width: `${adminVideoProgress}%` }}
+                    >
+                      {adminVideoProgress > 5 && `${Math.round(adminVideoProgress)}%`}
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Button */}
+                <button
+                  onClick={async () => {
+                    if (!adminVideoFile && !adminVideoLink.trim()) {
+                      alert('Please upload a video file or provide a link');
+                      return;
+                    }
+
+                    setAdminVideoUploading(true);
+                    setAdminVideoProgress(0);
+
+                    try {
+                      let finalVideoLink = adminVideoLink;
+
+                      // If a file is selected, upload it to Firebase Storage
+                      if (adminVideoFile) {
+                        if (!storage) {
+                          alert('❌ Firebase Storage is not configured.');
+                          setAdminVideoUploading(false);
+                          return;
+                        }
+
+                        finalVideoLink = await uploadFileToStorage(
+                          adminVideoFile,
+                          'videos',
+                          (progress) => setAdminVideoProgress(progress)
+                        );
+                      }
+
+                      if (finalVideoLink && finalVideoLink.trim()) {
+                        const newVideo = {
+                          id: Date.now().toString(),
+                          clientId: attachVideoModal.event.clientId,
+                          contentId: attachVideoModal.event.contentId,
+                          contentTitle: attachVideoModal.event.title,
+                          videoLink: finalVideoLink,
+                          description: `Video for: ${attachVideoModal.event.title}`,
+                          status: 'pending',
+                          submittedAt: new Date().toISOString(),
+                          fileName: adminVideoFile ? adminVideoFile.name : null,
+                          uploadedByAdmin: true
+                        };
+
+                        if (!db) {
+                          alert('⚠️ Database not configured.');
+                          setAdminVideoUploading(false);
+                          return;
+                        }
+
+                        await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+
+                        // Log admin activity
+                        await logAdminActivity('video_attached', `Attached video to "${attachVideoModal.event.title}"`, {
+                          contentId: attachVideoModal.event.contentId,
+                          clientId: attachVideoModal.event.clientId
+                        });
+
+                        // Reset and close modal
+                        setAdminVideoFile(null);
+                        setAdminVideoLink('');
+                        setAttachVideoModal({ isOpen: false, event: null, contentItem: null });
+                        alert('Video attached successfully!');
+                      }
+                    } catch (error) {
+                      console.error('❌ Error attaching video:', error);
+                      alert('Error attaching video. Please try again.');
+                    } finally {
+                      setAdminVideoUploading(false);
+                      setAdminVideoProgress(0);
+                    }
+                  }}
+                  disabled={(!adminVideoFile && !adminVideoLink.trim()) || adminVideoUploading}
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {adminVideoUploading ? (
+                    <>Uploading...</>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      Attach Video
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>

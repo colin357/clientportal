@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare } from 'lucide-react';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -3065,6 +3065,7 @@ const ClientPortal = () => {
 
     const [selectedContent, setSelectedContent] = useState(null);
     const [selectedTodayContent, setSelectedTodayContent] = useState(null); // For today's scheduled content modal
+    const [contentDetailItem, setContentDetailItem] = useState(null); // For viewing content details in All Content section
 
     const [groupFilter, setGroupFilterState] = useState(() => getStoredFilter('groupFilter', 'all') as string);
     const setGroupFilter = (filter: string) => {
@@ -4236,7 +4237,11 @@ const ClientPortal = () => {
                       .map(item => {
                       const client = users.find(u => u.id === item.clientId);
                       return (
-                        <div key={item.id} className="p-4 bg-gray-50 rounded">
+                        <div
+                          key={item.id}
+                          className="p-4 bg-gray-50 rounded cursor-pointer hover:bg-gray-100 transition-colors"
+                          onClick={() => setContentDetailItem(item)}
+                        >
                           <div className="flex justify-between mb-2">
                             <div className="flex-1">
                               <p className="font-medium">{item.title}</p>
@@ -4245,7 +4250,8 @@ const ClientPortal = () => {
                             <div className="flex items-center gap-2">
                               <span className={`px-3 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
                               <button
-                                onClick={async () => {
+                                onClick={async (e) => {
+                                  e.stopPropagation();
                                   if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
                                     // Delete from Firestore - onSnapshot will automatically update local state
                                     if (db) {
@@ -5878,6 +5884,216 @@ const ClientPortal = () => {
                 <button onClick={() => setSelectedUser(null)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition">
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Content Detail Modal */}
+        {contentDetailItem && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">{contentDetailItem.title}</h2>
+                  <p className="text-gray-600">
+                    {users.find(u => u.id === contentDetailItem.clientId)?.companyName || 'Unknown Client'}
+                  </p>
+                </div>
+                <button onClick={() => setContentDetailItem(null)} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Status and Type */}
+                <div className="flex flex-wrap gap-3">
+                  <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    contentDetailItem.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    contentDetailItem.status === 'approved' ? 'bg-green-100 text-green-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    Status: {contentDetailItem.status.charAt(0).toUpperCase() + contentDetailItem.status.slice(1)}
+                  </span>
+                  <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    contentDetailItem.type === 'social' ? 'bg-blue-100 text-blue-800' :
+                    contentDetailItem.type === 'email' ? 'bg-green-100 text-green-800' :
+                    contentDetailItem.type === 'blog' ? 'bg-purple-100 text-purple-800' :
+                    contentDetailItem.type === 'landing-page' ? 'bg-indigo-100 text-indigo-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    Type: {contentDetailItem.type === 'landing-page' ? 'Landing Page' :
+                           contentDetailItem.type === 'social' ? 'Social Media' :
+                           contentDetailItem.type === 'blog' ? 'Blog Post' :
+                           contentDetailItem.type === 'email' ? 'Email Campaign' :
+                           contentDetailItem.type.charAt(0).toUpperCase() + contentDetailItem.type.slice(1)}
+                  </span>
+                  {contentDetailItem.uploadedByAdmin && (
+                    <span className="px-4 py-2 rounded-lg text-sm font-medium bg-orange-100 text-orange-800">
+                      Uploaded by Admin
+                    </span>
+                  )}
+                </div>
+
+                {/* Client Information */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Client Information
+                  </h3>
+                  {(() => {
+                    const client = users.find(u => u.id === contentDetailItem.clientId);
+                    return client ? (
+                      <div className="grid md:grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-gray-600">Name:</span>
+                          <span className="ml-2 font-medium">{client.firstName} {client.lastName || ''}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Company:</span>
+                          <span className="ml-2 font-medium">{client.companyName}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Email:</span>
+                          <span className="ml-2 font-medium">{client.email}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600">Client information not available</p>
+                    );
+                  })()}
+                </div>
+
+                {/* Description */}
+                {contentDetailItem.description && (
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Description
+                    </h3>
+                    <p className="text-gray-700 whitespace-pre-wrap">{contentDetailItem.description}</p>
+                  </div>
+                )}
+
+                {/* Content Body */}
+                {contentDetailItem.content && (
+                  <div className="bg-white border rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Content
+                    </h3>
+                    <div className="text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg border max-h-96 overflow-y-auto">
+                      {contentDetailItem.content}
+                    </div>
+                  </div>
+                )}
+
+                {/* Attachments */}
+                {(contentDetailItem.fileLink || contentDetailItem.videoLink) && (
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <Upload className="w-5 h-5" />
+                      Attachments
+                    </h3>
+                    <div className="space-y-2">
+                      {contentDetailItem.fileLink && (
+                        <a
+                          href={contentDetailItem.fileLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          <FileText className="w-4 h-4" />
+                          View Attached File
+                        </a>
+                      )}
+                      {contentDetailItem.videoLink && (
+                        <a
+                          href={contentDetailItem.videoLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          <Video className="w-4 h-4" />
+                          View Attached Video
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Feedback */}
+                {contentDetailItem.feedback && (
+                  <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5" />
+                      Admin Feedback
+                    </h3>
+                    <p className="text-gray-700 whitespace-pre-wrap">{contentDetailItem.feedback}</p>
+                  </div>
+                )}
+
+                {/* Timestamps */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <Calendar className="w-5 h-5" />
+                    Timeline
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-600">Created:</span>
+                      <span className="ml-2 font-medium">
+                        {new Date(contentDetailItem.createdAt).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    {contentDetailItem.reviewedAt && (
+                      <div>
+                        <span className="text-gray-600">Reviewed:</span>
+                        <span className="ml-2 font-medium">
+                          {new Date(contentDetailItem.reviewedAt).toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => setContentDetailItem(null)}
+                    className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg hover:bg-gray-300 transition"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (confirm(`Delete "${contentDetailItem.title}"? This cannot be undone.`)) {
+                        if (db) {
+                          await deleteDoc(doc(db, 'content', contentDetailItem.id));
+                        }
+                        setContentDetailItem(null);
+                      }
+                    }}
+                    className="px-6 bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2"
+                  >
+                    <X className="w-5 h-5" />
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           </div>

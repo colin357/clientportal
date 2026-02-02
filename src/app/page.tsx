@@ -2638,6 +2638,188 @@ const ClientPortal = () => {
                 saveSession(updated, 'dashboard');
               }} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 mb-8">Save Profile & Branding</button>
 
+              {/* Video Upload Section */}
+              <div className="border-t pt-8 mt-8">
+                <div className="flex items-center gap-3 mb-4">
+                  <Video className="w-6 h-6 text-purple-600" />
+                  <h4 className="font-semibold">Upload Videos</h4>
+                </div>
+                <p className="text-sm text-gray-600 mb-6">Upload videos for editing without attaching them to specific content</p>
+
+                <div className="grid md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload Video File</label>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-purple-400 transition-colors">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          setSelectedVideoFile(file || null);
+                        }}
+                        className="text-sm"
+                        disabled={uploadingVideo}
+                      />
+                    </div>
+                    {selectedVideoFile && (
+                      <p className="text-xs text-gray-600 mt-2">
+                        {selectedVideoFile.name} ({(selectedVideoFile.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    )}
+
+                    {/* OR divider */}
+                    <div className="flex items-center gap-2 my-3">
+                      <div className="flex-1 border-t border-gray-300"></div>
+                      <span className="text-gray-400 text-xs">OR</span>
+                      <div className="flex-1 border-t border-gray-300"></div>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={videoLink}
+                      onChange={(e) => setVideoLink(e.target.value)}
+                      placeholder="Google Drive or Dropbox link"
+                      className="w-full px-4 py-2 border rounded outline-none focus:ring-2 focus:ring-purple-500"
+                      disabled={uploadingVideo}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Video Description</label>
+                    <textarea
+                      value={videoDescription}
+                      onChange={(e) => setVideoDescription(e.target.value)}
+                      placeholder="Describe your video or what you'd like done with it..."
+                      className="w-full px-4 py-2 border rounded outline-none focus:ring-2 focus:ring-purple-500 h-32"
+                      disabled={uploadingVideo}
+                    />
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                {uploadingVideo && (
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden mb-4">
+                    <div
+                      className="bg-purple-600 h-3 transition-all duration-300 flex items-center justify-center text-xs text-white font-semibold"
+                      style={{ width: `${uploadProgress}%` }}
+                    >
+                      {uploadProgress > 5 && `${Math.round(uploadProgress)}%`}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={async () => {
+                    if (!selectedVideoFile && !videoLink?.trim()) {
+                      alert('Please upload a video file or provide a link');
+                      return;
+                    }
+
+                    setUploadingVideo(true);
+                    setUploadProgress(0);
+
+                    try {
+                      let finalVideoLink = videoLink;
+
+                      // Upload file if selected
+                      if (selectedVideoFile) {
+                        if (!storage) {
+                          alert('Firebase Storage is not configured. Please use a link instead.');
+                          setUploadingVideo(false);
+                          return;
+                        }
+
+                        finalVideoLink = await uploadFileToStorage(
+                          selectedVideoFile,
+                          'videos',
+                          (progress) => setUploadProgress(progress)
+                        );
+                      }
+
+                      if (finalVideoLink && finalVideoLink.trim()) {
+                        const newVideo = {
+                          id: Date.now().toString(),
+                          clientId: effectiveClientId,
+                          videoLink: finalVideoLink,
+                          description: videoDescription || 'No description provided',
+                          status: 'pending',
+                          submittedAt: new Date().toISOString(),
+                          fileName: selectedVideoFile ? selectedVideoFile.name : null
+                        };
+
+                        if (!db) {
+                          alert('Cloud storage not configured. Video not saved.');
+                          setUploadingVideo(false);
+                          return;
+                        }
+
+                        await setDoc(doc(db, 'videos', newVideo.id), newVideo);
+
+                        // Send SMS notification
+                        await sendSMS(
+                          '+17867882699',
+                          `New video uploaded by ${currentUser.companyName}. Description: ${videoDescription || 'None'}. Check the admin portal!`
+                        );
+
+                        // Clear form
+                        setSelectedVideoFile(null);
+                        setVideoLink('');
+                        setVideoDescription('');
+                        await loadUserVideos();
+                        alert('Video submitted successfully!');
+                      }
+                    } catch (error) {
+                      console.error('Error submitting video:', error);
+                      alert('Error submitting video. Please try again.');
+                    } finally {
+                      setUploadingVideo(false);
+                      setUploadProgress(0);
+                    }
+                  }}
+                  disabled={(!selectedVideoFile && !videoLink?.trim()) || uploadingVideo}
+                  className="bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Upload className="w-5 h-5" />
+                  {uploadingVideo ? 'Uploading...' : 'Submit Video for Editing'}
+                </button>
+
+                {/* Previously Uploaded Videos */}
+                {userVideos.filter(v => !v.contentId).length > 0 && (
+                  <div className="mt-8 border-t pt-6">
+                    <h5 className="font-medium text-gray-800 mb-4">Your Uploaded Videos</h5>
+                    <div className="space-y-3">
+                      {userVideos.filter(v => !v.contentId).map(video => (
+                        <div key={video.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-800">{video.description}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Submitted {new Date(video.submittedAt).toLocaleDateString()}
+                              {video.fileName && ` • ${video.fileName}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              video.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              video.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
+                              'bg-green-100 text-green-800'
+                            }`}>
+                              {video.status === 'pending' ? 'Pending Review' :
+                               video.status === 'in-progress' ? 'Being Edited' :
+                               'Completed'}
+                            </span>
+                            {video.completedLink && (
+                              <a href={video.completedLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1">
+                                <Download className="w-4 h-4" />Download
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Team Members Section */}
               <div className="border-t pt-8 mt-8">
                 <h3 className="text-xl font-semibold mb-4">Team Members</h3>

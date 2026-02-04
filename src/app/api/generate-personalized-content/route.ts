@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
     // Build personalized prompt
     const industry = Array.isArray(onboardingAnswers.industry) ? onboardingAnswers.industry.join(', ') : onboardingAnswers.industry || 'real estate or mortgage';
     const targetAudience = Array.isArray(onboardingAnswers.targetAudience) ? onboardingAnswers.targetAudience.join(', ') : onboardingAnswers.targetAudience || 'general audience';
-    const goals = Array.isArray(onboardingAnswers.goals) ? onboardingAnswers.goals.join(', ') : onboardingAnswers.goals || 'marketing';
     const brandVoice = Array.isArray(onboardingAnswers.brandVoice) ? onboardingAnswers.brandVoice.join(', ') : onboardingAnswers.brandVoice || 'professional';
+    const specialties = Array.isArray(onboardingAnswers.specialties) ? onboardingAnswers.specialties.join(', ') : onboardingAnswers.specialties || '';
 
     // Build conversation history context
     let historyContext = '';
@@ -52,10 +52,12 @@ SPEAKER INFORMATION (use these exact values when needed):
 - Company Name: ${user.companyName}
 
 Target Audience: ${targetAudience}
-Goals: ${goals}
 Brand Voice: ${brandVoice}
-${onboardingAnswers.differentiators ? `What makes them unique: ${onboardingAnswers.differentiators}` : ''}
-${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}${historyContext}${adminContext}
+${specialties ? `Specialties: ${specialties}` : ''}
+${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}
+${onboardingAnswers.pricePoint ? `Price Point: ${onboardingAnswers.pricePoint}` : ''}
+${onboardingAnswers.clientPainPoints ? `Client Pain Points to Address: ${onboardingAnswers.clientPainPoints}` : ''}
+${onboardingAnswers.topicsToAvoid ? `\nTOPICS TO AVOID (DO NOT create content about these): ${onboardingAnswers.topicsToAvoid}` : ''}${historyContext}${adminContext}
 
 CRITICAL: Create EXACTLY 5 pieces of EACH type below. NO MORE, NO LESS. Total output must be exactly 15 pieces.
 
@@ -69,6 +71,9 @@ CRITICAL: Create EXACTLY 5 pieces of EACH type below. NO MORE, NO LESS. Total ou
 - CRITICAL: Scripts must be PACKED with specific, actionable details and valuable information
 - Include CONCRETE examples, specific numbers, step-by-step advice, or insider tips
 - Don't just give surface-level advice - provide real depth and practical takeaways
+- HUMANIZE THE WRITING: Vary sentence length, use contractions, include personal observations
+- Avoid AI phrases like "dive into", "unlock", "leverage", "game-changer", "navigate the landscape"
+- Write hooks that sound like real people talking, not marketing copy
 - IMPORTANT: DO NOT include self-introductions like "Hi, I'm [name]" or "I'm [name] with [company]" unless it's genuinely necessary for establishing credentials on a specific topic
 - Focus on delivering MEANINGFUL INFORMATION and ACTIONABLE ADVICE to the viewer immediately
 - Jump straight into the valuable content with a strong hook
@@ -83,6 +88,11 @@ CRITICAL: Create EXACTLY 5 pieces of EACH type below. NO MORE, NO LESS. Total ou
 - Use proper heading structure (H2, H3) for SEO
 - Provide real depth and practical value - not surface-level fluff
 - Write as if this is going to be a cornerstone piece of content for their website
+- HUMANIZE: Write like a knowledgeable friend explaining things, not a textbook
+- Mix up paragraph lengths - some short for impact, others longer for depth
+- Use "you" and "your" to speak directly to readers
+- Avoid stiff, formal language - be conversational while still professional
+- NO AI clichés: skip "in today's competitive market", "unlock your potential", "navigate the complexities"
 
 **Email Campaigns (EXACTLY 5 pieces - NOT 15):**
 - Subject lines and full email body
@@ -91,6 +101,10 @@ CRITICAL: Create EXACTLY 5 pieces of EACH type below. NO MORE, NO LESS. Total ou
 - Include clear CTAs
 - IMPORTANT: DO NOT reference specific dates, months, or years (like "October 2023") - keep content evergreen
 - Use relative time references like "this month", "this season", "recently" instead of specific dates
+- HUMANIZE: Write emails that sound like they're from a real person, not a corporate template
+- Use casual, warm openings - skip generic "I hope this email finds you well"
+- Keep sentences punchy and easy to scan
+- Avoid buzzwords and corporate jargon - write like you actually talk
 
 For each piece, provide:
 - type: "social", "blog", or "email"
@@ -114,7 +128,21 @@ REMINDER: Return a JSON array with EXACTLY 15 total objects: 5 social + 5 blog +
         messages: [
           {
             role: 'system',
-            content: 'You are a professional marketing content writer specializing in real estate and mortgage industries. Always respond with valid JSON arrays containing exactly 15 content pieces (5 social posts, 5 blog posts, 5 email campaigns). Create in-depth, valuable content with specific details and actionable insights.'
+            content: `You are a professional marketing content writer specializing in real estate and mortgage industries. Always respond with valid JSON arrays containing exactly 15 content pieces (5 social posts, 5 blog posts, 5 email campaigns). Create in-depth, valuable content with specific details and actionable insights.
+
+CRITICAL - WRITE LIKE A HUMAN, NOT AN AI:
+- NEVER use these overused AI phrases: "dive into", "delve into", "unlock", "leverage", "game-changer", "elevate", "empower", "seamless", "robust", "cutting-edge", "navigate", "landscape", "realm", "embark", "foster", "encompass", "firstly/secondly/lastly", "in today's [X]", "in conclusion"
+- AVOID generic openings like "Are you looking to..." or "Want to learn how to..."
+- VARY your sentence structure - mix short punchy sentences with longer ones
+- Use contractions naturally (you're, don't, isn't, we'll, that's)
+- Include specific details, numbers, and examples instead of vague claims
+- Write like you're talking to a friend who asked for advice - be direct and real
+- Have opinions and take stances - don't be wishy-washy
+- Use casual transitions like "Here's the thing", "Look", "The truth is", "Real talk"
+- Start some sentences with "And" or "But" - it's natural
+- Avoid excessive exclamation points and forced enthusiasm
+- Skip the generic intros - get to the point quickly
+- Sound like a real person with experience, not a corporate brochure`
           },
           {
             role: 'user',

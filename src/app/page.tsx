@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare } from 'lucide-react';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { RichTextDisplay } from '@/components/ui/rich-text-display';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -1783,7 +1785,9 @@ const ClientPortal = () => {
                                 </span>
                               )}
                             </div>
-                            <p className="text-gray-600 text-sm mb-3 whitespace-pre-wrap">{item.content}</p>
+                            <div className="text-gray-600 text-sm mb-3">
+                              <RichTextDisplay content={item.content} />
+                            </div>
                             {item.fileLink && (
                               <a href={item.fileLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2">
                                 <FileText className="w-4 h-4" />View Attachment
@@ -1994,7 +1998,7 @@ const ClientPortal = () => {
                       </div>
                       <p className="text-sm text-gray-600 mb-4">{item.description}</p>
                       <div className="bg-white rounded p-4 mb-4 max-h-60 overflow-y-auto">
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.content}</p>
+                        <RichTextDisplay content={item.content} className="text-sm text-gray-700" />
                       </div>
                       {item.reviewedAt && (
                         <p className="text-xs text-gray-500">Approved on {new Date(item.reviewedAt).toLocaleDateString()}</p>
@@ -2031,7 +2035,7 @@ const ClientPortal = () => {
                       </div>
                       <p className="text-sm text-gray-600 mb-4">{item.description}</p>
                       <div className="bg-white rounded p-4 mb-4 max-h-60 overflow-y-auto">
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.content}</p>
+                        <RichTextDisplay content={item.content} className="text-sm text-gray-700" />
                       </div>
                       {item.reviewedAt && (
                         <p className="text-xs text-gray-500">Approved on {new Date(item.reviewedAt).toLocaleDateString()}</p>
@@ -3001,7 +3005,7 @@ const ClientPortal = () => {
                 <button onClick={() => { setSelectedContent(null); setFeedback(''); }} className="text-gray-500"><X className="w-6 h-6" /></button>
               </div>
               <div className="bg-gray-50 p-4 rounded mb-6">
-                <p className="whitespace-pre-wrap">{selectedContent.content}</p>
+                <RichTextDisplay content={selectedContent.content} />
                 {selectedContent.fileLink && (
                   <a href={selectedContent.fileLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-blue-600 mt-4"><FileText className="w-4 h-4" />View File</a>
                 )}
@@ -5509,7 +5513,14 @@ const ClientPortal = () => {
                 </select>
                 <input type="text" value={newContent.title} onChange={(e) => setNewContent({ ...newContent, title: e.target.value })} placeholder="Title" className="w-full px-4 py-2 border rounded" />
                 <input type="text" value={newContent.description} onChange={(e) => setNewContent({ ...newContent, description: e.target.value })} placeholder="Description" className="w-full px-4 py-2 border rounded" />
-                <textarea value={newContent.content} onChange={(e) => setNewContent({ ...newContent, content: e.target.value })} placeholder="Content" className="w-full px-4 py-3 border rounded" rows="6" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                  <RichTextEditor
+                    value={newContent.content}
+                    onChange={(value) => setNewContent({ ...newContent, content: value })}
+                    placeholder="Enter content with formatting..."
+                  />
+                </div>
                 <input type="text" value={newContent.fileLink} onChange={(e) => setNewContent({ ...newContent, fileLink: e.target.value })} placeholder="File Link (optional)" className="w-full px-4 py-2 border rounded" />
               </div>
               <div className="flex gap-3 mt-6">

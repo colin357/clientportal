@@ -735,7 +735,7 @@ const ClientPortal = () => {
 
   if (view === 'login') return <LoginView />;
   if (view === 'admin-login') return <AdminLoginView />;
-  if (view === 'onboarding') return <OnboardingView currentUser={currentUser} handleOnboarding={handleOnboarding} />;
+  if (view === 'onboarding') return <OnboardingView {...onboardingViewProps} />;
   if (view === 'dashboard') return <DashboardView />;
   if (view === 'admin') return <AdminView />;
 
@@ -1030,6 +1030,8 @@ const ClientPortal = () => {
       </div>
     );
   }
+
+  const onboardingViewProps = { currentUser, handleOnboarding };
 
   function DashboardView() {
     // Team members should see content for their parent client

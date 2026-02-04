@@ -69,6 +69,127 @@ try {
   console.error('❌ Firebase initialization error:', error);
 }
 
+// OnboardingView is defined outside ClientPortal to prevent state reset on parent re-renders
+// (Firebase real-time listeners cause parent re-renders which would reset the form)
+function OnboardingView({ currentUser, handleOnboarding }) {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [answers, setAnswers] = useState({
+    industry: [], targetAudience: [], brandVoice: [], specialties: [],
+    primaryMarkets: '', pricePoint: '', clientPainPoints: '', topicsToAvoid: '', styleInspirations: '', successMetrics: '', agencyExperience: ''
+  });
+  const [otherInputs, setOtherInputs] = useState({
+    industry: '', targetAudience: '', brandVoice: '', specialties: ''
+  });
+
+  const industries = ['Realtor', 'Loan Officer'];
+  const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'];
+  const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
+  const specialtyOptions = ['First-Time Buyers', 'Luxury Homes', 'Investment Properties', 'Commercial', 'VA Loans', 'FHA Loans', 'Refinancing', 'New Construction', 'Relocation', 'Downsizing'];
+
+  const questions = [
+    { type: 'buttons', key: 'industry', label: 'What do you do?', options: industries },
+    { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
+    { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },
+    { type: 'buttons', key: 'specialties', label: 'What are your specialties? (Select all that apply)', options: specialtyOptions },
+    { type: 'text', key: 'primaryMarkets', label: 'What are your primary markets? (locations)', placeholder: 'e.g., Los Angeles, Orange County, San Diego' },
+    { type: 'text', key: 'pricePoint', label: 'Average price point or loan size', placeholder: 'e.g., $500K-$1M, $300K loans' },
+    { type: 'text', key: 'clientPainPoints', label: 'What are the biggest pain points or challenges your clients face?', placeholder: 'e.g., Saving for a down payment, understanding the loan process, finding the right neighborhood...' },
+    { type: 'text', key: 'topicsToAvoid', label: 'Are there any topics you want to AVOID in your content?', placeholder: 'e.g., Political topics, specific competitors, certain neighborhoods...' },
+    { type: 'text', key: 'styleInspirations', label: 'Are there creators or competitors whose style you like?', placeholder: 'List any accounts or brands you admire...' },
+    { type: 'text', key: 'successMetrics', label: 'What does success look like in the next 30, 60, and 90 days?', placeholder: 'Describe your goals for each timeframe...' },
+    { type: 'text', key: 'agencyExperience', label: 'Have you worked with a marketing agency before? What did you like or dislike?', placeholder: 'Share your experience...' }
+  ];
+
+  const currentQuestion = questions[currentStep];
+
+  const toggleOption = (key, option) => {
+    const current = answers[key] || [];
+    if (current.includes(option)) {
+      setAnswers({ ...answers, [key]: current.filter(item => item !== option) });
+    } else {
+      setAnswers({ ...answers, [key]: [...current, option] });
+    }
+  };
+
+  const isAnswerValid = () => {
+    if (currentQuestion.type === 'text') {
+      return answers[currentQuestion.key]?.trim();
+    } else {
+      const hasSelection = answers[currentQuestion.key]?.length > 0;
+      const hasOtherText = answers[currentQuestion.key]?.includes('Other') ? otherInputs[currentQuestion.key]?.trim() : true;
+      return hasSelection && hasOtherText;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4 flex items-center justify-center">
+      <div className="max-w-3xl w-full bg-white rounded-lg shadow-xl p-8">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome, {currentUser.firstName}! 👋</h1>
+        <p className="text-gray-600 mb-8">Let's get to know your business</p>
+
+        <div className="flex gap-2 mb-8">
+          {questions.map((_, idx) => (
+            <div key={idx} className={`h-2 flex-1 rounded-full transition ${idx <= currentStep ? 'bg-purple-600' : 'bg-gray-200'}`} />
+          ))}
+        </div>
+
+        <div className="mb-2 text-sm text-purple-600 font-medium">Question {currentStep + 1} of {questions.length}</div>
+        <label className="block text-xl font-semibold text-gray-800 mb-4">{currentQuestion.label}</label>
+
+        {currentQuestion.type === 'text' ? (
+          <textarea value={answers[currentQuestion.key]} onChange={(e) => setAnswers({ ...answers, [currentQuestion.key]: e.target.value })} placeholder={currentQuestion.placeholder} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-6" rows="4" />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+              {currentQuestion.options.map(opt => (
+                <button key={opt} onClick={() => toggleOption(currentQuestion.key, opt)} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes(opt) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                  {opt}
+                </button>
+              ))}
+              <button onClick={() => toggleOption(currentQuestion.key, 'Other')} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes('Other') ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
+                Other
+              </button>
+            </div>
+            {(answers[currentQuestion.key] || []).includes('Other') && (
+              <input type="text" value={otherInputs[currentQuestion.key] || ''} onChange={(e) => setOtherInputs({ ...otherInputs, [currentQuestion.key]: e.target.value })} placeholder="Please specify..." className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6" />
+            )}
+          </>
+        )}
+
+        <div className="flex gap-3">
+          {currentStep > 0 && (
+            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center gap-2">
+              <ChevronLeft className="w-5 h-5" />Back
+            </button>
+          )}
+          <button onClick={() => {
+            if (currentStep < questions.length - 1) {
+              setCurrentStep(currentStep + 1);
+            } else {
+              const finalAnswers = { ...answers, otherInputs };
+              handleOnboarding(finalAnswers);
+            }
+          }} className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
+            Skip
+          </button>
+          <button onClick={() => {
+            if (isAnswerValid()) {
+              if (currentStep < questions.length - 1) {
+                setCurrentStep(currentStep + 1);
+              } else {
+                const finalAnswers = { ...answers, otherInputs };
+                handleOnboarding(finalAnswers);
+              }
+            }
+          }} disabled={!isAnswerValid()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
+            {currentStep < questions.length - 1 ? <><span>Next</span><ChevronRight className="w-5 h-5" /></> : 'Complete Setup'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const ClientPortal = () => {
   const [view, setView] = useState('login');
   const [currentUser, setCurrentUser] = useState(null);
@@ -614,7 +735,7 @@ const ClientPortal = () => {
 
   if (view === 'login') return <LoginView />;
   if (view === 'admin-login') return <AdminLoginView />;
-  if (view === 'onboarding') return <OnboardingView />;
+  if (view === 'onboarding') return <OnboardingView currentUser={currentUser} handleOnboarding={handleOnboarding} />;
   if (view === 'dashboard') return <DashboardView />;
   if (view === 'admin') return <AdminView />;
 
@@ -905,125 +1026,6 @@ const ClientPortal = () => {
               <button onClick={() => setView('login')} className="w-full mt-2 text-gray-600 hover:underline">← Back to Client Login</button>
             </>
           )}
-        </div>
-      </div>
-    );
-  }
-
-  function OnboardingView() {
-    const [currentStep, setCurrentStep] = useState(0);
-    const [answers, setAnswers] = useState({
-      industry: [], targetAudience: [], brandVoice: [], specialties: [],
-      primaryMarkets: '', pricePoint: '', clientPainPoints: '', topicsToAvoid: '', styleInspirations: '', successMetrics: '', agencyExperience: ''
-    });
-    const [otherInputs, setOtherInputs] = useState({
-      industry: '', targetAudience: '', brandVoice: '', specialties: ''
-    });
-
-    const industries = ['Realtor', 'Loan Officer'];
-    const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'];
-    const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
-    const specialtyOptions = ['First-Time Buyers', 'Luxury Homes', 'Investment Properties', 'Commercial', 'VA Loans', 'FHA Loans', 'Refinancing', 'New Construction', 'Relocation', 'Downsizing'];
-
-    const questions = [
-      { type: 'buttons', key: 'industry', label: 'What do you do?', options: industries },
-      { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
-      { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },
-      { type: 'buttons', key: 'specialties', label: 'What are your specialties? (Select all that apply)', options: specialtyOptions },
-      { type: 'text', key: 'primaryMarkets', label: 'What are your primary markets? (locations)', placeholder: 'e.g., Los Angeles, Orange County, San Diego' },
-      { type: 'text', key: 'pricePoint', label: 'Average price point or loan size', placeholder: 'e.g., $500K-$1M, $300K loans' },
-      { type: 'text', key: 'clientPainPoints', label: 'What are the biggest pain points or challenges your clients face?', placeholder: 'e.g., Saving for a down payment, understanding the loan process, finding the right neighborhood...' },
-      { type: 'text', key: 'topicsToAvoid', label: 'Are there any topics you want to AVOID in your content?', placeholder: 'e.g., Political topics, specific competitors, certain neighborhoods...' },
-      { type: 'text', key: 'styleInspirations', label: 'Are there creators or competitors whose style you like?', placeholder: 'List any accounts or brands you admire...' },
-      { type: 'text', key: 'successMetrics', label: 'What does success look like in the next 30, 60, and 90 days?', placeholder: 'Describe your goals for each timeframe...' },
-      { type: 'text', key: 'agencyExperience', label: 'Have you worked with a marketing agency before? What did you like or dislike?', placeholder: 'Share your experience...' }
-    ];
-
-    const currentQuestion = questions[currentStep];
-
-    const toggleOption = (key, option) => {
-      const current = answers[key] || [];
-      if (current.includes(option)) {
-        setAnswers({ ...answers, [key]: current.filter(item => item !== option) });
-      } else {
-        setAnswers({ ...answers, [key]: [...current, option] });
-      }
-    };
-
-    const isAnswerValid = () => {
-      if (currentQuestion.type === 'text') {
-        return answers[currentQuestion.key]?.trim();
-      } else {
-        const hasSelection = answers[currentQuestion.key]?.length > 0;
-        const hasOtherText = answers[currentQuestion.key]?.includes('Other') ? otherInputs[currentQuestion.key]?.trim() : true;
-        return hasSelection && hasOtherText;
-      }
-    };
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4 flex items-center justify-center">
-        <div className="max-w-3xl w-full bg-white rounded-lg shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome, {currentUser.firstName}! 👋</h1>
-          <p className="text-gray-600 mb-8">Let's get to know your business</p>
-          
-          <div className="flex gap-2 mb-8">
-            {questions.map((_, idx) => (
-              <div key={idx} className={`h-2 flex-1 rounded-full transition ${idx <= currentStep ? 'bg-purple-600' : 'bg-gray-200'}`} />
-            ))}
-          </div>
-
-          <div className="mb-2 text-sm text-purple-600 font-medium">Question {currentStep + 1} of {questions.length}</div>
-          <label className="block text-xl font-semibold text-gray-800 mb-4">{currentQuestion.label}</label>
-
-          {currentQuestion.type === 'text' ? (
-            <textarea value={answers[currentQuestion.key]} onChange={(e) => setAnswers({ ...answers, [currentQuestion.key]: e.target.value })} placeholder={currentQuestion.placeholder} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-6" rows="4" />
-          ) : (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-                {currentQuestion.options.map(opt => (
-                  <button key={opt} onClick={() => toggleOption(currentQuestion.key, opt)} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes(opt) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
-                    {opt}
-                  </button>
-                ))}
-                <button onClick={() => toggleOption(currentQuestion.key, 'Other')} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes('Other') ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
-                  Other
-                </button>
-              </div>
-              {(answers[currentQuestion.key] || []).includes('Other') && (
-                <input type="text" value={otherInputs[currentQuestion.key] || ''} onChange={(e) => setOtherInputs({ ...otherInputs, [currentQuestion.key]: e.target.value })} placeholder="Please specify..." className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6" />
-              )}
-            </>
-          )}
-
-          <div className="flex gap-3">
-            {currentStep > 0 && (
-              <button onClick={() => setCurrentStep(currentStep - 1)} className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center gap-2">
-                <ChevronLeft className="w-5 h-5" />Back
-              </button>
-            )}
-            <button onClick={() => {
-              if (currentStep < questions.length - 1) {
-                setCurrentStep(currentStep + 1);
-              } else {
-                const finalAnswers = { ...answers, otherInputs };
-                handleOnboarding(finalAnswers);
-              }
-            }} className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
-              Skip
-            </button>
-            <button onClick={() => {
-              if (isAnswerValid()) {
-                if (currentStep < questions.length - 1) {
-                  setCurrentStep(currentStep + 1);
-                } else {
-                  const finalAnswers = { ...answers, otherInputs };
-                  handleOnboarding(finalAnswers);
-                }
-              }
-            }} disabled={!isAnswerValid()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
-              {currentStep < questions.length - 1 ? <><span>Next</span><ChevronRight className="w-5 h-5" /></> : 'Complete Setup'}
-            </button>
-          </div>
         </div>
       </div>
     );

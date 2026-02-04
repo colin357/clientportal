@@ -733,6 +733,9 @@ const ClientPortal = () => {
     await saveContentItems([updatedItem]);
   };
 
+  // Define props for OnboardingView before using them (const declarations are not hoisted)
+  const onboardingViewProps = { currentUser, handleOnboarding };
+
   if (view === 'login') return <LoginView />;
   if (view === 'admin-login') return <AdminLoginView />;
   if (view === 'onboarding') return <OnboardingView {...onboardingViewProps} />;
@@ -1030,8 +1033,6 @@ const ClientPortal = () => {
       </div>
     );
   }
-
-  const onboardingViewProps = { currentUser, handleOnboarding };
 
   function DashboardView() {
     // Team members should see content for their parent client

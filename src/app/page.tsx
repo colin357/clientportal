@@ -497,7 +497,7 @@ const ClientPortal = () => {
     // Save only the updated item (not all content) - let real-time sync update state
     const saved = await saveContentItems([updatedItem]);
     if (!saved) {
-      alert('⚠️ Failed to save content status. Please try again.');
+      alert(`⚠️ ${currentUser?.firstName || 'User'}, failed to save content status. Please try again.`);
       return;
     }
 
@@ -1779,7 +1779,7 @@ const ClientPortal = () => {
                                     const link = contentVideoLinks[item.id];
 
                                     if (!file && !link?.trim()) {
-                                      alert('Please upload a video file or provide a link');
+                                      alert(`${currentUser.firstName}, please upload a video file or provide a link`);
                                       return;
                                     }
 
@@ -1791,7 +1791,7 @@ const ClientPortal = () => {
                                       // Upload file if selected
                                       if (file) {
                                         if (!storage) {
-                                          alert('❌ Firebase Storage is not configured. Please use a link instead.');
+                                          alert(`❌ ${currentUser.firstName}, Firebase Storage is not configured. Please use a link instead.`);
                                           setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
                                           return;
                                         }
@@ -1820,7 +1820,7 @@ const ClientPortal = () => {
                                         };
 
                                         if (!db) {
-                                          alert('⚠️ Cloud storage not configured. Video not saved.');
+                                          alert(`⚠️ ${currentUser.firstName}, cloud storage not configured. Video not saved.`);
                                           setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
                                           return;
                                         }
@@ -1837,11 +1837,11 @@ const ClientPortal = () => {
                                         setContentVideoFiles(prev => ({ ...prev, [item.id]: null }));
                                         setContentVideoLinks(prev => ({ ...prev, [item.id]: '' }));
                                         await loadUserVideos();
-                                        alert('Video submitted successfully!');
+                                        alert(`✅ ${currentUser.firstName}, your video was submitted successfully!`);
                                       }
                                     } catch (error) {
                                       console.error('❌ Error submitting video:', error);
-                                      alert('Error submitting video. Please try again.');
+                                      alert(`❌ ${currentUser.firstName}, there was an error submitting your video. Please try again.`);
                                     } finally {
                                       setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
                                     }
@@ -2023,7 +2023,7 @@ const ClientPortal = () => {
                     <button
                       onClick={async () => {
                         if (!aiTopic.trim() || !aiPurpose.trim()) {
-                          alert('Please fill in the topic and purpose fields');
+                          alert(`${currentUser.firstName}, please fill in the topic and purpose fields`);
                           return;
                         }
 
@@ -2046,11 +2046,11 @@ const ClientPortal = () => {
                           if (response.ok) {
                             setGeneratedIdea(data.idea);
                           } else {
-                            alert('Error generating idea: ' + data.error);
+                            alert(`❌ ${currentUser.firstName}, error generating idea: ` + data.error);
                           }
                         } catch (error) {
                           console.error('Error:', error);
-                          alert('Failed to generate content idea. Please try again.');
+                          alert(`❌ ${currentUser.firstName}, failed to generate content idea. Please try again.`);
                         } finally {
                           setGeneratingIdea(false);
                         }
@@ -2092,7 +2092,7 @@ const ClientPortal = () => {
                       <button
                         onClick={async () => {
                           if (!ideaFeedback.trim()) {
-                            alert('Please provide feedback on what to change');
+                            alert(`${currentUser.firstName}, please provide feedback on what to change`);
                             return;
                           }
 
@@ -2118,11 +2118,11 @@ const ClientPortal = () => {
                               setGeneratedIdea(data.idea);
                               setIdeaFeedback('');
                             } else {
-                              alert('Error regenerating idea: ' + data.error);
+                              alert(`❌ ${currentUser.firstName}, error regenerating idea: ` + data.error);
                             }
                           } catch (error) {
                             console.error('Error:', error);
-                            alert('Failed to regenerate content idea. Please try again.');
+                            alert(`❌ ${currentUser.firstName}, failed to regenerate content idea. Please try again.`);
                           } finally {
                             setGeneratingIdea(false);
                           }
@@ -2493,7 +2493,7 @@ const ClientPortal = () => {
                           const file = e.target.files[0];
                           if (file) {
                             if (!storage) {
-                              alert('❌ Storage not configured. Please use URL instead.');
+                              alert(`❌ ${currentUser.firstName}, storage not configured. Please use URL instead.`);
                               return;
                             }
 
@@ -2507,10 +2507,10 @@ const ClientPortal = () => {
                                 (progress) => setHeadshotProgress(progress)
                               );
                               setHeadshot(url);
-                              alert('✅ Headshot uploaded successfully!');
+                              alert(`✅ ${currentUser.firstName}, your headshot was uploaded successfully!`);
                             } catch (error) {
                               console.error('Upload error:', error);
-                              alert('❌ Upload failed: ' + error.message);
+                              alert(`❌ ${currentUser.firstName}, upload failed: ` + error.message);
                             } finally {
                               setUploadingHeadshot(false);
                               setHeadshotProgress(0);
@@ -2568,7 +2568,7 @@ const ClientPortal = () => {
                           const file = e.target.files[0];
                           if (file) {
                             if (!storage) {
-                              alert('❌ Storage not configured. Please use URL instead.');
+                              alert(`❌ ${currentUser.firstName}, storage not configured. Please use URL instead.`);
                               return;
                             }
 
@@ -2582,10 +2582,10 @@ const ClientPortal = () => {
                                 (progress) => setLogoProgress(progress)
                               );
                               setCompanyLogo(url);
-                              alert('✅ Logo uploaded successfully!');
+                              alert(`✅ ${currentUser.firstName}, your logo was uploaded successfully!`);
                             } catch (error) {
                               console.error('Upload error:', error);
-                              alert('❌ Upload failed: ' + error.message);
+                              alert(`❌ ${currentUser.firstName}, upload failed: ` + error.message);
                             } finally {
                               setUploadingLogo(false);
                               setLogoProgress(0);
@@ -2711,7 +2711,7 @@ const ClientPortal = () => {
                 <button
                   onClick={async () => {
                     if (!selectedVideoFile && !videoLink?.trim()) {
-                      alert('Please upload a video file or provide a link');
+                      alert(`${currentUser.firstName}, please upload a video file or provide a link`);
                       return;
                     }
 
@@ -2724,7 +2724,7 @@ const ClientPortal = () => {
                       // Upload file if selected
                       if (selectedVideoFile) {
                         if (!storage) {
-                          alert('Firebase Storage is not configured. Please use a link instead.');
+                          alert(`❌ ${currentUser.firstName}, Firebase Storage is not configured. Please use a link instead.`);
                           setUploadingVideo(false);
                           return;
                         }
@@ -2748,7 +2748,7 @@ const ClientPortal = () => {
                         };
 
                         if (!db) {
-                          alert('Cloud storage not configured. Video not saved.');
+                          alert(`⚠️ ${currentUser.firstName}, cloud storage not configured. Video not saved.`);
                           setUploadingVideo(false);
                           return;
                         }
@@ -2766,11 +2766,11 @@ const ClientPortal = () => {
                         setVideoLink('');
                         setVideoDescription('');
                         await loadUserVideos();
-                        alert('Video submitted successfully!');
+                        alert(`✅ ${currentUser.firstName}, your video was submitted successfully!`);
                       }
                     } catch (error) {
                       console.error('Error submitting video:', error);
-                      alert('Error submitting video. Please try again.');
+                      alert(`❌ ${currentUser.firstName}, there was an error submitting your video. Please try again.`);
                     } finally {
                       setUploadingVideo(false);
                       setUploadProgress(0);
@@ -2862,7 +2862,7 @@ const ClientPortal = () => {
                           try {
                             if (!db) {
                               console.error('❌ Firestore not available');
-                              alert('⚠️ Cloud storage not configured. Cannot remove team member.');
+                              alert(`⚠️ ${currentUser.firstName}, cloud storage not configured. Cannot remove team member.`);
                               return;
                             }
 

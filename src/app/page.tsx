@@ -911,27 +911,27 @@ const ClientPortal = () => {
   function OnboardingView() {
     const [currentStep, setCurrentStep] = useState(0);
     const [answers, setAnswers] = useState({
-      industry: [], targetAudience: [], goals: [], brandVoice: [], competitors: '',
-      differentiators: '', primaryMarkets: '', pricePoint: '', styleInspirations: '', successMetrics: '', agencyExperience: ''
+      industry: [], targetAudience: [], brandVoice: [], specialties: [],
+      primaryMarkets: '', pricePoint: '', clientPainPoints: '', topicsToAvoid: '', styleInspirations: '', successMetrics: '', agencyExperience: ''
     });
     const [otherInputs, setOtherInputs] = useState({
-      industry: '', targetAudience: '', goals: '', brandVoice: ''
+      industry: '', targetAudience: '', brandVoice: '', specialties: ''
     });
 
     const industries = ['Realtor', 'Loan Officer'];
     const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'];
-    const goalOptions = ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'];
     const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
+    const specialtyOptions = ['First-Time Buyers', 'Luxury Homes', 'Investment Properties', 'Commercial', 'VA Loans', 'FHA Loans', 'Refinancing', 'New Construction', 'Relocation', 'Downsizing'];
 
     const questions = [
       { type: 'buttons', key: 'industry', label: 'What do you do?', options: industries },
       { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
-      { type: 'buttons', key: 'goals', label: 'What are your main marketing goals? (Select all that apply)', options: goalOptions },
       { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },
-      { type: 'text', key: 'competitors', label: 'Who are your main competitors?', placeholder: 'e.g., Company A, Company B' },
-      { type: 'text', key: 'differentiators', label: 'What separates you from your competitors?', placeholder: 'Describe what makes you unique...' },
+      { type: 'buttons', key: 'specialties', label: 'What are your specialties? (Select all that apply)', options: specialtyOptions },
       { type: 'text', key: 'primaryMarkets', label: 'What are your primary markets? (locations)', placeholder: 'e.g., Los Angeles, Orange County, San Diego' },
       { type: 'text', key: 'pricePoint', label: 'Average price point or loan size', placeholder: 'e.g., $500K-$1M, $300K loans' },
+      { type: 'text', key: 'clientPainPoints', label: 'What are the biggest pain points or challenges your clients face?', placeholder: 'e.g., Saving for a down payment, understanding the loan process, finding the right neighborhood...' },
+      { type: 'text', key: 'topicsToAvoid', label: 'Are there any topics you want to AVOID in your content?', placeholder: 'e.g., Political topics, specific competitors, certain neighborhoods...' },
       { type: 'text', key: 'styleInspirations', label: 'Are there creators or competitors whose style you like?', placeholder: 'List any accounts or brands you admire...' },
       { type: 'text', key: 'successMetrics', label: 'What does success look like in the next 30, 60, and 90 days?', placeholder: 'Describe your goals for each timeframe...' },
       { type: 'text', key: 'agencyExperience', label: 'Have you worked with a marketing agency before? What did you like or dislike?', placeholder: 'Share your experience...' }
@@ -2381,9 +2381,10 @@ const ClientPortal = () => {
                   const fieldOptions = {
                     industry: ['Realtor', 'Loan Officer'],
                     targetAudience: ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'],
-                    goals: ['Increase Brand Awareness', 'Generate Leads', 'Drive Sales', 'Build Community', 'Improve Engagement', 'Launch Product'],
                     brandVoice: ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'],
-                    competitors: null // Text field
+                    specialties: ['First-Time Buyers', 'Luxury Homes', 'Investment Properties', 'Commercial', 'VA Loans', 'FHA Loans', 'Refinancing', 'New Construction', 'Relocation', 'Downsizing'],
+                    clientPainPoints: null, // Text field
+                    topicsToAvoid: null // Text field
                   };
 
                   return Object.keys(fieldOptions).map(key => {
@@ -5923,14 +5924,6 @@ const ClientPortal = () => {
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-600 font-medium">Goals:</span>
-                        <p className="text-gray-800 mt-1">
-                          {Array.isArray(selectedUser.onboardingAnswers.goals)
-                            ? selectedUser.onboardingAnswers.goals.join(', ')
-                            : selectedUser.onboardingAnswers.goals || 'Not provided'}
-                        </p>
-                      </div>
-                      <div>
                         <span className="text-gray-600 font-medium">Brand Voice:</span>
                         <p className="text-gray-800 mt-1">
                           {Array.isArray(selectedUser.onboardingAnswers.brandVoice)
@@ -5939,8 +5932,20 @@ const ClientPortal = () => {
                         </p>
                       </div>
                       <div>
-                        <span className="text-gray-600 font-medium">Competitors:</span>
-                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.competitors || 'Not provided'}</p>
+                        <span className="text-gray-600 font-medium">Specialties:</span>
+                        <p className="text-gray-800 mt-1">
+                          {Array.isArray(selectedUser.onboardingAnswers.specialties)
+                            ? selectedUser.onboardingAnswers.specialties.join(', ')
+                            : selectedUser.onboardingAnswers.specialties || 'Not provided'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Client Pain Points:</span>
+                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.clientPainPoints || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Topics to Avoid:</span>
+                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.topicsToAvoid || 'Not provided'}</p>
                       </div>
                       {selectedUser.onboardingAnswers.otherInputs && Object.keys(selectedUser.onboardingAnswers.otherInputs).some(k => selectedUser.onboardingAnswers.otherInputs[k]) && (
                         <div>

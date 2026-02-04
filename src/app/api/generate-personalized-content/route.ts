@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
     // Build personalized prompt
     const industry = Array.isArray(onboardingAnswers.industry) ? onboardingAnswers.industry.join(', ') : onboardingAnswers.industry || 'real estate or mortgage';
     const targetAudience = Array.isArray(onboardingAnswers.targetAudience) ? onboardingAnswers.targetAudience.join(', ') : onboardingAnswers.targetAudience || 'general audience';
-    const goals = Array.isArray(onboardingAnswers.goals) ? onboardingAnswers.goals.join(', ') : onboardingAnswers.goals || 'marketing';
     const brandVoice = Array.isArray(onboardingAnswers.brandVoice) ? onboardingAnswers.brandVoice.join(', ') : onboardingAnswers.brandVoice || 'professional';
+    const specialties = Array.isArray(onboardingAnswers.specialties) ? onboardingAnswers.specialties.join(', ') : onboardingAnswers.specialties || '';
 
     // Build conversation history context
     let historyContext = '';
@@ -52,10 +52,12 @@ SPEAKER INFORMATION (use these exact values when needed):
 - Company Name: ${user.companyName}
 
 Target Audience: ${targetAudience}
-Goals: ${goals}
 Brand Voice: ${brandVoice}
-${onboardingAnswers.differentiators ? `What makes them unique: ${onboardingAnswers.differentiators}` : ''}
-${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}${historyContext}${adminContext}
+${specialties ? `Specialties: ${specialties}` : ''}
+${onboardingAnswers.primaryMarkets ? `Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}
+${onboardingAnswers.pricePoint ? `Price Point: ${onboardingAnswers.pricePoint}` : ''}
+${onboardingAnswers.clientPainPoints ? `Client Pain Points to Address: ${onboardingAnswers.clientPainPoints}` : ''}
+${onboardingAnswers.topicsToAvoid ? `\nTOPICS TO AVOID (DO NOT create content about these): ${onboardingAnswers.topicsToAvoid}` : ''}${historyContext}${adminContext}
 
 CRITICAL: Create EXACTLY 5 pieces of EACH type below. NO MORE, NO LESS. Total output must be exactly 15 pieces.
 

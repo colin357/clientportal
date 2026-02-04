@@ -37,12 +37,12 @@ export async function POST(request: NextRequest) {
     const targetAudience = audience || (Array.isArray(onboardingAnswers?.targetAudience)
       ? onboardingAnswers.targetAudience.join(', ')
       : onboardingAnswers?.targetAudience || 'general audience');
-    const goals = Array.isArray(onboardingAnswers?.goals)
-      ? onboardingAnswers.goals.join(', ')
-      : onboardingAnswers?.goals || 'marketing';
     const brandVoice = Array.isArray(onboardingAnswers?.brandVoice)
       ? onboardingAnswers.brandVoice.join(', ')
       : onboardingAnswers?.brandVoice || 'professional';
+    const specialties = Array.isArray(onboardingAnswers?.specialties)
+      ? onboardingAnswers.specialties.join(', ')
+      : onboardingAnswers?.specialties || '';
 
     // Build feedback context if regenerating
     let feedbackContext = '';
@@ -123,10 +123,12 @@ CONTEXT:
 - Topic: ${topic}
 - Purpose: ${purpose}
 - Target Audience: ${targetAudience}
-- Goals: ${goals}
 - Brand Voice: ${brandVoice}
-${onboardingAnswers?.differentiators ? `- What makes them unique: ${onboardingAnswers.differentiators}` : ''}
-${onboardingAnswers?.primaryMarkets ? `- Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}${feedbackContext}
+${specialties ? `- Specialties: ${specialties}` : ''}
+${onboardingAnswers?.primaryMarkets ? `- Primary Markets: ${onboardingAnswers.primaryMarkets}` : ''}
+${onboardingAnswers?.pricePoint ? `- Price Point: ${onboardingAnswers.pricePoint}` : ''}
+${onboardingAnswers?.clientPainPoints ? `- Client Pain Points to Address: ${onboardingAnswers.clientPainPoints}` : ''}
+${onboardingAnswers?.topicsToAvoid ? `- TOPICS TO AVOID: ${onboardingAnswers.topicsToAvoid}` : ''}${feedbackContext}
 
 TASK:
 ${contentTypeInstructions}

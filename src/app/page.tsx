@@ -1084,6 +1084,36 @@ const ClientPortal = () => {
     const [generatingIdea, setGeneratingIdea] = useState(false);
     const [ideaFeedback, setIdeaFeedback] = useState('');
 
+    // Onboarding tasks state - shown after tutorial is completed
+    const getOnboardingTasksCompleted = () => {
+      try {
+        const stored = localStorage.getItem(`onboardingTasks_${currentUser.id}`);
+        if (stored) return JSON.parse(stored);
+        if (currentUser.onboardingTasksCompleted) return currentUser.onboardingTasksCompleted;
+      } catch {}
+      return {};
+    };
+    const [onboardingTasksCompleted, setOnboardingTasksCompleted] = useState(getOnboardingTasksCompleted());
+
+    const onboardingTasks = [
+      { id: 'logins', label: 'Add logins to the settings', action: () => setActivePage('settings') },
+      { id: 'review', label: 'Review Content Ideas', action: () => setActivePage('content') },
+      { id: 'video', label: 'Upload a video', action: () => setActivePage('settings') },
+      { id: 'headshot', label: 'Add your headshot in settings', action: () => setActivePage('settings') },
+    ];
+
+    const toggleOnboardingTask = async (taskId: string) => {
+      const newCompleted = { ...onboardingTasksCompleted, [taskId]: !onboardingTasksCompleted[taskId] };
+      setOnboardingTasksCompleted(newCompleted);
+      try { localStorage.setItem(`onboardingTasks_${currentUser.id}`, JSON.stringify(newCompleted)); } catch {}
+      const updatedUser = { ...currentUser, onboardingTasksCompleted: newCompleted };
+      setCurrentUser(updatedUser);
+      await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+    };
+
+    const completedTasksCount = onboardingTasks.filter(t => onboardingTasksCompleted[t.id]).length;
+    const allOnboardingTasksCompleted = completedTasksCount === onboardingTasks.length;
+
     useEffect(() => {
       generatePersonalizedContent();
 
@@ -1385,6 +1415,81 @@ const ClientPortal = () => {
             <h2 className="text-3xl font-bold mb-2">Let's Get Started, {currentUser.firstName}! 👋</h2>
             <p className="text-blue-100">Review your marketing materials and provide feedback</p>
           </div>
+
+          {/* Getting Started To-Do List - shown after tutorial is completed */}
+          {!showTutorial && !allOnboardingTasksCompleted && (
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-lg shadow-lg p-6 mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="bg-amber-500 rounded-full p-2">
+                    <ListTodo className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-800">Getting Started Checklist</h3>
+                    <p className="text-sm text-gray-600">Complete these tasks to get the most out of your portal</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full">
+                    {completedTasksCount}/{onboardingTasks.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-amber-200 rounded-full h-2 mb-4">
+                <div
+                  className="bg-amber-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${(completedTasksCount / onboardingTasks.length) * 100}%` }}
+                ></div>
+              </div>
+
+              <div className="space-y-3">
+                {onboardingTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg transition cursor-pointer ${
+                      onboardingTasksCompleted[task.id]
+                        ? 'bg-green-50 border border-green-200'
+                        : 'bg-white border border-gray-200 hover:border-amber-300 hover:bg-amber-50'
+                    }`}
+                  >
+                    <button
+                      onClick={() => toggleOnboardingTask(task.id)}
+                      className="flex-shrink-0"
+                    >
+                      {onboardingTasksCompleted[task.id] ? (
+                        <CheckSquare className="w-6 h-6 text-green-600" />
+                      ) : (
+                        <Square className="w-6 h-6 text-gray-400 hover:text-amber-500" />
+                      )}
+                    </button>
+                    <span
+                      className={`flex-grow font-medium ${
+                        onboardingTasksCompleted[task.id] ? 'text-green-700 line-through' : 'text-gray-700'
+                      }`}
+                    >
+                      {task.label}
+                    </span>
+                    {!onboardingTasksCompleted[task.id] && (
+                      <button
+                        onClick={task.action}
+                        className="text-amber-600 hover:text-amber-700 text-sm font-medium flex items-center gap-1"
+                      >
+                        Go <ChevronRight className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {completedTasksCount === onboardingTasks.length - 1 && (
+                <p className="text-center text-amber-700 font-medium mt-4">
+                  Almost there! Just one more task to go!
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Client Scorecard / Progress Bar */}
           {(() => {

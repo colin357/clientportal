@@ -4399,7 +4399,7 @@ const ClientPortal = () => {
                       <option value="all">All Clients</option>
                       {users.filter(u => !u.parentClientId).map(user => (
                         <option key={user.id} value={user.id}>
-                          {user.companyName || `${user.firstName} ${user.lastName || ''}`}
+                          {`${user.firstName} ${user.lastName || ''}`.trim()}{user.companyName ? ` (${user.companyName})` : ''}
                         </option>
                       ))}
                     </select>

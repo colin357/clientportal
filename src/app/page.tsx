@@ -40,6 +40,14 @@ const isFirebaseConfigured = () => {
   } else {
     console.log('✅ Firebase configuration detected');
     console.log('Project ID:', firebaseConfig.projectId);
+    // Warn explicitly when storageBucket is missing — uploads will silently target
+    // the wrong default bucket ({projectId}.appspot.com) instead of the real one,
+    // causing all video download URLs to return 404.
+    if (!firebaseConfig.storageBucket) {
+      console.error('❌ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is not set!');
+      console.error('Video uploads will fail or target the wrong storage bucket.');
+      console.error('Set this env var to your Firebase Storage bucket (e.g. your-project.firebasestorage.app)');
+    }
   }
 
   return isConfigured;
@@ -694,6 +702,14 @@ const ClientPortal = () => {
   const uploadFileToStorage = async (file, path, onProgress) => {
     if (!storage) {
       throw new Error('Firebase Storage is not configured');
+    }
+    if (!firebaseConfig.storageBucket) {
+      throw new Error(
+        'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is not set. ' +
+        'Videos cannot be uploaded — the SDK would silently use the wrong default bucket, ' +
+        'producing download URLs that return 404. ' +
+        'Add this environment variable in your Vercel project settings.'
+      );
     }
 
     return new Promise((resolve, reject) => {
@@ -3643,13 +3659,26 @@ const ClientPortal = () => {
 
     const updateVideoStatus = async (videoId, status, completedLink = '') => {
       const video = videos.find(v => v.id === videoId);
-      const updated = videos.map(v =>
-        v.id === videoId ? { ...v, status, completedLink, completedAt: new Date().toISOString() } : v
-      );
-      await saveVideos(updated);
+      if (!video) return;
+
+      const patch = { status, completedLink, completedAt: new Date().toISOString() };
+
+      // Update local state immediately so the UI reflects the change without waiting for the
+      // Firestore snapshot to come back. This avoids the previous approach of calling saveVideos()
+      // which rewrote every video document in the collection on every status change.
+      setVideos(prev => prev.map(v => v.id === videoId ? { ...v, ...patch } : v));
+
+      // Persist only the changed fields for this single video document.
+      if (db) {
+        try {
+          await updateDoc(doc(db, 'videos', videoId), patch);
+        } catch (e) {
+          console.error('❌ Error updating video status:', e);
+        }
+      }
 
       // Automatic client notifications are disabled - use manual SMS from admin portal
-      if (status === 'completed' && video) {
+      if (status === 'completed') {
         console.log(`✅ Video marked as completed (SMS notifications to client disabled)`);
       }
     };
@@ -4908,9 +4937,13 @@ const ClientPortal = () => {
                           <p className="text-sm text-gray-700 mb-3">{video.description}</p>
                         )}
                         
-                        <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2 mb-3">
-                          <FileText className="w-4 h-4" />View Raw Video
-                        </a>
+                        {video.videoLink ? (
+                          <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2 mb-3">
+                            <FileText className="w-4 h-4" />View Raw Video
+                          </a>
+                        ) : (
+                          <p className="text-sm text-gray-400 italic mb-3">No video link available</p>
+                        )}
 
                         <div className="flex gap-2 mt-3">
                           <button onClick={() => updateVideoStatus(video.id, 'in-progress')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">

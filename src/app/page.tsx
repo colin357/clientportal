@@ -753,8 +753,12 @@ const ClientPortal = () => {
     const handleSubmit = async () => {
       setError('');
       if (isSignup) {
-        if (!companyName.trim() || !firstName.trim() || !lastName.trim() || !phoneNumber.trim()) {
+        if (!email.trim() || !password.trim() || !companyName.trim() || !firstName.trim() || !lastName.trim() || !phoneNumber.trim()) {
           setError('All fields required');
+          return;
+        }
+        if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+          setError('An account with this email already exists');
           return;
         }
         await handleSignup(email, password, companyName, firstName, lastName, phoneNumber);

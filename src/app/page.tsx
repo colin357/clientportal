@@ -733,12 +733,6 @@ const ClientPortal = () => {
     await saveContentItems([updatedItem]);
   };
 
-  if (view === 'login') return <LoginView />;
-  if (view === 'admin-login') return <AdminLoginView />;
-  if (view === 'onboarding') return <OnboardingView {...onboardingViewProps} />;
-  if (view === 'dashboard') return <DashboardView />;
-  if (view === 'admin') return <AdminView />;
-
   function LoginView() {
     const [isSignup, setIsSignup] = useState(false);
     const [email, setEmail] = useState('');
@@ -1034,8 +1028,6 @@ const ClientPortal = () => {
       </div>
     );
   }
-
-  const onboardingViewProps = { currentUser, handleOnboarding };
 
   function DashboardView() {
     // Team members should see content for their parent client
@@ -6412,6 +6404,14 @@ const ClientPortal = () => {
       </div>
     );
   }
+
+  const onboardingViewProps = { currentUser, handleOnboarding };
+
+  if (view === 'login') return <LoginView />;
+  if (view === 'admin-login') return <AdminLoginView />;
+  if (view === 'onboarding') return <OnboardingView {...onboardingViewProps} />;
+  if (view === 'dashboard') return <DashboardView />;
+  if (view === 'admin') return <AdminView />;
 };
 
 export default ClientPortal;

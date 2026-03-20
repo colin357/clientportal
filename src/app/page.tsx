@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown } from 'lucide-react';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 
@@ -207,87 +207,23 @@ const ClientPortal = () => {
     const unsubscribers: (() => void)[] = [];
 
     if (db) {
-      console.log('🔄 Setting up real-time data sync...');
+      // Real-time listeners for data sync - minimal logging to reduce performance overhead
+      const listen = (collectionName, setter) => {
+        return onSnapshot(collection(db, collectionName), (snapshot) => {
+          setter(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+        }, (error) => {
+          console.error(`Error syncing ${collectionName}:`, error);
+        });
+      };
 
-      // Real-time listener for users
-      const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-        const usersData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Users synced: ${usersData.length} users`);
-        setUsers(usersData);
-      }, (error) => {
-        console.error('❌ Error syncing users:', error);
-      });
-      unsubscribers.push(unsubUsers);
-
-      // Real-time listener for content
-      const unsubContent = onSnapshot(collection(db, 'content'), (snapshot) => {
-        const contentData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Content synced: ${contentData.length} items`);
-        setContent(contentData);
-      }, (error) => {
-        console.error('❌ Error syncing content:', error);
-      });
-      unsubscribers.push(unsubContent);
-
-      // Real-time listener for calendar events
-      const unsubEvents = onSnapshot(collection(db, 'calendarEvents'), (snapshot) => {
-        const eventsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Calendar events synced: ${eventsData.length} events`);
-        setCalendarEvents(eventsData);
-      }, (error) => {
-        console.error('❌ Error syncing calendar events:', error);
-      });
-      unsubscribers.push(unsubEvents);
-
-      // Real-time listener for groups
-      const unsubGroups = onSnapshot(collection(db, 'groups'), (snapshot) => {
-        const groupsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Groups synced: ${groupsData.length} groups`);
-        setGroups(groupsData);
-      }, (error) => {
-        console.error('❌ Error syncing groups:', error);
-      });
-      unsubscribers.push(unsubGroups);
-
-      // Real-time listener for daily tasks
-      const unsubDailyTasks = onSnapshot(collection(db, 'dailyTasks'), (snapshot) => {
-        const tasksData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Daily tasks synced: ${tasksData.length} tasks`);
-        setDailyTasks(tasksData);
-      }, (error) => {
-        console.error('❌ Error syncing daily tasks:', error);
-      });
-      unsubscribers.push(unsubDailyTasks);
-
-      // Real-time listener for daily task completions
-      const unsubTaskCompletions = onSnapshot(collection(db, 'dailyTaskCompletions'), (snapshot) => {
-        const completionsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Task completions synced: ${completionsData.length} completions`);
-        setDailyTaskCompletions(completionsData);
-      }, (error) => {
-        console.error('❌ Error syncing task completions:', error);
-      });
-      unsubscribers.push(unsubTaskCompletions);
-
-      // Real-time listener for admin users
-      const unsubAdminUsers = onSnapshot(collection(db, 'adminUsers'), (snapshot) => {
-        const adminData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Admin users synced: ${adminData.length} admins`);
-        setAdminUsers(adminData);
-      }, (error) => {
-        console.error('❌ Error syncing admin users:', error);
-      });
-      unsubscribers.push(unsubAdminUsers);
-
-      // Real-time listener for admin activities
-      const unsubActivities = onSnapshot(collection(db, 'adminActivities'), (snapshot) => {
-        const activitiesData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Admin activities synced: ${activitiesData.length} activities`);
-        setAdminActivities(activitiesData);
-      }, (error) => {
-        console.error('❌ Error syncing admin activities:', error);
-      });
-      unsubscribers.push(unsubActivities);
+      unsubscribers.push(listen('users', setUsers));
+      unsubscribers.push(listen('content', setContent));
+      unsubscribers.push(listen('calendarEvents', setCalendarEvents));
+      unsubscribers.push(listen('groups', setGroups));
+      unsubscribers.push(listen('dailyTasks', setDailyTasks));
+      unsubscribers.push(listen('dailyTaskCompletions', setDailyTaskCompletions));
+      unsubscribers.push(listen('adminUsers', setAdminUsers));
+      unsubscribers.push(listen('adminActivities', setAdminActivities));
     } else {
       // Fallback to one-time load if db not available
       loadData();
@@ -295,11 +231,7 @@ const ClientPortal = () => {
 
     restoreSession();
 
-    // Cleanup listeners on unmount
-    return () => {
-      console.log('🧹 Cleaning up real-time listeners...');
-      unsubscribers.forEach(unsub => unsub());
-    };
+    return () => unsubscribers.forEach(unsub => unsub());
   }, []);
 
   // Keep currentUser in sync when users data changes from another device/tab
@@ -402,25 +334,23 @@ const ClientPortal = () => {
     }
   };
 
-  const saveUsers = async (u) => {
-    setUsers(u);
-
+  const saveUsers = async (u, changedIds?: string[]) => {
+    // Don't update local state - let onSnapshot handle it to prevent race conditions
     if (!db) {
-      console.warn('⚠️ Firestore not available - users not saved to cloud');
+      setUsers(u);
       return;
     }
 
     try {
-      console.log(`💾 Saving ${u.length} users to Firestore...`);
-      // Save each user to Firestore
-      for (const user of u) {
-        await setDoc(doc(db, 'users', user.id), user);
-        console.log(`✅ Saved user: ${user.email} (ID: ${user.id})`);
-      }
-      console.log('✅ All users saved successfully');
+      // Only save changed users if specified, otherwise save all
+      const usersToSave = changedIds
+        ? u.filter(user => changedIds.includes(user.id))
+        : u;
+
+      const savePromises = usersToSave.map(user => setDoc(doc(db, 'users', user.id), user));
+      await Promise.all(savePromises);
     } catch (e) {
-      console.error('❌ Error saving users to cloud:', e);
-      console.error('Error details:', e.message);
+      console.error('Error saving users:', e);
     }
   };
 
@@ -429,14 +359,10 @@ const ClientPortal = () => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         await setDoc(doc(db, 'content', item.id), item);
-        console.log(`✅ Saved content: ${item.title} (ID: ${item.id})`);
         return true;
       } catch (error) {
-        console.error(`❌ Attempt ${attempt}/${maxRetries} failed for ${item.id}:`, error.message);
         if (attempt < maxRetries) {
-          // Exponential backoff: 1s, 2s, 4s
           const delay = Math.pow(2, attempt - 1) * 1000;
-          console.log(`⏳ Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           throw error;
@@ -465,22 +391,17 @@ const ClientPortal = () => {
     }
 
     try {
-      console.log(`💾 Saving ${items.length} content item(s) to Firestore...`);
-
       // Save items in parallel for better performance
       const savePromises = items.map(item => saveContentItemWithRetry(item));
       const results = await Promise.allSettled(savePromises);
 
       const failures = results.filter(r => r.status === 'rejected');
       if (failures.length > 0) {
-        console.error(`❌ Failed to save ${failures.length} item(s)`);
         if (showAlert) {
-          alert(`⚠️ Failed to save ${failures.length} content item(s). Please try again.`);
+          alert(`Failed to save ${failures.length} content item(s). Please try again.`);
         }
         return false;
       }
-
-      console.log(`✅ Successfully saved ${items.length} content item(s)`);
       if (showAlert && alertMessage) {
         alert(alertMessage);
       }
@@ -497,68 +418,57 @@ const ClientPortal = () => {
 
   // Legacy function - saves all content (use sparingly, prefer saveContentItems)
   const saveContent = async (c) => {
-    // Don't update state manually - let the onSnapshot listener handle it
-    // This prevents race conditions between manual updates and real-time sync
-
     if (!db) {
-      // Only update local state if there's no real-time sync
       setContent(c);
-      console.warn('⚠️ Firestore not available - content not saved to cloud');
       return;
     }
 
     try {
-      console.log(`💾 Saving ${c.length} content items to Firestore...`);
-      // Save each content item to Firestore
-      for (const item of c) {
-        await saveContentItemWithRetry(item);
-      }
-      console.log('✅ All content saved successfully');
+      const savePromises = c.map(item => saveContentItemWithRetry(item));
+      await Promise.all(savePromises);
     } catch (e) {
-      console.error('❌ Error saving content to cloud:', e);
-      console.error('Error details:', e.message);
+      console.error('Error saving content:', e);
     }
   };
 
   const saveCalendarEvents = async (events) => {
-    setCalendarEvents(events);
-
     if (!db) {
-      console.warn('⚠️ Firestore not available - calendar events not saved to cloud');
+      setCalendarEvents(events);
       return;
     }
 
     try {
-      console.log(`💾 Saving ${events.length} calendar events to Firestore...`);
-      for (const event of events) {
-        await setDoc(doc(db, 'calendarEvents', event.id), event);
-        console.log(`✅ Saved event: ${event.title} (ID: ${event.id})`);
+      // Only save new/changed events by comparing with current state
+      const currentIds = new Set(calendarEvents.map(e => e.id));
+      const newEvents = events.filter(e => !currentIds.has(e.id));
+      const existingEvents = events.filter(e => currentIds.has(e.id));
+
+      // Save new events in parallel
+      const savePromises = newEvents.map(event => setDoc(doc(db, 'calendarEvents', event.id), event));
+      // Also save any modified existing events
+      for (const event of existingEvents) {
+        const existing = calendarEvents.find(e => e.id === event.id);
+        if (JSON.stringify(existing) !== JSON.stringify(event)) {
+          savePromises.push(setDoc(doc(db, 'calendarEvents', event.id), event));
+        }
       }
-      console.log('✅ All calendar events saved successfully');
+      await Promise.all(savePromises);
     } catch (e) {
-      console.error('❌ Error saving calendar events to cloud:', e);
-      console.error('Error details:', e.message);
+      console.error('Error saving calendar events:', e);
     }
   };
 
   const saveGroups = async (g) => {
-    setGroups(g);
-
     if (!db) {
-      console.warn('⚠️ Firestore not available - groups not saved to cloud');
+      setGroups(g);
       return;
     }
 
     try {
-      console.log(`💾 Saving ${g.length} groups to Firestore...`);
-      for (const group of g) {
-        await setDoc(doc(db, 'groups', group.id), group);
-        console.log(`✅ Saved group: ${group.name} (ID: ${group.id})`);
-      }
-      console.log('✅ All groups saved successfully');
+      const savePromises = g.map(group => setDoc(doc(db, 'groups', group.id), group));
+      await Promise.all(savePromises);
     } catch (e) {
-      console.error('❌ Error saving groups to cloud:', e);
-      console.error('Error details:', e.message);
+      console.error('Error saving groups:', e);
     }
   };
 
@@ -1085,6 +995,14 @@ const ClientPortal = () => {
     const [generatedIdea, setGeneratedIdea] = useState(null);
     const [generatingIdea, setGeneratingIdea] = useState(false);
     const [ideaFeedback, setIdeaFeedback] = useState('');
+    const [showHeaderVideoModal, setShowHeaderVideoModal] = useState(false);
+    const [headerVideoAttachType, setHeaderVideoAttachType] = useState('standalone'); // 'standalone' or 'content'
+    const [headerVideoContentId, setHeaderVideoContentId] = useState('');
+    const [headerVideoFile, setHeaderVideoFile] = useState(null);
+    const [headerVideoLink, setHeaderVideoLink] = useState('');
+    const [headerVideoDescription, setHeaderVideoDescription] = useState('');
+    const [headerVideoUploading, setHeaderVideoUploading] = useState(false);
+    const [headerVideoProgress, setHeaderVideoProgress] = useState(0);
 
     // Onboarding tasks state - shown after tutorial is completed
     const getOnboardingTasksCompleted = () => {
@@ -1126,22 +1044,15 @@ const ClientPortal = () => {
         return;
       }
 
-      console.log('🔄 Setting up real-time video sync for user...');
       const unsubVideos = onSnapshot(collection(db, 'videos'), (snapshot) => {
         const videosData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        // Team members should see videos for their parent client
-        const clientVideos = videosData.filter(v => v.clientId === effectiveClientId);
-        console.log(`🔄 Videos synced: ${clientVideos.length} videos for current user`);
-        setUserVideos(clientVideos);
+        setUserVideos(videosData.filter(v => v.clientId === effectiveClientId));
       }, (error) => {
-        console.error('❌ Error syncing videos:', error);
+        console.error('Error syncing videos:', error);
         setUserVideos([]);
       });
 
-      return () => {
-        console.log('🧹 Cleaning up video listener...');
-        unsubVideos();
-      };
+      return () => unsubVideos();
     }, [effectiveClientId]);
 
     // Track when content generation is taking too long (show skip option after 90 seconds)
@@ -1408,9 +1319,178 @@ const ClientPortal = () => {
                 <p className="text-sm text-gray-600">Content Review Portal</p>
               </div>
             </div>
-            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-600 hover:text-gray-800">Logout</button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowHeaderVideoModal(true)}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm font-medium transition-colors"
+              >
+                <Video className="w-4 h-4" />
+                Upload Video
+              </button>
+              <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-600 hover:text-gray-800">Logout</button>
+            </div>
           </div>
         </nav>
+
+        {/* Header Video Upload Modal */}
+        {showHeaderVideoModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Video className="w-5 h-5 text-purple-600" />
+                  Upload Video
+                </h2>
+                <button onClick={() => {
+                  setShowHeaderVideoModal(false);
+                  setHeaderVideoAttachType('standalone');
+                  setHeaderVideoContentId('');
+                  setHeaderVideoFile(null);
+                  setHeaderVideoLink('');
+                  setHeaderVideoDescription('');
+                }} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Is this video for a content idea?</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition">
+                      <input type="radio" name="videoAttach" value="standalone" checked={headerVideoAttachType === 'standalone'} onChange={() => setHeaderVideoAttachType('standalone')} className="w-4 h-4 text-purple-600" />
+                      <div>
+                        <p className="font-medium text-gray-800">Standalone Video</p>
+                        <p className="text-xs text-gray-500">Not attached to any content idea</p>
+                      </div>
+                    </label>
+                    <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition">
+                      <input type="radio" name="videoAttach" value="content" checked={headerVideoAttachType === 'content'} onChange={() => setHeaderVideoAttachType('content')} className="w-4 h-4 text-purple-600" />
+                      <div>
+                        <p className="font-medium text-gray-800">Attach to Content Idea</p>
+                        <p className="text-xs text-gray-500">Link this video to a specific content piece</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {headerVideoAttachType === 'content' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Content Idea</label>
+                    <select value={headerVideoContentId} onChange={(e) => setHeaderVideoContentId(e.target.value)} className="w-full px-4 py-2 border rounded-lg">
+                      <option value="">-- Select content --</option>
+                      {clientContent.filter(c => c.status === 'approved').map(c => (
+                        <option key={c.id} value={c.id}>{c.title} ({c.type})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                  <textarea value={headerVideoDescription} onChange={(e) => setHeaderVideoDescription(e.target.value)} placeholder="Describe the video..." rows={2} className="w-full px-4 py-2 border rounded-lg resize-none" />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Method</label>
+                  <div className="space-y-3">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-purple-400 transition-colors">
+                      <input type="file" accept="video/*" onChange={(e) => { if (e.target.files[0]) setHeaderVideoFile(e.target.files[0]); }} className="text-sm" />
+                      {headerVideoFile && <p className="text-xs text-gray-500 mt-1">Selected: {headerVideoFile.name}</p>}
+                    </div>
+                    <div className="text-center text-sm text-gray-400">or</div>
+                    <input type="text" value={headerVideoLink} onChange={(e) => setHeaderVideoLink(e.target.value)} placeholder="Paste video link (Google Drive, Dropbox, etc.)" className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                </div>
+
+                {headerVideoUploading && (
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="bg-purple-600 h-2 rounded-full transition-all" style={{ width: `${headerVideoProgress}%` }}></div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    disabled={headerVideoUploading || (!headerVideoFile && !headerVideoLink)}
+                    onClick={async () => {
+                      if (headerVideoAttachType === 'content' && !headerVideoContentId) {
+                        alert('Please select a content idea to attach this video to.');
+                        return;
+                      }
+
+                      setHeaderVideoUploading(true);
+                      try {
+                        let videoUrl = headerVideoLink;
+                        let fileName = '';
+
+                        if (headerVideoFile) {
+                          if (!storage) {
+                            alert('Storage not configured. Please use a link instead.');
+                            setHeaderVideoUploading(false);
+                            return;
+                          }
+                          const storageRef = ref(storage, `videos/${effectiveClientId}/${Date.now()}_${headerVideoFile.name}`);
+                          const uploadTask = uploadBytesResumable(storageRef, headerVideoFile);
+                          videoUrl = await new Promise((resolve, reject) => {
+                            uploadTask.on('state_changed',
+                              (snapshot) => setHeaderVideoProgress(Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)),
+                              reject,
+                              async () => resolve(await getDownloadURL(uploadTask.snapshot.ref))
+                            );
+                          });
+                          fileName = headerVideoFile.name;
+                        }
+
+                        const contentItem = headerVideoContentId ? clientContent.find(c => c.id === headerVideoContentId) : null;
+                        const videoDoc = {
+                          id: Date.now().toString(),
+                          clientId: effectiveClientId,
+                          contentId: headerVideoContentId || '',
+                          contentTitle: contentItem?.title || '',
+                          videoLink: videoUrl,
+                          description: headerVideoDescription,
+                          status: 'pending',
+                          submittedAt: new Date().toISOString(),
+                          uploadedAt: new Date().toISOString(),
+                          fileName
+                        };
+
+                        if (db) await setDoc(doc(db, 'videos', videoDoc.id), videoDoc);
+
+                        await sendSMS('+17867882699', `📹 New video submitted by ${currentUser.companyName}${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
+
+                        alert('Video uploaded successfully!');
+                        setShowHeaderVideoModal(false);
+                        setHeaderVideoAttachType('standalone');
+                        setHeaderVideoContentId('');
+                        setHeaderVideoFile(null);
+                        setHeaderVideoLink('');
+                        setHeaderVideoDescription('');
+                      } catch (error) {
+                        console.error('Error uploading video:', error);
+                        alert('Failed to upload video. Please try again.');
+                      } finally {
+                        setHeaderVideoUploading(false);
+                        setHeaderVideoProgress(0);
+                      }
+                    }}
+                    className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+                  >
+                    {headerVideoUploading ? `Uploading... ${headerVideoProgress}%` : 'Upload Video'}
+                  </button>
+                  <button onClick={() => {
+                    setShowHeaderVideoModal(false);
+                    setHeaderVideoAttachType('standalone');
+                    setHeaderVideoContentId('');
+                    setHeaderVideoFile(null);
+                    setHeaderVideoLink('');
+                    setHeaderVideoDescription('');
+                  }} className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-8 mb-8 text-white">
@@ -2577,8 +2657,41 @@ const ClientPortal = () => {
               <h4 className="font-semibold mb-4">Social Media Logins</h4>
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 {Object.keys(socialLogins).map(key => (
-                  <input key={key} type="text" value={socialLogins[key]} onChange={(e) => setSocialLogins({ ...socialLogins, [key]: e.target.value })} placeholder={key.charAt(0).toUpperCase() + key.slice(1)} className="px-4 py-2 border rounded outline-none focus:ring-2" />
+                  <div key={key} className="flex gap-2">
+                    <input type="text" value={socialLogins[key]} onChange={(e) => setSocialLogins({ ...socialLogins, [key]: e.target.value })} placeholder={key.charAt(0).toUpperCase() + key.slice(1)} className="flex-1 px-4 py-2 border rounded outline-none focus:ring-2" />
+                    {!['instagram', 'facebook', 'youtube', 'x', 'linkedin', 'tiktok', 'crm'].includes(key) && (
+                      <button
+                        onClick={() => {
+                          const { [key]: _, ...rest } = socialLogins;
+                          setSocialLogins(rest);
+                        }}
+                        className="text-red-500 hover:text-red-700 px-2"
+                        title="Remove field"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 ))}
+              </div>
+              <div className="flex gap-3 mb-4">
+                <button
+                  onClick={() => {
+                    const fieldName = prompt('Enter a name for the new login field (e.g., "Pinterest", "Threads", "Website"):');
+                    if (fieldName && fieldName.trim()) {
+                      const key = fieldName.trim().toLowerCase().replace(/\s+/g, '_');
+                      if (socialLogins[key] !== undefined) {
+                        alert('This field already exists.');
+                        return;
+                      }
+                      setSocialLogins({ ...socialLogins, [key]: '' });
+                    }
+                  }}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200 flex items-center gap-2 text-sm"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  Add New Field
+                </button>
               </div>
               <button onClick={async () => {
                 const updated = { ...currentUser, socialLogins };
@@ -3284,7 +3397,8 @@ const ClientPortal = () => {
     const [newContent, setNewContent] = useState({
       clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: ''
     });
-    const [publishMode, setPublishMode] = useState('single'); // 'single', 'all-realtors', 'all-loan-officers'
+    const [publishMode, setPublishMode] = useState('single'); // 'single', 'all-realtors', 'all-loan-officers', 'approval-group'
+    const [targetApprovalGroup, setTargetApprovalGroup] = useState('review-required'); // 'review-required' or 'auto-approve'
     const [videos, setVideos] = useState([]);
 
     // Helper functions for persisting filter state to sessionStorage
@@ -3390,6 +3504,10 @@ const ClientPortal = () => {
       setStoredFilter('showOnlyUnscheduled', show);
     };
 
+    // Recurring post state
+    const [recurrence, setRecurrence] = useState('none'); // 'none', 'daily', 'weekly', 'biweekly', 'monthly'
+    const [recurrenceCount, setRecurrenceCount] = useState(4); // Number of occurrences
+
     // Drag and drop state
     const [draggedContent, setDraggedContent] = useState(null);
     const [dragOverDate, setDragOverDate] = useState(null);
@@ -3410,6 +3528,7 @@ const ClientPortal = () => {
     const [smsTemplate, setSmsTemplate] = useState('');
     const [smsCustomMessage, setSmsCustomMessage] = useState('');
     const [smsSending, setSmsSending] = useState(false);
+    const [sendingDailyTexts, setSendingDailyTexts] = useState(false);
 
     // SMS Templates
     const smsTemplates = {
@@ -3445,7 +3564,7 @@ const ClientPortal = () => {
 
     // Daily Tasks state
     const [showAddTaskModal, setShowAddTaskModal] = useState(false);
-    const [newTask, setNewTask] = useState({ clientId: 'all', name: '', description: '' });
+    const [newTask, setNewTask] = useState({ clientId: 'all', name: '', description: '', frequency: 'daily' });
 
     // Log admin activity
     const logAdminActivity = async (action: string, details: string, metadata?: Record<string, any>) => {
@@ -3501,8 +3620,25 @@ const ClientPortal = () => {
     // Get today's date string for task completions
     const getTodayDateString = () => formatDateLocal(new Date());
 
-    // Check if a daily task is completed for today
-    const isTaskCompletedToday = (taskId: string, clientId: string) => {
+    // Get the Monday of the current week (for weekly task tracking)
+    const getWeekStartString = () => {
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      const monday = new Date(now.setDate(diff));
+      return formatDateLocal(monday);
+    };
+
+    // Check if a task is completed for its period (today for daily, this week for weekly)
+    const isTaskCompletedToday = (taskId: string, clientId: string, frequency?: string) => {
+      if (frequency === 'weekly') {
+        const weekStart = getWeekStartString();
+        return dailyTaskCompletions.some(
+          completion => completion.taskId === taskId &&
+                       completion.clientId === clientId &&
+                       completion.date >= weekStart
+        );
+      }
       const today = getTodayDateString();
       return dailyTaskCompletions.some(
         completion => completion.taskId === taskId &&
@@ -3564,10 +3700,11 @@ const ClientPortal = () => {
           clientId: newTask.clientId,
           name: newTask.name.trim(),
           description: newTask.description.trim(),
+          frequency: newTask.frequency || 'daily',
           createdAt: new Date().toISOString()
         });
-        console.log(`✅ Added daily task: ${newTask.name}`);
-        setNewTask({ clientId: 'all', name: '', description: '' });
+        console.log(`✅ Added ${newTask.frequency} task: ${newTask.name}`);
+        setNewTask({ clientId: 'all', name: '', description: '', frequency: 'daily' });
         setShowAddTaskModal(false);
       } catch (e) {
         console.error('❌ Error adding daily task:', e);
@@ -3599,41 +3736,27 @@ const ClientPortal = () => {
         return;
       }
 
-      console.log('🔄 Setting up real-time video sync for admin...');
       const unsubVideos = onSnapshot(collection(db, 'videos'), (snapshot) => {
-        const videosData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        console.log(`🔄 Admin videos synced: ${videosData.length} videos`);
-        setVideos(videosData);
+        setVideos(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       }, (error) => {
-        console.error('❌ Error syncing videos:', error);
+        console.error('Error syncing videos:', error);
         setVideos([]);
       });
 
-      return () => {
-        console.log('🧹 Cleaning up admin video listener...');
-        unsubVideos();
-      };
+      return () => unsubVideos();
     }, []);
 
     const saveVideos = async (v) => {
-      setVideos(v);
-
       if (!db) {
-        console.warn('⚠️ Firestore not available - videos not saved to cloud');
+        setVideos(v);
         return;
       }
 
       try {
-        console.log(`💾 Saving ${v.length} videos to Firestore...`);
-        // Save each video to Firestore
-        for (const video of v) {
-          await setDoc(doc(db, 'videos', video.id), video);
-          console.log(`✅ Saved video: ${video.id}`);
-        }
-        console.log('✅ All videos saved successfully');
+        const savePromises = v.map(video => setDoc(doc(db, 'videos', video.id), video));
+        await Promise.all(savePromises);
       } catch (e) {
-        console.error('❌ Error saving videos to cloud:', e);
-        console.error('Error details:', e.message);
+        console.error('Error saving videos:', e);
       }
     };
 
@@ -3696,6 +3819,53 @@ const ClientPortal = () => {
         alert('❌ Error sending SMS. Please try again.');
       } finally {
         setSmsSending(false);
+      }
+    };
+
+    const handleSendDailyTexts = async () => {
+      const today = formatDateLocal(new Date());
+      const eligibleUsers = users.filter(u => !u.parentClientId && u.receiveDailyTexts && u.phoneNumber);
+
+      if (eligibleUsers.length === 0) {
+        alert('No users have daily text notifications enabled. Enable it in each client\'s details.');
+        return;
+      }
+
+      const todaysScheduledContent = calendarEvents.filter(e => e.date === today);
+
+      if (todaysScheduledContent.length === 0) {
+        alert('No content scheduled for today.');
+        return;
+      }
+
+      if (!confirm(`Send daily text updates to ${eligibleUsers.length} client${eligibleUsers.length > 1 ? 's' : ''}?`)) return;
+
+      setSendingDailyTexts(true);
+      let sent = 0;
+      let failed = 0;
+
+      try {
+        for (const user of eligibleUsers) {
+          const userEvents = todaysScheduledContent.filter(e => e.clientId === user.id);
+          if (userEvents.length === 0) continue;
+
+          const eventList = userEvents.map(e => `- ${e.title} (${e.type})`).join('\n');
+          const message = `Hi ${user.firstName}! You have ${userEvents.length} content piece${userEvents.length > 1 ? 's' : ''} scheduled for today:\n\n${eventList}\n\nCheck your portal for details!`;
+
+          try {
+            await sendSMS(user.phoneNumber, message);
+            sent++;
+          } catch {
+            failed++;
+          }
+        }
+
+        alert(`Daily texts sent to ${sent} client${sent !== 1 ? 's' : ''}!${failed > 0 ? ` (${failed} failed)` : ''}`);
+      } catch (error) {
+        console.error('Error sending daily texts:', error);
+        alert('Error sending daily texts.');
+      } finally {
+        setSendingDailyTexts(false);
       }
     };
 
@@ -3817,23 +3987,53 @@ const ClientPortal = () => {
     };
 
     return (
-      <div className="min-h-screen bg-gray-50">
-        <nav className="bg-gray-800 text-white">
+      <div className="min-h-screen bg-gray-100">
+        <nav className="bg-gray-800 text-white shadow-lg">
           <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
             <div className="flex items-center gap-4">
               {currentUser.companyLogo && (
                 <img src={currentUser.companyLogo} alt="Logo" className="h-12 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
               )}
-              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+              <div>
+                <h1 className="text-xl font-bold">Admin Dashboard</h1>
+                <p className="text-xs text-gray-400">Logged in as {currentUser?.name || currentUser?.email}</p>
+              </div>
             </div>
-            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-300 hover:text-white">Logout</button>
+            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-300 hover:text-white px-4 py-2 rounded hover:bg-gray-700 transition">Logout</button>
           </div>
         </nav>
 
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="mb-8 flex justify-between items-center">
-            <h2 className="text-2xl font-semibold">Admin Dashboard</h2>
-            <div className="flex gap-3">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          {/* Quick Stats Dashboard */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500">
+              <p className="text-2xl font-bold text-gray-800">{users.filter(u => !u.parentClientId).length}</p>
+              <p className="text-xs text-gray-500">Total Clients</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-yellow-500">
+              <p className="text-2xl font-bold text-yellow-600">{content.filter(c => c.status === 'pending').length}</p>
+              <p className="text-xs text-gray-500">Pending Review</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-green-500">
+              <p className="text-2xl font-bold text-green-600">{content.filter(c => c.status === 'approved').length}</p>
+              <p className="text-xs text-gray-500">Approved</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-purple-500">
+              <p className="text-2xl font-bold text-purple-600">{videos.filter(v => v.status === 'pending').length}</p>
+              <p className="text-xs text-gray-500">Videos Pending</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-indigo-500">
+              <p className="text-2xl font-bold text-indigo-600">{calendarEvents.filter(e => e.date === formatDateLocal(new Date())).length}</p>
+              <p className="text-xs text-gray-500">Today's Posts</p>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-teal-500">
+              <p className="text-2xl font-bold text-teal-600">{users.filter(u => !u.parentClientId && u.approvalGroup === 'auto-approve').length}</p>
+              <p className="text-xs text-gray-500">Auto-Approve</p>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mb-6 flex flex-wrap justify-end gap-2">
               <button
                 onClick={async () => {
                   if (!confirm('Check for pending content and send reminder texts to clients who need them?')) {
@@ -3878,24 +4078,31 @@ const ClientPortal = () => {
                     alert('Failed to check reminders. See console for details.');
                   }
                 }}
-                className="bg-orange-600 text-white px-6 py-3 rounded hover:bg-orange-700 flex items-center gap-2"
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center gap-2 text-sm"
               >
-                <Clock className="w-5 h-5" />
-                Send Reminders
+                <Clock className="w-4 h-4" />
+                Reminders
               </button>
               <button
                 onClick={handleAIGenerateContent}
                 disabled={isGeneratingAI}
-                className="bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 flex items-center gap-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                <Sparkles className="w-5 h-5" />
-                {isGeneratingAI ? 'Generating AI Content...' : 'AI Generate Content'}
+                <Sparkles className="w-4 h-4" />
+                {isGeneratingAI ? 'Generating...' : 'AI Content'}
               </button>
-              <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 flex items-center gap-2">
-                <Upload className="w-5 h-5" />Upload Content
+              <button
+                onClick={handleSendDailyTexts}
+                disabled={sendingDailyTexts}
+                className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 flex items-center gap-2 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                <Bell className="w-4 h-4" />
+                {sendingDailyTexts ? 'Sending...' : 'Daily Texts'}
+              </button>
+              <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm">
+                <Upload className="w-4 h-4" />Upload Content
               </button>
             </div>
-          </div>
 
           {/* Alert: Scheduled Social Posts Without Videos */}
           {(() => {
@@ -4198,7 +4405,7 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {/* Daily Tasks Section */}
+          {/* Daily & Weekly Tasks Section */}
           {(() => {
             const today = getTodayDateString();
             // Get all clients (excluding team members)
@@ -4211,7 +4418,7 @@ const ClientPortal = () => {
               const clientSpecificTasks = dailyTasks.filter(t => t.clientId === client.id);
               const tasksForClient = [...clientSpecificTasks, ...allClientTasks];
               const completedCount = tasksForClient.filter(task =>
-                isTaskCompletedToday(task.id, client.id)
+                isTaskCompletedToday(task.id, client.id, task.frequency)
               ).length;
               return {
                 client,
@@ -4229,7 +4436,7 @@ const ClientPortal = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <ListTodo className="w-6 h-6 text-amber-600" />
-                    <h3 className="text-xl font-semibold text-gray-800">Daily Tasks</h3>
+                    <h3 className="text-xl font-semibold text-gray-800">Daily & Weekly Tasks</h3>
                     {totalTasks > 0 && (
                       <>
                         <span className="bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
@@ -4271,7 +4478,7 @@ const ClientPortal = () => {
                         </div>
                         <div className="space-y-2">
                           {tasks.map(task => {
-                            const isCompleted = isTaskCompletedToday(task.id, client.id);
+                            const isCompleted = isTaskCompletedToday(task.id, client.id, task.frequency);
                             return (
                               <div
                                 key={`${task.id}-${client.id}`}
@@ -4294,6 +4501,9 @@ const ClientPortal = () => {
                                 <div className="flex-1 min-w-0">
                                   <p className={`text-sm font-medium ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
                                     {task.name}
+                                    {task.frequency === 'weekly' && (
+                                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-normal">weekly</span>
+                                    )}
                                     {task.clientId === 'all' && (
                                       <span className="ml-2 text-xs text-amber-600 font-normal">(all clients)</span>
                                     )}
@@ -4328,7 +4538,7 @@ const ClientPortal = () => {
                               <div>
                                 <p className="text-sm font-medium text-gray-800">{task.name}</p>
                                 <p className="text-xs text-gray-500">
-                                  {task.clientId === 'all' ? 'Applies to all clients' : `For: ${taskClient?.companyName || 'Unknown'}`}
+                                  {task.frequency === 'weekly' ? 'Weekly' : 'Daily'} • {task.clientId === 'all' ? 'All clients' : `For: ${taskClient?.companyName || 'Unknown'}`}
                                 </p>
                               </div>
                               <button
@@ -4355,7 +4565,7 @@ const ClientPortal = () => {
               <div className="bg-white rounded-lg shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
                 <div className="p-6 border-b border-gray-200">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-gray-800">Add Daily Task</h3>
+                    <h3 className="text-xl font-bold text-gray-800">Add Task</h3>
                     <button onClick={() => setShowAddTaskModal(false)} className="text-gray-400 hover:text-gray-600">
                       <X className="w-6 h-6" />
                     </button>
@@ -4383,6 +4593,20 @@ const ClientPortal = () => {
                       rows={2}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+                    <div className="flex gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="taskFrequency" value="daily" checked={newTask.frequency === 'daily'} onChange={() => setNewTask({ ...newTask, frequency: 'daily' })} className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm text-gray-700">Daily</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="taskFrequency" value="weekly" checked={newTask.frequency === 'weekly'} onChange={() => setNewTask({ ...newTask, frequency: 'weekly' })} className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm text-gray-700">Weekly</span>
+                      </label>
+                    </div>
                   </div>
 
                   <div>
@@ -4426,12 +4650,12 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {/* Expandable Section Headers */}
-          <div className="space-y-2">
+          {/* Expandable Sections */}
+          <div className="space-y-3">
             {/* Clients & Content */}
-            <button onClick={() => toggleSection('clients')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('clients') ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-2"><Users className="w-4 h-4" />Clients & Content <span className="text-xs opacity-70">({users.filter(u => !u.parentClientId).length})</span></div>
-              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('clients') ? 'rotate-90' : ''}`} />
+            <button onClick={() => toggleSection('clients')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('clients') ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-700 hover:bg-blue-50 hover:border-blue-200 border border-gray-200'}`}>
+              <div className="flex items-center gap-3"><Users className="w-5 h-5" />Clients & Content <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{users.filter(u => !u.parentClientId).length}</span></div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('clients') ? 'rotate-180' : ''}`} />
             </button>
             {expandedSections.has('clients') && (
             <div>
@@ -4466,11 +4690,16 @@ const ClientPortal = () => {
                           <h3 className="text-lg font-semibold">{user.firstName} {user.lastName || ''} - {user.companyName}</h3>
                           <p className="text-sm text-gray-600">{user.email}</p>
                         </div>
-                        {userGroup && (
-                          <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full font-medium">
-                            {userGroup.name}
+                        <div className="flex flex-col items-end gap-1">
+                          {userGroup && (
+                            <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full font-medium">
+                              {userGroup.name}
+                            </span>
+                          )}
+                          <span className={`px-3 py-1 text-xs rounded-full font-medium ${user.approvalGroup === 'auto-approve' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                            {user.approvalGroup === 'auto-approve' ? 'Auto-Approve' : 'Review Required'}
                           </span>
-                        )}
+                        </div>
                       </div>
                       {teamMembers.length > 0 && (
                         <p className="text-xs text-gray-500 mt-1">{teamMembers.length} team member{teamMembers.length > 1 ? 's' : ''}</p>
@@ -4573,9 +4802,9 @@ const ClientPortal = () => {
           )}
 
             {/* Content Calendar */}
-            <button onClick={() => toggleSection('calendar')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('calendar') ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-2"><Calendar className="w-4 h-4" />Content Calendar <span className="text-xs opacity-70">({calendarEvents.length})</span></div>
-              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('calendar') ? 'rotate-90' : ''}`} />
+            <button onClick={() => toggleSection('calendar')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('calendar') ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white text-gray-700 hover:bg-indigo-50 hover:border-indigo-200 border border-gray-200'}`}>
+              <div className="flex items-center gap-3"><Calendar className="w-5 h-5" />Content Calendar <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{calendarEvents.length}</span></div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('calendar') ? 'rotate-180' : ''}`} />
             </button>
           {expandedSections.has('calendar') && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -4863,9 +5092,9 @@ const ClientPortal = () => {
           )}
 
             {/* Video Production Queue */}
-            <button onClick={() => toggleSection('videos')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('videos') ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-2"><Video className="w-4 h-4" />Video Production Queue <span className="text-xs opacity-70">({videos.filter(v => v.status !== 'completed').length} pending)</span></div>
-              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('videos') ? 'rotate-90' : ''}`} />
+            <button onClick={() => toggleSection('videos')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('videos') ? 'bg-purple-600 text-white shadow-purple-200' : 'bg-white text-gray-700 hover:bg-purple-50 hover:border-purple-200 border border-gray-200'}`}>
+              <div className="flex items-center gap-3"><Video className="w-5 h-5" />Video Production Queue <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{videos.filter(v => v.status !== 'completed').length} pending</span></div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('videos') ? 'rotate-180' : ''}`} />
             </button>
           {expandedSections.has('videos') && (
             <div className="bg-white rounded-lg shadow p-6">
@@ -4937,9 +5166,9 @@ const ClientPortal = () => {
           )}
 
             {/* Groups */}
-            <button onClick={() => toggleSection('groups')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('groups') ? 'bg-teal-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-2"><Users className="w-4 h-4" />Groups <span className="text-xs opacity-70">({groups.length})</span></div>
-              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('groups') ? 'rotate-90' : ''}`} />
+            <button onClick={() => toggleSection('groups')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('groups') ? 'bg-teal-600 text-white shadow-teal-200' : 'bg-white text-gray-700 hover:bg-teal-50 hover:border-teal-200 border border-gray-200'}`}>
+              <div className="flex items-center gap-3"><Users className="w-5 h-5" />Groups <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{groups.length}</span></div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('groups') ? 'rotate-180' : ''}`} />
             </button>
           {expandedSections.has('groups') && (
             <div className="space-y-6">
@@ -5099,9 +5328,9 @@ const ClientPortal = () => {
           )}
 
             {/* Send SMS */}
-            <button onClick={() => toggleSection('sms')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('sms') ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-2"><Mail className="w-4 h-4" />📱 Send SMS</div>
-              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('sms') ? 'rotate-90' : ''}`} />
+            <button onClick={() => toggleSection('sms')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('sms') ? 'bg-green-600 text-white shadow-green-200' : 'bg-white text-gray-700 hover:bg-green-50 hover:border-green-200 border border-gray-200'}`}>
+              <div className="flex items-center gap-3"><MessageSquare className="w-5 h-5" />Send SMS</div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('sms') ? 'rotate-180' : ''}`} />
             </button>
           {expandedSections.has('sms') && (
             <div className="space-y-6">
@@ -5245,9 +5474,9 @@ const ClientPortal = () => {
           )}
 
             {/* Activity Log */}
-            <button onClick={() => toggleSection('activity')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('activity') ? 'bg-amber-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-2"><Clock className="w-4 h-4" />Activity Log <span className="text-xs opacity-70">({adminActivities.length})</span></div>
-              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('activity') ? 'rotate-90' : ''}`} />
+            <button onClick={() => toggleSection('activity')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('activity') ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-white text-gray-700 hover:bg-amber-50 hover:border-amber-200 border border-gray-200'}`}>
+              <div className="flex items-center gap-3"><Clock className="w-5 h-5" />Activity Log <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{adminActivities.length}</span></div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('activity') ? 'rotate-180' : ''}`} />
             </button>
           {expandedSections.has('activity') && (
             <div className="space-y-6">
@@ -5359,9 +5588,9 @@ const ClientPortal = () => {
           )}
 
             {/* Team */}
-            <button onClick={() => toggleSection('team')} className={`w-full px-4 py-3 rounded-lg font-medium flex items-center justify-between ${expandedSections.has('team') ? 'bg-gray-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-2"><Users className="w-4 h-4" />Team <span className="text-xs opacity-70">({adminUsers.length})</span></div>
-              <ChevronRight className={`w-4 h-4 transition-transform ${expandedSections.has('team') ? 'rotate-90' : ''}`} />
+            <button onClick={() => toggleSection('team')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('team') ? 'bg-gray-600 text-white shadow-gray-200' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}`}>
+              <div className="flex items-center gap-3"><Users className="w-5 h-5" />Team <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{adminUsers.length}</span></div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('team') ? 'rotate-180' : ''}`} />
             </button>
           {expandedSections.has('team') && (
             <div className="space-y-6">
@@ -5493,8 +5722,39 @@ const ClientPortal = () => {
                       />
                       <span className="text-gray-700">All Loan Officers</span>
                     </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="publishMode"
+                        value="approval-group"
+                        checked={publishMode === 'approval-group'}
+                        onChange={(e) => setPublishMode(e.target.value)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-gray-700">By Approval Group</span>
+                    </label>
                   </div>
                 </div>
+
+                {/* Approval Group Selection */}
+                {publishMode === 'approval-group' && (
+                  <div className="border rounded p-4 bg-blue-50">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Target Group:</label>
+                    <select
+                      value={targetApprovalGroup}
+                      onChange={(e) => setTargetApprovalGroup(e.target.value)}
+                      className="w-full px-4 py-2 border rounded"
+                    >
+                      <option value="review-required">Review Required (content goes to review)</option>
+                      <option value="auto-approve">Auto-Approve (content is automatically approved)</option>
+                    </select>
+                    <p className="text-xs text-gray-600 mt-2">
+                      {targetApprovalGroup === 'auto-approve'
+                        ? 'Content will be automatically approved and ready for scheduling.'
+                        : 'Content will appear in the client\'s review section for approval.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Client Selection - Only show for single mode */}
                 {publishMode === 'single' && (
@@ -5535,13 +5795,58 @@ const ClientPortal = () => {
                     return;
                   }
 
+                  // Helper to determine content status based on user's approval group
+                  const getContentStatus = (userId) => {
+                    const user = users.find(u => u.id === userId);
+                    return (user?.approvalGroup === 'auto-approve') ? 'approved' : 'pending';
+                  };
+
+                  // Approval group mode
+                  if (publishMode === 'approval-group') {
+                    const targetUsers = users.filter(u => {
+                      if (u.parentClientId) return false;
+                      const group = u.approvalGroup || 'review-required';
+                      return group === targetApprovalGroup;
+                    });
+
+                    if (targetUsers.length === 0) {
+                      alert(`No clients found in the "${targetApprovalGroup === 'auto-approve' ? 'Auto-Approve' : 'Review Required'}" group`);
+                      return;
+                    }
+
+                    const confirmMsg = `Publish this content to ${targetUsers.length} client${targetUsers.length > 1 ? 's' : ''} in the "${targetApprovalGroup === 'auto-approve' ? 'Auto-Approve' : 'Review Required'}" group?\n\n${targetUsers.map(u => u.companyName).join(', ')}`;
+                    if (!confirm(confirmMsg)) return;
+
+                    const newContentPieces = targetUsers.map(user => ({
+                      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                      clientId: user.id,
+                      type: newContent.type,
+                      title: newContent.title,
+                      description: newContent.description,
+                      content: newContent.content,
+                      fileLink: newContent.fileLink,
+                      status: getContentStatus(user.id),
+                      createdAt: new Date().toISOString()
+                    }));
+
+                    const saved = await saveContentItems(newContentPieces);
+                    if (!saved) {
+                      alert('⚠️ Failed to save some content. Please try again.');
+                      return;
+                    }
+
+                    const autoApprovedCount = newContentPieces.filter(c => c.status === 'approved').length;
+                    alert(`✅ Published to ${targetUsers.length} client${targetUsers.length > 1 ? 's' : ''}!${autoApprovedCount > 0 ? ` (${autoApprovedCount} auto-approved)` : ''}`);
+                    setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
+                    setPublishMode('single');
+                    setShowForm(false);
+                  }
                   // Bulk publish mode
-                  if (publishMode === 'all-realtors' || publishMode === 'all-loan-officers') {
+                  else if (publishMode === 'all-realtors' || publishMode === 'all-loan-officers') {
                     const targetIndustry = publishMode === 'all-realtors' ? 'Realtor' : 'Loan Officer';
 
-                    // Filter users by industry
                     const targetUsers = users.filter(u => {
-                      if (u.parentClientId) return false; // Skip team members
+                      if (u.parentClientId) return false;
                       if (!u.onboardingAnswers?.industry) return false;
                       const industries = Array.isArray(u.onboardingAnswers.industry)
                         ? u.onboardingAnswers.industry
@@ -5557,7 +5862,6 @@ const ClientPortal = () => {
                     const confirmMsg = `Publish this content to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''}?\n\n${targetUsers.map(u => u.companyName).join(', ')}`;
                     if (!confirm(confirmMsg)) return;
 
-                    // Create content for each target user
                     const newContentPieces = targetUsers.map(user => ({
                       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
                       clientId: user.id,
@@ -5566,42 +5870,39 @@ const ClientPortal = () => {
                       description: newContent.description,
                       content: newContent.content,
                       fileLink: newContent.fileLink,
-                      status: 'pending',
+                      status: getContentStatus(user.id),
                       createdAt: new Date().toISOString()
                     }));
 
-                    // Save only the new content items - let real-time sync update state
                     const saved = await saveContentItems(newContentPieces);
                     if (!saved) {
                       alert('⚠️ Failed to save some content. Please try again.');
                       return;
                     }
 
-                    // Automatic client notifications are disabled - use manual SMS from admin portal
-                    console.log(`✅ Published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''} (SMS notifications disabled)`);
-
-                    alert(`✅ Successfully published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''}!`);
+                    const autoApprovedCount = newContentPieces.filter(c => c.status === 'approved').length;
+                    alert(`✅ Published to ${targetUsers.length} ${targetIndustry}${targetUsers.length > 1 ? 's' : ''}!${autoApprovedCount > 0 ? ` (${autoApprovedCount} auto-approved)` : ''}`);
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
                     setPublishMode('single');
                     setShowForm(false);
                   }
                   // Single client mode
                   else {
-                    const singleContent = { id: Date.now().toString(), ...newContent, status: 'pending', createdAt: new Date().toISOString() };
+                    const singleContent = { id: Date.now().toString(), ...newContent, status: getContentStatus(newContent.clientId), createdAt: new Date().toISOString() };
                     const saved = await saveContentItems([singleContent]);
                     if (!saved) {
                       alert('⚠️ Failed to save content. Please try again.');
                       return;
                     }
 
-                    // Automatic client notifications are disabled - use manual SMS from admin portal
-                    console.log(`✅ Content published to client (SMS notifications disabled)`);
+                    const statusMsg = singleContent.status === 'approved' ? ' (auto-approved)' : '';
+                    console.log(`✅ Content published to client${statusMsg}`);
 
                     setNewContent({ clientId: '', type: 'content-idea', title: '', description: '', content: '', fileLink: '' });
                     setShowForm(false);
                   }
                 }} className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700">
-                  {publishMode === 'single' ? 'Upload' : `Publish to All ${publishMode === 'all-realtors' ? 'Realtors' : 'Loan Officers'}`}
+                  {publishMode === 'single' ? 'Upload' : publishMode === 'approval-group' ? `Publish to ${targetApprovalGroup === 'auto-approve' ? 'Auto-Approve' : 'Review Required'} Group` : `Publish to All ${publishMode === 'all-realtors' ? 'Realtors' : 'Loan Officers'}`}
                 </button>
                 <button onClick={() => {
                   setShowForm(false);
@@ -5812,6 +6113,44 @@ const ClientPortal = () => {
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      <Repeat className="w-4 h-4 inline mr-1" />
+                      Repeat
+                    </label>
+                    <div className="flex gap-3">
+                      <select
+                        value={recurrence}
+                        onChange={(e) => setRecurrence(e.target.value)}
+                        className="flex-1 px-4 py-2 border rounded"
+                      >
+                        <option value="none">No Repeat</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="biweekly">Every 2 Weeks</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                      {recurrence !== 'none' && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="2"
+                            max="52"
+                            value={recurrenceCount}
+                            onChange={(e) => setRecurrenceCount(Math.max(2, Math.min(52, parseInt(e.target.value) || 2)))}
+                            className="w-20 px-3 py-2 border rounded"
+                          />
+                          <span className="text-sm text-gray-600">times</span>
+                        </div>
+                      )}
+                    </div>
+                    {recurrence !== 'none' && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        This will create {recurrenceCount} scheduled posts starting from the selected date.
+                      </p>
+                    )}
+                  </div>
+
                   <div className="flex gap-3 mt-6">
                     <button
                       onClick={async () => {
@@ -5820,30 +6159,49 @@ const ClientPortal = () => {
                           return;
                         }
 
-                        await saveCalendarEvents([...calendarEvents, {
-                          id: Date.now().toString(),
-                          clientId: selectedContent.clientId,
-                          title: selectedContent.title,
-                          description: selectedContent.description,
-                          date: formatDateLocal(selectedDate),
-                          type: selectedContent.type,
-                          contentId: selectedContent.id,
-                          createdAt: new Date().toISOString()
-                        }]);
+                        const newEvents = [];
+                        const baseDate = new Date(selectedDate);
+
+                        const count = recurrence === 'none' ? 1 : recurrenceCount;
+                        for (let i = 0; i < count; i++) {
+                          const eventDate = new Date(baseDate);
+                          if (recurrence === 'daily') eventDate.setDate(baseDate.getDate() + i);
+                          else if (recurrence === 'weekly') eventDate.setDate(baseDate.getDate() + (i * 7));
+                          else if (recurrence === 'biweekly') eventDate.setDate(baseDate.getDate() + (i * 14));
+                          else if (recurrence === 'monthly') eventDate.setMonth(baseDate.getMonth() + i);
+
+                          newEvents.push({
+                            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                            clientId: selectedContent.clientId,
+                            title: selectedContent.title,
+                            description: selectedContent.description,
+                            date: formatDateLocal(eventDate),
+                            type: selectedContent.type,
+                            contentId: selectedContent.id,
+                            recurrenceGroup: recurrence !== 'none' ? Date.now().toString() : undefined,
+                            createdAt: new Date().toISOString()
+                          });
+                        }
+
+                        await saveCalendarEvents([...calendarEvents, ...newEvents]);
 
                         setShowScheduleModal(false);
                         setSelectedContent(null);
                         setSelectedDate(null);
+                        setRecurrence('none');
+                        setRecurrenceCount(4);
                       }}
                       className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
                     >
-                      Schedule
+                      {recurrence === 'none' ? 'Schedule' : `Schedule ${recurrenceCount} Posts`}
                     </button>
                     <button
                       onClick={() => {
                         setShowScheduleModal(false);
                         setSelectedContent(null);
                         setSelectedDate(null);
+                        setRecurrence('none');
+                        setRecurrenceCount(4);
                       }}
                       className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300"
                     >
@@ -6011,6 +6369,36 @@ const ClientPortal = () => {
                     <div>
                       <span className="text-gray-600">Onboarded:</span>
                       <span className="ml-2 font-medium">{selectedUser.onboarded ? 'Yes' : 'No'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Approval Group:</span>
+                      <select
+                        value={selectedUser.approvalGroup || 'review-required'}
+                        onChange={async (e) => {
+                          const updatedUser = { ...selectedUser, approvalGroup: e.target.value };
+                          setSelectedUser(updatedUser);
+                          const updatedUsers = users.map(u => u.id === selectedUser.id ? updatedUser : u);
+                          await saveUsers(updatedUsers);
+                        }}
+                        className="ml-2 px-2 py-1 border rounded text-sm font-medium"
+                      >
+                        <option value="review-required">Review Required</option>
+                        <option value="auto-approve">Auto-Approve</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Daily Text Notifications:</span>
+                      <button
+                        onClick={async () => {
+                          const updatedUser = { ...selectedUser, receiveDailyTexts: !selectedUser.receiveDailyTexts };
+                          setSelectedUser(updatedUser);
+                          const updatedUsers = users.map(u => u.id === selectedUser.id ? updatedUser : u);
+                          await saveUsers(updatedUsers);
+                        }}
+                        className={`ml-2 px-3 py-1 rounded text-xs font-medium ${selectedUser.receiveDailyTexts ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
+                      >
+                        {selectedUser.receiveDailyTexts ? 'Enabled' : 'Disabled'}
+                      </button>
                     </div>
                   </div>
                 </div>

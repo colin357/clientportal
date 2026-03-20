@@ -4129,17 +4129,20 @@ const ClientPortal = () => {
             }, {} as Record<string, typeof postsWithoutVideos>);
 
             return (
-              <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 rounded-lg p-6 mb-8">
-                <div className="flex items-center gap-2 mb-4">
-                  <Video className="w-6 h-6 text-red-600" />
-                  <h3 className="text-xl font-semibold text-red-800">Scheduled Posts Missing Videos</h3>
-                  <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">{postsWithoutVideos.length}</span>
-                </div>
-                <p className="text-sm text-red-700 mb-4">
-                  The following social media posts are scheduled but don't have a video attached. Follow up with clients to get their videos.
-                </p>
-                <div className="space-y-4">
-                  {Object.entries(groupedByClient).map(([clientId, events]) => {
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 rounded-lg mb-8">
+                <details className="group">
+                  <summary className="flex items-center gap-2 p-4 cursor-pointer list-none select-none hover:bg-red-50/50 rounded-lg transition-colors">
+                    <ChevronRight className="w-5 h-5 text-red-600 transition-transform group-open:rotate-90" />
+                    <Video className="w-5 h-5 text-red-600" />
+                    <h3 className="text-lg font-semibold text-red-800">Scheduled Posts Missing Videos</h3>
+                    <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">{postsWithoutVideos.length}</span>
+                  </summary>
+                  <div className="px-6 pb-6">
+                    <p className="text-sm text-red-700 mb-4">
+                      The following social media posts are scheduled but don't have a video attached. Follow up with clients to get their videos.
+                    </p>
+                    <div className="space-y-4">
+                      {Object.entries(groupedByClient).map(([clientId, events]) => {
                     const client = users.find(u => u.id === clientId);
                     return (
                       <div key={clientId} className="bg-white rounded-lg p-4 shadow-sm border border-red-200">
@@ -4189,11 +4192,13 @@ const ClientPortal = () => {
                               </div>
                             );
                           })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
+              </details>
               </div>
             );
           })()}

@@ -1429,15 +1429,11 @@ const ClientPortal = () => {
                             setHeaderVideoUploading(false);
                             return;
                           }
-                          const storageRef = ref(storage, `videos/${effectiveClientId}/${Date.now()}_${headerVideoFile.name}`);
-                          const uploadTask = uploadBytesResumable(storageRef, headerVideoFile);
-                          videoUrl = await new Promise((resolve, reject) => {
-                            uploadTask.on('state_changed',
-                              (snapshot) => setHeaderVideoProgress(Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)),
-                              reject,
-                              async () => resolve(await getDownloadURL(uploadTask.snapshot.ref))
-                            );
-                          });
+                          videoUrl = await uploadFileToStorage(
+                            headerVideoFile,
+                            'videos',
+                            (progress) => setHeaderVideoProgress(Math.round(progress))
+                          );
                           fileName = headerVideoFile.name;
                         }
 

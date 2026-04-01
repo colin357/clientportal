@@ -1456,7 +1456,8 @@ const ClientPortal = () => {
 
                         if (db) await setDoc(doc(db, 'videos', videoDoc.id), videoDoc);
 
-                        await sendSMS('+17867882699', `📹 New video submitted by ${currentUser.companyName}${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
+                        await sendSMS('+17867882699', `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
+                        await sendSMS('+12678976117', `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
 
                         await loadUserVideos();
                         alert('Video uploaded successfully!');
@@ -2020,7 +2021,11 @@ const ClientPortal = () => {
                                         // Send SMS notification
                                         await sendSMS(
                                           '+17867882699',
-                                          `📹 New video submitted by ${currentUser.companyName} for "${item.title}". Check the admin portal!`
+                                          `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
+                                        );
+                                        await sendSMS(
+                                          '+12678976117',
+                                          `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
                                         );
 
                                         // Clear form
@@ -2982,7 +2987,11 @@ const ClientPortal = () => {
                         // Send SMS notification
                         await sendSMS(
                           '+17867882699',
-                          `New video uploaded by ${currentUser.companyName}. Description: ${videoDescription || 'None'}. Check the admin portal!`
+                          `New video uploaded by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
+                        );
+                        await sendSMS(
+                          '+12678976117',
+                          `New video uploaded by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
                         );
 
                         // Clear form

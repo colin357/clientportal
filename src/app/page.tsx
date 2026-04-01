@@ -1456,8 +1456,9 @@ const ClientPortal = () => {
 
                         if (db) await setDoc(doc(db, 'videos', videoDoc.id), videoDoc);
 
-                        await sendSMS('+17867882699', `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
-                        await sendSMS('+12678976117', `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
+                        const uploaderName1 = [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ');
+                        await sendSMS('+17867882699', `📹 New video submitted by ${uploaderName1} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
+                        await sendSMS('+12678976117', `📹 New video submitted by ${uploaderName1} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
 
                         await loadUserVideos();
                         alert('Video uploaded successfully!');
@@ -2019,13 +2020,14 @@ const ClientPortal = () => {
                                         await setDoc(doc(db, 'videos', newVideo.id), newVideo);
 
                                         // Send SMS notification
+                                        const uploaderName2 = [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ');
                                         await sendSMS(
                                           '+17867882699',
-                                          `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
+                                          `📹 New video submitted by ${uploaderName2} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
                                         );
                                         await sendSMS(
                                           '+12678976117',
-                                          `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
+                                          `📹 New video submitted by ${uploaderName2} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
                                         );
 
                                         // Clear form
@@ -2985,13 +2987,14 @@ const ClientPortal = () => {
                         await setDoc(doc(db, 'videos', newVideo.id), newVideo);
 
                         // Send SMS notification
+                        const uploaderName3 = [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ');
                         await sendSMS(
                           '+17867882699',
-                          `New video uploaded by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
+                          `New video uploaded by ${uploaderName3} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
                         );
                         await sendSMS(
                           '+12678976117',
-                          `New video uploaded by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
+                          `New video uploaded by ${uploaderName3} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
                         );
 
                         // Clear form
@@ -5131,7 +5134,7 @@ const ClientPortal = () => {
                       <div key={video.id} className="border rounded-lg p-4">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <p className="font-semibold text-gray-800">{client?.companyName}</p>
+                            <p className="font-semibold text-gray-800">{client?.companyName}{client?.firstName ? <span className="text-sm font-normal text-gray-500 ml-2">({[client.firstName, client.lastName].filter(Boolean).join(' ')})</span> : null}</p>
                             {video.contentTitle && (
                               <p className="text-sm text-purple-600 font-medium">📝 For Content: {video.contentTitle}</p>
                             )}

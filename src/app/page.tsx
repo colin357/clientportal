@@ -40,6 +40,9 @@ const isFirebaseConfigured = () => {
   } else {
     console.log('✅ Firebase configuration detected');
     console.log('Project ID:', firebaseConfig.projectId);
+    if (!firebaseConfig.storageBucket) {
+      console.warn('⚠️ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is missing - file uploads will not work');
+    }
   }
 
   return isConfigured;
@@ -603,7 +606,7 @@ const ClientPortal = () => {
   // File upload helper function
   const uploadFileToStorage = async (file, path, onProgress) => {
     if (!storage) {
-      throw new Error('Firebase Storage is not configured');
+      throw new Error('Firebase Storage is not configured. Check that NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is set.');
     }
 
     return new Promise((resolve, reject) => {
@@ -1455,6 +1458,7 @@ const ClientPortal = () => {
 
                         await sendSMS('+17867882699', `📹 New video submitted by ${currentUser.companyName}${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
 
+                        await loadUserVideos();
                         alert('Video uploaded successfully!');
                         setShowHeaderVideoModal(false);
                         setHeaderVideoAttachType('standalone');
@@ -1464,7 +1468,8 @@ const ClientPortal = () => {
                         setHeaderVideoDescription('');
                       } catch (error) {
                         console.error('Error uploading video:', error);
-                        alert('Failed to upload video. Please try again.');
+                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                        alert(`Failed to upload video: ${errorMessage}`);
                       } finally {
                         setHeaderVideoUploading(false);
                         setHeaderVideoProgress(0);

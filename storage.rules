@@ -20,8 +20,7 @@ service firebase.storage {
 
     // Allow uploads to videos folder
     match /videos/{fileName} {
-      allow write: if request.resource.size < 500 * 1024 * 1024 // 500MB limit
-                   && request.resource.contentType.matches('video/.*');
+      allow write: if request.resource.size < 500 * 1024 * 1024; // 500MB limit
     }
   }
 }

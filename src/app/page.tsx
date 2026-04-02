@@ -202,6 +202,7 @@ const ClientPortal = () => {
   const [groups, setGroups] = useState([]);
   const [dailyTasks, setDailyTasks] = useState([]);
   const [dailyTaskCompletions, setDailyTaskCompletions] = useState([]);
+  const [generalTasks, setGeneralTasks] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminActivities, setAdminActivities] = useState([]);
 
@@ -225,6 +226,7 @@ const ClientPortal = () => {
       unsubscribers.push(listen('groups', setGroups));
       unsubscribers.push(listen('dailyTasks', setDailyTasks));
       unsubscribers.push(listen('dailyTaskCompletions', setDailyTaskCompletions));
+      unsubscribers.push(listen('generalTasks', setGeneralTasks));
       unsubscribers.push(listen('adminUsers', setAdminUsers));
       unsubscribers.push(listen('adminActivities', setAdminActivities));
     } else {
@@ -3575,6 +3577,8 @@ const ClientPortal = () => {
     // Daily Tasks state
     const [showAddTaskModal, setShowAddTaskModal] = useState(false);
     const [newTask, setNewTask] = useState({ clientId: 'all', name: '', description: '', frequency: 'daily' });
+    const [showAddGeneralTaskModal, setShowAddGeneralTaskModal] = useState(false);
+    const [newGeneralTask, setNewGeneralTask] = useState({ name: '', description: '' });
 
     // Log admin activity
     const logAdminActivity = async (action: string, details: string, metadata?: Record<string, any>) => {
@@ -3735,6 +3739,57 @@ const ClientPortal = () => {
         console.log(`✅ Deleted daily task: ${taskId}`);
       } catch (e) {
         console.error('❌ Error deleting daily task:', e);
+      }
+    };
+
+    // Add a general (one-off) task
+    const addGeneralTask = async () => {
+      if (!db || !newGeneralTask.name.trim()) return;
+
+      try {
+        const taskId = Date.now().toString();
+        await setDoc(doc(db, 'generalTasks', taskId), {
+          id: taskId,
+          name: newGeneralTask.name.trim(),
+          description: newGeneralTask.description.trim(),
+          completed: false,
+          completedAt: null,
+          completedBy: null,
+          createdAt: new Date().toISOString()
+        });
+        setNewGeneralTask({ name: '', description: '' });
+        setShowAddGeneralTaskModal(false);
+      } catch (e) {
+        console.error('❌ Error adding general task:', e);
+      }
+    };
+
+    // Toggle completion of a general task
+    const toggleGeneralTaskCompletion = async (taskId: string) => {
+      if (!db) return;
+
+      try {
+        const task = generalTasks.find(t => t.id === taskId);
+        if (!task) return;
+        const nowCompleted = !task.completed;
+        await updateDoc(doc(db, 'generalTasks', taskId), {
+          completed: nowCompleted,
+          completedAt: nowCompleted ? new Date().toISOString() : null,
+          completedBy: nowCompleted ? (currentUser?.name || currentUser?.email || 'Admin') : null
+        });
+      } catch (e) {
+        console.error('❌ Error toggling general task:', e);
+      }
+    };
+
+    // Delete a general task
+    const deleteGeneralTask = async (taskId: string) => {
+      if (!db) return;
+
+      try {
+        await deleteDoc(doc(db, 'generalTasks', taskId));
+      } catch (e) {
+        console.error('❌ Error deleting general task:', e);
       }
     };
 
@@ -5692,8 +5747,164 @@ const ClientPortal = () => {
               </div>
             </div>
           )}
+            {/* General Tasks */}
+            <button onClick={() => toggleSection('generalTasks')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('generalTasks') ? 'bg-orange-600 text-white shadow-orange-200' : 'bg-white text-gray-700 hover:bg-orange-50 hover:border-orange-200 border border-gray-200'}`}>
+              <div className="flex items-center gap-3">
+                <ListTodo className="w-5 h-5" />
+                General Tasks
+                <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{generalTasks.filter(t => !t.completed).length} pending</span>
+              </div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('generalTasks') ? 'rotate-180' : ''}`} />
+            </button>
+          {expandedSections.has('generalTasks') && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">One-off tasks that don't repeat. Check them off when done.</p>
+                <button
+                  onClick={() => setShowAddGeneralTaskModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Task
+                </button>
+              </div>
+
+              {generalTasks.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  <ListTodo className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium">No tasks yet</p>
+                  <p className="text-sm mt-1">Add a one-off task to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Pending tasks */}
+                  {generalTasks.filter(t => !t.completed).map(task => (
+                    <div key={task.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors group">
+                      <button
+                        onClick={() => toggleGeneralTaskCompletion(task.id)}
+                        className="mt-0.5 flex-shrink-0 text-gray-400 hover:text-orange-600 transition-colors"
+                      >
+                        <Square className="w-5 h-5" />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{task.name}</p>
+                        {task.description && (
+                          <p className="text-xs text-gray-500 mt-0.5">{task.description}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-1">Added {new Date(task.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <button
+                        onClick={() => deleteGeneralTask(task.id)}
+                        className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1 transition-all flex-shrink-0"
+                        title="Delete task"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Completed tasks */}
+                  {generalTasks.filter(t => t.completed).length > 0 && (
+                    <details className="mt-4">
+                      <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700 font-medium select-none">
+                        Completed ({generalTasks.filter(t => t.completed).length})
+                      </summary>
+                      <div className="mt-2 space-y-2">
+                        {generalTasks.filter(t => t.completed).map(task => (
+                          <div key={task.id} className="flex items-start gap-3 p-3 rounded-lg bg-green-50 group">
+                            <button
+                              onClick={() => toggleGeneralTaskCompletion(task.id)}
+                              className="mt-0.5 flex-shrink-0 text-green-600 hover:text-green-700 transition-colors"
+                            >
+                              <CheckSquare className="w-5 h-5" />
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-500 line-through">{task.name}</p>
+                              {task.description && (
+                                <p className="text-xs text-gray-400 mt-0.5">{task.description}</p>
+                              )}
+                              {task.completedAt && (
+                                <p className="text-xs text-green-600 mt-1">
+                                  Completed {new Date(task.completedAt).toLocaleDateString()}{task.completedBy ? ` by ${task.completedBy}` : ''}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => deleteGeneralTask(task.id)}
+                              className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1 transition-all flex-shrink-0"
+                              title="Delete task"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           </div>
         </div>
+
+        {/* Add General Task Modal */}
+        {showAddGeneralTaskModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowAddGeneralTaskModal(false)}>
+            <div className="bg-white rounded-lg shadow-2xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xl font-bold text-gray-800">Add General Task</h3>
+                  <button onClick={() => setShowAddGeneralTaskModal(false)} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Task Name *</label>
+                  <input
+                    type="text"
+                    value={newGeneralTask.name}
+                    onChange={(e) => setNewGeneralTask({ ...newGeneralTask, name: e.target.value })}
+                    placeholder="e.g., Update client onboarding doc"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                    onKeyDown={(e) => { if (e.key === 'Enter' && newGeneralTask.name.trim()) addGeneralTask(); }}
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                  <textarea
+                    value={newGeneralTask.description}
+                    onChange={(e) => setNewGeneralTask({ ...newGeneralTask, description: e.target.value })}
+                    placeholder="Add any notes or details..."
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowAddGeneralTaskModal(false)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addGeneralTask}
+                  disabled={!newGeneralTask.name.trim()}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Add Task
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

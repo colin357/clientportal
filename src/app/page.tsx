@@ -6202,15 +6202,21 @@ const ClientPortal = () => {
                               const file = e.target.files?.[0];
                               if (!file) return;
                               const isVideo = file.type.startsWith('video/');
+                              if (!storage) {
+                                alert('Firebase Storage is not configured. Please paste an image or video URL in the field below instead.');
+                                e.target.value = '';
+                                return;
+                              }
                               try {
                                 setScheduleMediaUploadProgress(0);
                                 const url = await uploadFileToStorage(file, 'schedule-media', (p) => setScheduleMediaUploadProgress(p));
                                 setScheduleMediaUrl(url);
                                 setScheduleMediaType(isVideo ? 'video' : 'image');
                                 setScheduleMediaUploadProgress(null);
-                              } catch {
-                                alert('Upload failed. Please try a URL instead.');
+                              } catch (err) {
+                                alert(`Upload failed: ${err instanceof Error ? err.message : String(err)}\n\nPlease paste an image or video URL in the field below instead.`);
                                 setScheduleMediaUploadProgress(null);
+                                e.target.value = '';
                               }
                             }}
                           />

@@ -2534,26 +2534,38 @@ const ClientPortal = () => {
                     </p>
                   </div>
 
+                  {/* Media preview */}
+                  {selectedEvent.mediaUrl && selectedEvent.mediaType === 'image' && (
+                    <div>
+                      <p className="text-sm text-gray-500 font-medium mb-1">Media</p>
+                      <img src={selectedEvent.mediaUrl} alt="Post media" className="w-full max-h-64 object-cover rounded-lg border" />
+                    </div>
+                  )}
+                  {selectedEvent.mediaUrl && selectedEvent.mediaType === 'video' && (
+                    <div>
+                      <p className="text-sm text-gray-500 font-medium mb-1">Media</p>
+                      <video src={selectedEvent.mediaUrl} className="w-full max-h-64 rounded-lg border" controls />
+                    </div>
+                  )}
+
                   <div>
                     <p className="text-sm text-gray-500 font-medium mb-1">Description</p>
                     <p className="text-gray-700 whitespace-pre-wrap">{selectedEvent.description}</p>
                   </div>
 
-                  {selectedEvent.contentId && (
-                    <div className="mt-6 pt-6 border-t">
-                      <button
-                        onClick={() => {
-                          setShowEventModal(false);
-                          setActivePage('content');
-                          // Scroll to content item if needed
-                        }}
-                        className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2"
-                      >
-                        <FileText className="w-4 h-4" />
-                        View Full Content Details
-                      </button>
-                    </div>
-                  )}
+                  {/* Full content text */}
+                  {(() => {
+                    const fullItem = selectedEvent.contentId ? clientContent.find(c => c.id === selectedEvent.contentId) : null;
+                    if (!fullItem?.content) return null;
+                    return (
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium mb-1">Content</p>
+                        <div className="bg-gray-50 rounded-lg border p-4 max-h-64 overflow-y-auto">
+                          <RichTextDisplay content={fullItem.content} className="text-sm text-gray-700" />
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="mt-8 flex justify-end">
@@ -3517,6 +3529,11 @@ const ClientPortal = () => {
     // Recurring post state
     const [recurrence, setRecurrence] = useState('none'); // 'none', 'daily', 'weekly', 'biweekly', 'monthly'
     const [recurrenceCount, setRecurrenceCount] = useState(4); // Number of occurrences
+
+    // Schedule modal media state
+    const [scheduleMediaUrl, setScheduleMediaUrl] = useState('');
+    const [scheduleMediaType, setScheduleMediaType] = useState<'image' | 'video' | ''>('');
+    const [scheduleMediaUploadProgress, setScheduleMediaUploadProgress] = useState<number | null>(null);
 
     // Drag and drop state
     const [draggedContent, setDraggedContent] = useState(null);
@@ -6166,6 +6183,68 @@ const ClientPortal = () => {
                     )}
                   </div>
 
+                  {/* Media Attachment */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Media Attachment (optional)
+                    </label>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <label className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors text-sm text-gray-600">
+                          <input
+                            type="file"
+                            accept="image/*,video/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const isVideo = file.type.startsWith('video/');
+                              try {
+                                setScheduleMediaUploadProgress(0);
+                                const url = await uploadFileToStorage(file, 'schedule-media', (p) => setScheduleMediaUploadProgress(p));
+                                setScheduleMediaUrl(url);
+                                setScheduleMediaType(isVideo ? 'video' : 'image');
+                                setScheduleMediaUploadProgress(null);
+                              } catch {
+                                alert('Upload failed. Please try a URL instead.');
+                                setScheduleMediaUploadProgress(null);
+                              }
+                            }}
+                          />
+                          {scheduleMediaUploadProgress !== null
+                            ? `Uploading… ${Math.round(scheduleMediaUploadProgress)}%`
+                            : 'Upload photo or video'}
+                        </label>
+                      </div>
+                      <input
+                        type="url"
+                        placeholder="Or paste an image / video URL"
+                        value={scheduleMediaUrl}
+                        onChange={(e) => {
+                          const url = e.target.value;
+                          setScheduleMediaUrl(url);
+                          if (!url) { setScheduleMediaType(''); return; }
+                          const lower = url.toLowerCase();
+                          if (lower.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/)) setScheduleMediaType('video');
+                          else setScheduleMediaType('image');
+                        }}
+                        className="w-full px-3 py-2 border rounded text-sm"
+                      />
+                      {scheduleMediaUrl && scheduleMediaType === 'image' && (
+                        <div className="relative">
+                          <img src={scheduleMediaUrl} alt="Preview" className="w-full max-h-40 object-cover rounded border" />
+                          <button onClick={() => { setScheduleMediaUrl(''); setScheduleMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>
+                        </div>
+                      )}
+                      {scheduleMediaUrl && scheduleMediaType === 'video' && (
+                        <div className="relative">
+                          <video src={scheduleMediaUrl} className="w-full max-h-40 rounded border" controls />
+                          <button onClick={() => { setScheduleMediaUrl(''); setScheduleMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="flex gap-3 mt-6">
                     <button
                       onClick={async () => {
@@ -6194,7 +6273,8 @@ const ClientPortal = () => {
                             type: selectedContent.type,
                             contentId: selectedContent.id,
                             recurrenceGroup: recurrence !== 'none' ? Date.now().toString() : undefined,
-                            createdAt: new Date().toISOString()
+                            createdAt: new Date().toISOString(),
+                            ...(scheduleMediaUrl ? { mediaUrl: scheduleMediaUrl, mediaType: scheduleMediaType } : {})
                           });
                         }
 
@@ -6205,6 +6285,8 @@ const ClientPortal = () => {
                         setSelectedDate(null);
                         setRecurrence('none');
                         setRecurrenceCount(4);
+                        setScheduleMediaUrl('');
+                        setScheduleMediaType('');
                       }}
                       className="flex-1 bg-blue-600 text-white py-3 rounded hover:bg-blue-700"
                     >
@@ -6217,6 +6299,8 @@ const ClientPortal = () => {
                         setSelectedDate(null);
                         setRecurrence('none');
                         setRecurrenceCount(4);
+                        setScheduleMediaUrl('');
+                        setScheduleMediaType('');
                       }}
                       className="flex-1 bg-gray-200 py-3 rounded hover:bg-gray-300"
                     >

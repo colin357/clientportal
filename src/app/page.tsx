@@ -6116,8 +6116,11 @@ const ClientPortal = () => {
         {/* Schedule Content Modal */}
         {showScheduleModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
-              <h2 className="text-2xl font-bold mb-6">Schedule Content</h2>
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+              <div className="p-6 border-b flex-shrink-0">
+                <h2 className="text-2xl font-bold">Schedule Content</h2>
+              </div>
+              <div className="overflow-y-auto flex-1 p-6">
 
               {selectedContent ? (
                 <div className="space-y-4">
@@ -6420,6 +6423,7 @@ const ClientPortal = () => {
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </div>
         )}

@@ -3535,6 +3535,12 @@ const ClientPortal = () => {
     const [scheduleMediaType, setScheduleMediaType] = useState<'image' | 'video' | ''>('');
     const [scheduleMediaUploadProgress, setScheduleMediaUploadProgress] = useState<number | null>(null);
 
+    // Edit existing event media state
+    const [editingEvent, setEditingEvent] = useState<any>(null);
+    const [editMediaUrl, setEditMediaUrl] = useState('');
+    const [editMediaType, setEditMediaType] = useState<'image' | 'video' | ''>('');
+    const [editMediaUploadProgress, setEditMediaUploadProgress] = useState<number | null>(null);
+
     // Drag and drop state
     const [draggedContent, setDraggedContent] = useState(null);
     const [dragOverDate, setDragOverDate] = useState(null);
@@ -4975,7 +4981,18 @@ const ClientPortal = () => {
                                   }`}
                                   title={event.title}
                                 >
-                                  <span className="truncate flex-1">{event.title}</span>
+                                  <button
+                                    className="truncate flex-1 text-left hover:underline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingEvent(event);
+                                      setEditMediaUrl(event.mediaUrl || '');
+                                      setEditMediaType(event.mediaType || '');
+                                    }}
+                                  >
+                                    {event.mediaUrl && <span className="mr-1">🖼</span>}
+                                    {event.title}
+                                  </button>
                                   <button
                                     onClick={async (e) => {
                                       e.stopPropagation();
@@ -6429,6 +6446,113 @@ const ClientPortal = () => {
                   </button>
                 </div>
               )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit scheduled event media modal */}
+        {editingEvent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-800">{editingEvent.title}</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    {' · '}
+                    <span className={`font-medium ${editingEvent.type === 'social' ? 'text-blue-600' : editingEvent.type === 'email' ? 'text-green-600' : 'text-purple-600'}`}>{editingEvent.type}</span>
+                  </p>
+                </div>
+                <button onClick={() => setEditingEvent(null)} className="text-gray-400 hover:text-gray-600 ml-4"><X className="w-5 h-5" /></button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-gray-700">Media Attachment</label>
+
+                <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors text-sm text-gray-600">
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const isVideo = file.type.startsWith('video/');
+                      if (!storage) {
+                        alert('Firebase Storage is not configured. Please paste a URL instead.');
+                        e.target.value = '';
+                        return;
+                      }
+                      try {
+                        setEditMediaUploadProgress(0);
+                        const url = await uploadFileToStorage(file, 'schedule-media', (p) => setEditMediaUploadProgress(p));
+                        setEditMediaUrl(url);
+                        setEditMediaType(isVideo ? 'video' : 'image');
+                        setEditMediaUploadProgress(null);
+                      } catch (err) {
+                        alert(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+                        setEditMediaUploadProgress(null);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  {editMediaUploadProgress !== null ? `Uploading… ${Math.round(editMediaUploadProgress)}%` : 'Upload photo or video'}
+                </label>
+
+                <input
+                  type="url"
+                  placeholder="Or paste an image / video URL"
+                  value={editMediaUrl}
+                  onChange={(e) => {
+                    const url = e.target.value;
+                    setEditMediaUrl(url);
+                    if (!url) { setEditMediaType(''); return; }
+                    const lower = url.toLowerCase();
+                    if (lower.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/)) setEditMediaType('video');
+                    else setEditMediaType('image');
+                  }}
+                  className="w-full px-3 py-2 border rounded text-sm"
+                />
+
+                {editMediaUrl && editMediaType === 'image' && (
+                  <div className="relative">
+                    <img src={editMediaUrl} alt="Preview" className="w-full max-h-48 object-cover rounded-lg border" />
+                    <button onClick={() => { setEditMediaUrl(''); setEditMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">×</button>
+                  </div>
+                )}
+                {editMediaUrl && editMediaType === 'video' && (
+                  <div className="relative">
+                    <video src={editMediaUrl} className="w-full max-h-48 rounded-lg border" controls />
+                    <button onClick={() => { setEditMediaUrl(''); setEditMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">×</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={async () => {
+                    const updated = { ...editingEvent, mediaUrl: editMediaUrl || null, mediaType: editMediaType || null };
+                    if (db) {
+                      await updateDoc(doc(db, 'calendarEvents', editingEvent.id), {
+                        mediaUrl: editMediaUrl || null,
+                        mediaType: editMediaType || null
+                      });
+                    } else {
+                      await saveCalendarEvents(calendarEvents.map(ev => ev.id === editingEvent.id ? updated : ev));
+                    }
+                    setEditingEvent(null);
+                  }}
+                  className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 font-medium"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingEvent(null)}
+                  className="flex-1 bg-gray-200 py-2.5 rounded-lg hover:bg-gray-300 font-medium"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

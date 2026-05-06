@@ -972,6 +972,7 @@ const ClientPortal = () => {
     const [generationTakingLong, setGenerationTakingLong] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [showEventModal, setShowEventModal] = useState(false);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [socialLogins, setSocialLogins] = useState({
       instagram: '', facebook: '', youtube: '', x: '', linkedin: '', tiktok: '', crm: '',
       ...currentUser.socialLogins
@@ -2538,7 +2539,13 @@ const ClientPortal = () => {
                   {selectedEvent.mediaUrl && selectedEvent.mediaType === 'image' && (
                     <div>
                       <p className="text-sm text-gray-500 font-medium mb-1">Media</p>
-                      <img src={selectedEvent.mediaUrl} alt="Post media" className="w-full max-h-64 object-cover rounded-lg border" />
+                      <img
+                        src={selectedEvent.mediaUrl}
+                        alt="Post media"
+                        className="w-full max-h-64 object-cover rounded-lg border cursor-zoom-in hover:opacity-90 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); setLightboxUrl(selectedEvent.mediaUrl); }}
+                      />
+                      <p className="text-xs text-gray-400 mt-1 text-center">Click image to view full size</p>
                     </div>
                   )}
                   {selectedEvent.mediaUrl && selectedEvent.mediaType === 'video' && (
@@ -2577,6 +2584,27 @@ const ClientPortal = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Image lightbox */}
+          {lightboxUrl && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[60] p-4 cursor-zoom-out"
+              onClick={() => setLightboxUrl(null)}
+            >
+              <button
+                className="absolute top-4 right-4 text-white bg-white/20 hover:bg-white/40 rounded-full w-10 h-10 flex items-center justify-center transition-colors"
+                onClick={() => setLightboxUrl(null)}
+              >
+                <X className="w-6 h-6" />
+              </button>
+              <img
+                src={lightboxUrl}
+                alt="Full size"
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
             </div>
           )}
 

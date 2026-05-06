@@ -22,5 +22,10 @@ service firebase.storage {
     match /videos/{fileName} {
       allow write: if request.resource.size < 500 * 1024 * 1024; // 500MB limit
     }
+
+    // Allow uploads to schedule-media folder (images and videos for scheduled posts)
+    match /schedule-media/{fileName} {
+      allow write: if request.resource.size < 500 * 1024 * 1024; // 500MB limit
+    }
   }
 }

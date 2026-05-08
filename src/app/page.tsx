@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown, ImagePlus } from 'lucide-react';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 
@@ -1007,6 +1007,11 @@ const ClientPortal = () => {
     const [headerVideoDescription, setHeaderVideoDescription] = useState('');
     const [headerVideoUploading, setHeaderVideoUploading] = useState(false);
     const [headerVideoProgress, setHeaderVideoProgress] = useState(0);
+    const [showHeaderPhotoModal, setShowHeaderPhotoModal] = useState(false);
+    const [headerPhotoFiles, setHeaderPhotoFiles] = useState([]);
+    const [headerPhotoDescription, setHeaderPhotoDescription] = useState('');
+    const [headerPhotoUploading, setHeaderPhotoUploading] = useState(false);
+    const [headerPhotoProgress, setHeaderPhotoProgress] = useState(0);
 
     // Onboarding tasks state - shown after tutorial is completed
     const getOnboardingTasksCompleted = () => {
@@ -1325,6 +1330,13 @@ const ClientPortal = () => {
             </div>
             <div className="flex items-center gap-3">
               <button
+                onClick={() => setShowHeaderPhotoModal(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm font-medium transition-colors"
+              >
+                <ImagePlus className="w-4 h-4" />
+                Upload Photos
+              </button>
+              <button
                 onClick={() => setShowHeaderVideoModal(true)}
                 className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm font-medium transition-colors"
               >
@@ -1488,6 +1500,138 @@ const ClientPortal = () => {
                     setHeaderVideoFile(null);
                     setHeaderVideoLink('');
                     setHeaderVideoDescription('');
+                  }} className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Header Photo Upload Modal */}
+        {showHeaderPhotoModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <ImagePlus className="w-5 h-5 text-blue-600" />
+                  Upload Photos
+                </h2>
+                <button onClick={() => {
+                  setShowHeaderPhotoModal(false);
+                  setHeaderPhotoFiles([]);
+                  setHeaderPhotoDescription('');
+                }} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Photos</label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => {
+                        if (e.target.files) setHeaderPhotoFiles(Array.from(e.target.files));
+                      }}
+                      className="text-sm w-full"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">You can select multiple photos at once</p>
+                  </div>
+                  {headerPhotoFiles.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {headerPhotoFiles.map((file, i) => (
+                        <div key={i} className="relative">
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={file.name}
+                            className="w-full h-20 object-cover rounded-lg border"
+                          />
+                          <p className="text-xs text-gray-500 truncate mt-0.5">{file.name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                  <textarea
+                    value={headerPhotoDescription}
+                    onChange={(e) => setHeaderPhotoDescription(e.target.value)}
+                    placeholder="Describe these photos..."
+                    rows={2}
+                    className="w-full px-4 py-2 border rounded-lg resize-none"
+                  />
+                </div>
+
+                {headerPhotoUploading && (
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Uploading...</span>
+                      <span>{headerPhotoProgress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${headerPhotoProgress}%` }}></div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    disabled={headerPhotoUploading || headerPhotoFiles.length === 0}
+                    onClick={async () => {
+                      if (!storage) {
+                        alert('Storage not configured. Please contact support.');
+                        return;
+                      }
+                      setHeaderPhotoUploading(true);
+                      try {
+                        const total = headerPhotoFiles.length;
+                        for (let i = 0; i < total; i++) {
+                          const file = headerPhotoFiles[i];
+                          const photoUrl = await uploadFileToStorage(
+                            file,
+                            'photos',
+                            (progress) => setHeaderPhotoProgress(Math.round(((i + progress / 100) / total) * 100))
+                          );
+                          const photoDoc = {
+                            id: `${Date.now()}_${i}`,
+                            clientId: effectiveClientId,
+                            photoUrl,
+                            fileName: file.name,
+                            description: headerPhotoDescription,
+                            status: 'pending',
+                            submittedAt: new Date().toISOString(),
+                            uploadedAt: new Date().toISOString(),
+                          };
+                          if (db) await setDoc(doc(db, 'photos', photoDoc.id), photoDoc);
+                        }
+                        await sendSMS('+17867882699', `📸 ${total} photo${total > 1 ? 's' : ''} submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})`);
+                        await sendSMS('+12678976117', `📸 ${total} photo${total > 1 ? 's' : ''} submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})`);
+                        alert(`${total} photo${total > 1 ? 's' : ''} uploaded successfully!`);
+                        setShowHeaderPhotoModal(false);
+                        setHeaderPhotoFiles([]);
+                        setHeaderPhotoDescription('');
+                      } catch (error) {
+                        console.error('Error uploading photos:', error);
+                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                        alert(`Failed to upload photos: ${errorMessage}`);
+                      } finally {
+                        setHeaderPhotoUploading(false);
+                        setHeaderPhotoProgress(0);
+                      }
+                    }}
+                    className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
+                  >
+                    {headerPhotoUploading ? `Uploading... ${headerPhotoProgress}%` : `Upload ${headerPhotoFiles.length > 0 ? headerPhotoFiles.length + ' ' : ''}Photo${headerPhotoFiles.length !== 1 ? 's' : ''}`}
+                  </button>
+                  <button onClick={() => {
+                    setShowHeaderPhotoModal(false);
+                    setHeaderPhotoFiles([]);
+                    setHeaderPhotoDescription('');
                   }} className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300">Cancel</button>
                 </div>
               </div>

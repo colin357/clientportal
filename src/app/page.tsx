@@ -3474,7 +3474,7 @@ const ClientPortal = () => {
     };
 
     // Initialize filter states from sessionStorage to persist across re-renders/actions
-    const [activeTab, setActiveTabState] = useState(() => getStoredFilter('activeTab', 'clients') as string);
+    const [activeTab, setActiveTabState] = useState(() => getStoredFilter('activeTab', 'today') as string);
     const setActiveTab = (tab: string) => {
       setActiveTabState(tab);
       setStoredFilter('activeTab', tab);
@@ -4048,122 +4048,143 @@ const ClientPortal = () => {
     };
 
     return (
-      <div className="min-h-screen bg-gray-100">
-        <nav className="bg-gray-800 text-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              {currentUser.companyLogo && (
-                <img src={currentUser.companyLogo} alt="Logo" className="h-12 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
-              )}
-              <div>
-                <h1 className="text-xl font-bold">Admin Dashboard</h1>
-                <p className="text-xs text-gray-400">Logged in as {currentUser?.name || currentUser?.email}</p>
+      <div className="min-h-screen bg-gray-50">
+
+        {/* Sticky header with tab navigation */}
+        <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center gap-3">
+                {currentUser.companyLogo && (
+                  <img src={currentUser.companyLogo} alt="Logo" className="h-10 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
+                )}
+                <div>
+                  <h1 className="text-lg font-bold text-gray-900">Admin Dashboard</h1>
+                  <p className="text-xs text-gray-400">{currentUser?.name || currentUser?.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={async () => {
+                    if (!confirm('Check for pending content and send reminder texts to clients who need them?')) return;
+                    try {
+                      const response = await fetch('/api/check-reminders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ users, content })
+                      });
+                      const result = await response.json();
+                      if (response.ok) {
+                        alert(`✅ Reminders sent: ${result.remindersSent}\n\nDetails:\n${result.details.map(d => `- ${d.companyName}: ${d.reminderType} reminder for "${d.contentTitle}"`).join('\n')}`);
+                        const modifiedItems = [];
+                        result.details.forEach(detail => {
+                          const existingItem = content.find(c => c.id === detail.contentId);
+                          if (existingItem) modifiedItems.push({ ...existingItem, reminders: [...(existingItem.reminders || []), { type: detail.reminderType, sentAt: detail.sentAt }] });
+                        });
+                        if (modifiedItems.length > 0) await saveContentItems(modifiedItems);
+                      } else {
+                        alert(`❌ Error: ${result.error}`);
+                      }
+                    } catch (error) {
+                      console.error('❌ Error checking reminders:', error);
+                      alert('Failed to check reminders. See console for details.');
+                    }
+                  }}
+                  className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 flex items-center gap-1.5 text-sm"
+                >
+                  <Clock className="w-4 h-4" />Reminders
+                </button>
+                <button
+                  onClick={handleAIGenerateContent}
+                  disabled={isGeneratingAI}
+                  className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 flex items-center gap-1.5 text-sm disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4" />{isGeneratingAI ? 'Generating...' : 'AI Content'}
+                </button>
+                <button
+                  onClick={handleSendDailyTexts}
+                  disabled={sendingDailyTexts}
+                  className="text-gray-500 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 flex items-center gap-1.5 text-sm disabled:opacity-50"
+                >
+                  <Bell className="w-4 h-4" />{sendingDailyTexts ? 'Sending...' : 'Daily Texts'}
+                </button>
+                <button onClick={() => setShowForm(true)} className="ml-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-1.5 text-sm font-medium">
+                  <Upload className="w-4 h-4" />Upload
+                </button>
+                <div className="w-px h-6 bg-gray-200 mx-2" />
+                <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-500 hover:text-gray-800 px-3 py-2 rounded-lg hover:bg-gray-100 text-sm">
+                  Logout
+                </button>
               </div>
             </div>
-            <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-300 hover:text-white px-4 py-2 rounded hover:bg-gray-700 transition">Logout</button>
+
+            {/* Tab navigation */}
+            <div className="flex items-center overflow-x-auto">
+              {(['today', 'clients', 'calendar', 'videos', 'sms', 'more'] as const).map(tabId => {
+                const badge = tabId === 'today' ? calendarEvents.filter(e => e.date === formatDateLocal(new Date())).length
+                  : tabId === 'clients' ? users.filter(u => !u.parentClientId).length
+                  : tabId === 'videos' ? videos.filter(v => v.status !== 'completed').length
+                  : 0;
+                const label = { today: 'Today', clients: 'Clients', calendar: 'Calendar', videos: 'Videos', sms: 'SMS', more: 'More' }[tabId];
+                return (
+                  <button
+                    key={tabId}
+                    onClick={() => setActiveTab(tabId)}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                      activeTab === tabId
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-200'
+                    }`}
+                  >
+                    {label}
+                    {badge > 0 && (
+                      <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-medium ${activeTab === tabId ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{badge}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </nav>
+        </div>
+
+        {/* Stats strip */}
+        <div className="bg-white border-b border-gray-100">
+          <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-5 overflow-x-auto text-sm">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-base font-bold text-gray-800">{users.filter(u => !u.parentClientId).length}</span>
+              <span className="text-gray-400">Clients</span>
+            </div>
+            <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-base font-bold text-amber-500">{content.filter(c => c.status === 'pending').length}</span>
+              <span className="text-gray-400">Pending</span>
+            </div>
+            <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-base font-bold text-green-600">{content.filter(c => c.status === 'approved').length}</span>
+              <span className="text-gray-400">Approved</span>
+            </div>
+            <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-base font-bold text-purple-600">{videos.filter(v => v.status === 'pending').length}</span>
+              <span className="text-gray-400">Videos Pending</span>
+            </div>
+            <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-base font-bold text-blue-600">{calendarEvents.filter(e => e.date === formatDateLocal(new Date())).length}</span>
+              <span className="text-gray-400">Today's Posts</span>
+            </div>
+            <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-base font-bold text-teal-600">{users.filter(u => !u.parentClientId && u.approvalGroup === 'auto-approve').length}</span>
+              <span className="text-gray-400">Auto-Approve</span>
+            </div>
+          </div>
+        </div>
 
         <div className="max-w-7xl mx-auto px-4 py-6">
-          {/* Quick Stats Dashboard */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500">
-              <p className="text-2xl font-bold text-gray-800">{users.filter(u => !u.parentClientId).length}</p>
-              <p className="text-xs text-gray-500">Total Clients</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-yellow-500">
-              <p className="text-2xl font-bold text-yellow-600">{content.filter(c => c.status === 'pending').length}</p>
-              <p className="text-xs text-gray-500">Pending Review</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-green-500">
-              <p className="text-2xl font-bold text-green-600">{content.filter(c => c.status === 'approved').length}</p>
-              <p className="text-xs text-gray-500">Approved</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-purple-500">
-              <p className="text-2xl font-bold text-purple-600">{videos.filter(v => v.status === 'pending').length}</p>
-              <p className="text-xs text-gray-500">Videos Pending</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-indigo-500">
-              <p className="text-2xl font-bold text-indigo-600">{calendarEvents.filter(e => e.date === formatDateLocal(new Date())).length}</p>
-              <p className="text-xs text-gray-500">Today's Posts</p>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-teal-500">
-              <p className="text-2xl font-bold text-teal-600">{users.filter(u => !u.parentClientId && u.approvalGroup === 'auto-approve').length}</p>
-              <p className="text-xs text-gray-500">Auto-Approve</p>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="mb-6 flex flex-wrap justify-end gap-2">
-              <button
-                onClick={async () => {
-                  if (!confirm('Check for pending content and send reminder texts to clients who need them?')) {
-                    return;
-                  }
-
-                  try {
-                    console.log('📲 Checking reminders...');
-                    const response = await fetch('/api/check-reminders', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ users, content })
-                    });
-
-                    const result = await response.json();
-                    if (response.ok) {
-                      alert(`✅ Reminders sent: ${result.remindersSent}\n\nDetails:\n${result.details.map(d => `- ${d.companyName}: ${d.reminderType} reminder for "${d.contentTitle}"`).join('\n')}`);
-
-                      // Update content with reminder tracking - only save modified items
-                      const modifiedItems = [];
-                      result.details.forEach(detail => {
-                        const existingItem = content.find(c => c.id === detail.contentId);
-                        if (existingItem) {
-                          const updatedItem = {
-                            ...existingItem,
-                            reminders: [
-                              ...(existingItem.reminders || []),
-                              { type: detail.reminderType, sentAt: detail.sentAt }
-                            ]
-                          };
-                          modifiedItems.push(updatedItem);
-                        }
-                      });
-                      if (modifiedItems.length > 0) {
-                        await saveContentItems(modifiedItems);
-                      }
-                    } else {
-                      alert(`❌ Error: ${result.error}`);
-                    }
-                  } catch (error) {
-                    console.error('❌ Error checking reminders:', error);
-                    alert('Failed to check reminders. See console for details.');
-                  }
-                }}
-                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 flex items-center gap-2 text-sm"
-              >
-                <Clock className="w-4 h-4" />
-                Reminders
-              </button>
-              <button
-                onClick={handleAIGenerateContent}
-                disabled={isGeneratingAI}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                <Sparkles className="w-4 h-4" />
-                {isGeneratingAI ? 'Generating...' : 'AI Content'}
-              </button>
-              <button
-                onClick={handleSendDailyTexts}
-                disabled={sendingDailyTexts}
-                className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 flex items-center gap-2 text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                <Bell className="w-4 h-4" />
-                {sendingDailyTexts ? 'Sending...' : 'Daily Texts'}
-              </button>
-              <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm">
-                <Upload className="w-4 h-4" />Upload Content
-              </button>
-            </div>
+          {activeTab === 'today' && (
+          <div className="space-y-6">
 
           {/* Alert: Scheduled Social Posts Without Videos */}
           {(() => {
@@ -4716,21 +4737,18 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {/* Expandable Sections */}
-          <div className="space-y-3">
-            {/* Clients & Content */}
-            <button onClick={() => toggleSection('clients')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('clients') ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-700 hover:bg-blue-50 hover:border-blue-200 border border-gray-200'}`}>
-              <div className="flex items-center gap-3"><Users className="w-5 h-5" />Clients & Content <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{users.filter(u => !u.parentClientId).length}</span></div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('clients') ? 'rotate-180' : ''}`} />
-            </button>
-            {expandedSections.has('clients') && (
-            <div>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Group</label>
+          </div>
+          )}
+
+          {/* ===== CLIENTS TAB ===== */}
+          {activeTab === 'clients' && (
+          <div>
+              <div className="mb-6 flex items-center gap-4">
+                <label className="text-sm font-medium text-gray-700">Filter by Group:</label>
                 <select
                   value={groupFilter}
                   onChange={(e) => setGroupFilter(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                 >
                   <option value="all">All Clients</option>
                   <option value="ungrouped">Ungrouped</option>
@@ -4739,9 +4757,9 @@ const ClientPortal = () => {
                   ))}
                 </select>
               </div>
-              <div className="grid md:grid-cols-2 gap-6 mb-8">
+              <div className="grid md:grid-cols-2 gap-4 mb-8">
                 {users.filter(u => {
-                  if (u.parentClientId) return false; // Skip team members
+                  if (u.parentClientId) return false;
                   if (groupFilter === 'all') return true;
                   if (groupFilter === 'ungrouped') return !u.groupId;
                   return u.groupId === groupFilter;
@@ -4750,37 +4768,31 @@ const ClientPortal = () => {
                   const teamMembers = users.filter(u => u.parentClientId === user.id);
                   const userGroup = groups.find(g => g.id === user.groupId);
                   return (
-                    <div key={user.id} className="bg-white rounded-lg shadow p-6">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold">{user.firstName} {user.lastName || ''} - {user.companyName}</h3>
-                          <p className="text-sm text-gray-600">{user.email}</p>
+                    <div key={user.id} className="bg-white rounded-lg border border-gray-200 p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 truncate">{user.firstName} {user.lastName || ''} – {user.companyName}</h3>
+                          <p className="text-sm text-gray-500">{user.email}</p>
+                          {teamMembers.length > 0 && <p className="text-xs text-gray-400 mt-0.5">{teamMembers.length} team member{teamMembers.length !== 1 ? 's' : ''}</p>}
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          {userGroup && (
-                            <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full font-medium">
-                              {userGroup.name}
-                            </span>
-                          )}
-                          <span className={`px-3 py-1 text-xs rounded-full font-medium ${user.approvalGroup === 'auto-approve' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        <div className="flex flex-col items-end gap-1 ml-3 flex-shrink-0">
+                          {userGroup && <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">{userGroup.name}</span>}
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${user.approvalGroup === 'auto-approve' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                             {user.approvalGroup === 'auto-approve' ? 'Auto-Approve' : 'Review Required'}
                           </span>
                         </div>
                       </div>
-                      {teamMembers.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-1">{teamMembers.length} team member{teamMembers.length > 1 ? 's' : ''}</p>
-                      )}
-                      <div className="flex gap-4 mt-4">
-                        <div className="flex-1 bg-yellow-50 p-3 rounded">
-                          <p className="text-2xl font-bold text-yellow-700">{userContent.filter(c => c.status === 'pending').length}</p>
-                          <p className="text-xs text-yellow-600">Pending</p>
+                      <div className="flex gap-3 mb-3">
+                        <div className="flex-1 bg-amber-50 rounded-lg p-3 text-center">
+                          <p className="text-xl font-bold text-amber-700">{userContent.filter(c => c.status === 'pending').length}</p>
+                          <p className="text-xs text-amber-600">Pending</p>
                         </div>
-                        <div className="flex-1 bg-green-50 p-3 rounded">
-                          <p className="text-2xl font-bold text-green-700">{userContent.filter(c => c.status === 'approved').length}</p>
+                        <div className="flex-1 bg-green-50 rounded-lg p-3 text-center">
+                          <p className="text-xl font-bold text-green-700">{userContent.filter(c => c.status === 'approved').length}</p>
                           <p className="text-xs text-green-600">Approved</p>
                         </div>
                       </div>
-                      <button onClick={() => setSelectedUser(user)} className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2">
+                      <button onClick={() => setSelectedUser(user)} className="w-full bg-gray-900 text-white py-2 rounded-lg hover:bg-gray-800 transition text-sm flex items-center justify-center gap-2">
                         <Eye className="w-4 h-4" />View Details
                       </button>
                     </div>
@@ -4789,24 +4801,24 @@ const ClientPortal = () => {
               </div>
 
               {content.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold">All Content</h3>
-                    <div className="flex gap-3">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <div className="flex flex-wrap justify-between items-center mb-4 gap-3">
+                    <h3 className="text-base font-semibold text-gray-800">All Content</h3>
+                    <div className="flex gap-3 flex-wrap">
                       <select
                         value={contentClientFilter}
                         onChange={(e) => setContentClientFilter(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                       >
                         <option value="all">All Clients</option>
                         {users.map(user => (
-                          <option key={user.id} value={user.id}>{user.firstName} {user.lastName || ''} - {user.companyName}</option>
+                          <option key={user.id} value={user.id}>{user.firstName} {user.lastName || ''} – {user.companyName}</option>
                         ))}
                       </select>
                       <select
                         value={contentTypeFilter}
                         onChange={(e) => setContentTypeFilter(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                       >
                         <option value="all">All Types</option>
                         <option value="social">Social Media</option>
@@ -4816,7 +4828,7 @@ const ClientPortal = () => {
                       </select>
                     </div>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {content
                       .filter(item => contentTypeFilter === 'all' || item.type === contentTypeFilter)
                       .filter(item => contentClientFilter === 'all' || item.clientId === contentClientFilter)
@@ -4826,53 +4838,38 @@ const ClientPortal = () => {
                       return (
                         <div
                           key={item.id}
-                          className="p-4 bg-gray-50 rounded cursor-pointer hover:bg-gray-100 transition-colors"
+                          className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200"
                           onClick={() => setContentDetailItem(item)}
                         >
-                          <div className="flex justify-between mb-2">
-                            <div className="flex-1">
-                              <p className="font-medium">{item.title}</p>
-                              <p className="text-sm text-gray-600">{client?.firstName} {client?.lastName || ''} - {client?.companyName} • {item.type}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`px-3 py-1 rounded text-xs ${item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : item.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.status}</span>
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
-                                    // Delete from Firestore - onSnapshot will automatically update local state
-                                    if (db) {
-                                      await deleteDoc(doc(db, 'content', item.id));
-                                    } else {
-                                      // Fallback for when db is not available
-                                      const updatedContent = content.filter(c => c.id !== item.id);
-                                      setContent(updatedContent);
-                                    }
-                                  }
-                                }}
-                                className="text-red-600 hover:text-red-800 p-2"
-                                title="Delete content"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-gray-800 truncate">{item.title}</p>
+                            <p className="text-xs text-gray-500">{client?.firstName} {client?.lastName || ''} – {client?.companyName} · {item.type}</p>
                           </div>
-                          {item.feedback && <div className="mt-2 p-3 bg-blue-50 rounded"><p className="text-xs text-blue-700">Feedback: {item.feedback}</p></div>}
+                          <span className={`px-2 py-0.5 rounded text-xs flex-shrink-0 ${item.status === 'pending' ? 'bg-amber-100 text-amber-700' : item.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.status}</span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                                if (db) await deleteDoc(doc(db, 'content', item.id));
+                                else setContent(content.filter(c => c.id !== item.id));
+                              }
+                            }}
+                            className="text-gray-300 hover:text-red-500 p-1 flex-shrink-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                          {item.feedback && <div className="mt-1 px-2 py-1 bg-blue-50 rounded text-xs text-blue-600">Feedback: {item.feedback}</div>}
                         </div>
                       );
                     })}
                   </div>
                 </div>
               )}
-            </div>
+          </div>
           )}
 
-            {/* Content Calendar */}
-            <button onClick={() => toggleSection('calendar')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('calendar') ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white text-gray-700 hover:bg-indigo-50 hover:border-indigo-200 border border-gray-200'}`}>
-              <div className="flex items-center gap-3"><Calendar className="w-5 h-5" />Content Calendar <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{calendarEvents.length}</span></div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('calendar') ? 'rotate-180' : ''}`} />
-            </button>
-          {expandedSections.has('calendar') && (
+          {/* ===== CALENDAR TAB ===== */}
+          {activeTab === 'calendar' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Visual Calendar */}
               <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
@@ -5168,20 +5165,21 @@ const ClientPortal = () => {
             </div>
           )}
 
-            {/* Video Production Queue */}
-            <button onClick={() => toggleSection('videos')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('videos') ? 'bg-purple-600 text-white shadow-purple-200' : 'bg-white text-gray-700 hover:bg-purple-50 hover:border-purple-200 border border-gray-200'}`}>
-              <div className="flex items-center gap-3"><Video className="w-5 h-5" />Video Production Queue <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{videos.filter(v => v.status !== 'completed').length} pending</span></div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('videos') ? 'rotate-180' : ''}`} />
-            </button>
-          {expandedSections.has('videos') && (
-            <div className="bg-white rounded-lg shadow p-6">
+          {/* ===== VIDEOS TAB ===== */}
+          {activeTab === 'videos' && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center gap-2 mb-5">
+                <Video className="w-5 h-5 text-purple-600" />
+                <h3 className="text-base font-semibold text-gray-800">Video Production Queue</h3>
+                <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-0.5 rounded-full">{videos.filter(v => v.status !== 'completed').length} pending</span>
+              </div>
               {videos.length === 0 ? (
                 <div className="text-center py-12">
-                  <Upload className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">No videos submitted yet</p>
+                  <Video className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-500">No videos submitted yet</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {videos
                     .sort((a, b) => {
                       const statusOrder = { 'pending': 1, 'in-progress': 2, 'completed': 3 };
@@ -5190,48 +5188,36 @@ const ClientPortal = () => {
                     .map(video => {
                     const client = users.find(u => u.id === video.clientId);
                     return (
-                      <div key={video.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-3">
+                      <div key={video.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-semibold text-gray-800">{client?.companyName}</p>
                             {video.contentTitle && (
-                              <p className="text-sm text-purple-600 font-medium">📝 For Content: {video.contentTitle}</p>
+                              <p className="text-sm text-purple-600">For: {video.contentTitle}</p>
                             )}
-                            <p className="text-sm text-gray-600">Submitted {new Date(video.submittedAt).toLocaleDateString()}</p>
+                            <p className="text-xs text-gray-400">Submitted {new Date(video.submittedAt).toLocaleDateString()}</p>
                           </div>
-                          <span className={`px-3 py-1 rounded text-xs font-medium ${
-                            video.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            video.status === 'in-progress' ? 'bg-blue-100 text-blue-800' :
-                            'bg-green-100 text-green-800'
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            video.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                            video.status === 'in-progress' ? 'bg-blue-100 text-blue-700' :
+                            'bg-green-100 text-green-700'
                           }`}>{video.status}</span>
                         </div>
-
-                        {video.description && (
-                          <p className="text-sm text-gray-700 mb-3">{video.description}</p>
-                        )}
-                        
-                        <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-2 mb-3">
-                          <FileText className="w-4 h-4" />View Raw Video
+                        {video.description && <p className="text-sm text-gray-600 mb-3">{video.description}</p>}
+                        <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1 mb-3">
+                          <FileText className="w-3.5 h-3.5" />View Raw Video
                         </a>
-
-                        <div className="flex gap-2 mt-3">
-                          <button onClick={() => updateVideoStatus(video.id, 'in-progress')} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
-                            Mark In Progress
-                          </button>
+                        <div className="flex gap-2">
+                          <button onClick={() => updateVideoStatus(video.id, 'in-progress')} className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Mark In Progress</button>
                           <button onClick={() => {
                             const link = prompt('Enter completed video link:');
                             if (link) updateVideoStatus(video.id, 'completed', link);
-                          }} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
-                            Mark Complete
-                          </button>
+                          }} className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 text-sm">Mark Complete</button>
                         </div>
-
                         {video.completedLink && (
-                          <div className="mt-3 p-3 bg-green-50 rounded">
-                            <p className="text-sm font-medium text-green-800 mb-1">Completed Video:</p>
-                            <a href={video.completedLink} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline text-sm">
-                              {video.completedLink}
-                            </a>
+                          <div className="mt-3 p-3 bg-green-50 rounded-lg">
+                            <p className="text-xs font-medium text-green-700 mb-1">Completed Video:</p>
+                            <a href={video.completedLink} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline text-sm">{video.completedLink}</a>
                           </div>
                         )}
                       </div>
@@ -5242,111 +5228,148 @@ const ClientPortal = () => {
             </div>
           )}
 
-            {/* Groups */}
-            <button onClick={() => toggleSection('groups')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('groups') ? 'bg-teal-600 text-white shadow-teal-200' : 'bg-white text-gray-700 hover:bg-teal-50 hover:border-teal-200 border border-gray-200'}`}>
-              <div className="flex items-center gap-3"><Users className="w-5 h-5" />Groups <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{groups.length}</span></div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('groups') ? 'rotate-180' : ''}`} />
-            </button>
-          {expandedSections.has('groups') && (
+          {/* ===== SMS TAB ===== */}
+          {activeTab === 'sms' && (
+            <div className="max-w-2xl">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <MessageSquare className="w-5 h-5 text-green-600" />
+                  <h3 className="text-base font-semibold text-gray-800">Send SMS</h3>
+                </div>
+                <p className="text-sm text-gray-500 mb-5">Select clients and a template to send SMS notifications manually.</p>
+
+                {/* Client Selection */}
+                <div className="mb-5">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select Clients ({smsSelectedClients.length} selected)</label>
+                  <div className="space-y-1 max-h-48 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                    <label className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={smsSelectedClients.length === users.filter(u => !u.parentClientId).length}
+                        onChange={(e) => {
+                          if (e.target.checked) setSmsSelectedClients(users.filter(u => !u.parentClientId).map(u => u.id));
+                          else setSmsSelectedClients([]);
+                        }}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="font-medium text-sm text-gray-800">Select All</span>
+                    </label>
+                    <div className="border-t pt-1">
+                      {users.filter(u => !u.parentClientId).map(user => (
+                        <label key={user.id} className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={smsSelectedClients.includes(user.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSmsSelectedClients([...smsSelectedClients, user.id]);
+                              else setSmsSelectedClients(smsSelectedClients.filter(id => id !== user.id));
+                            }}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{user.companyName}</p>
+                            <p className="text-xs text-gray-500">{user.firstName} {user.lastName} · {user.phoneNumber}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Template */}
+                <div className="mb-5">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Template</label>
+                  <select
+                    value={smsTemplate}
+                    onChange={(e) => { setSmsTemplate(e.target.value); if (e.target.value !== 'custom') setSmsCustomMessage(''); }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  >
+                    <option value="">-- Select a template --</option>
+                    {Object.entries(smsTemplates).map(([key, template]) => <option key={key} value={key}>{template.name}</option>)}
+                  </select>
+                </div>
+
+                {smsTemplate && (
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{smsTemplate === 'custom' ? 'Your Message' : 'Message Preview'}</label>
+                    {smsTemplate === 'custom' ? (
+                      <textarea
+                        value={smsCustomMessage}
+                        onChange={(e) => setSmsCustomMessage(e.target.value)}
+                        placeholder="Enter your custom message..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                        rows={6}
+                      />
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{smsTemplates[smsTemplate]?.message}</p>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">{(smsTemplate === 'custom' ? smsCustomMessage : smsTemplates[smsTemplate]?.message || '').length} chars</p>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleSendManualSMS}
+                    disabled={smsSending || smsSelectedClients.length === 0 || !smsTemplate}
+                    className="flex-1 px-4 py-2.5 rounded-lg font-medium text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+                  >
+                    {smsSending ? 'Sending...' : `Send to ${smsSelectedClients.length} client${smsSelectedClients.length !== 1 ? 's' : ''}`}
+                  </button>
+                  <button onClick={() => { setSmsSelectedClients([]); setSmsTemplate(''); setSmsCustomMessage(''); }} className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-sm">
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===== MORE TAB (Groups + Activity + Team) ===== */}
+          {activeTab === 'more' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-semibold">Group Management</h3>
+
+              {/* Groups */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-base font-semibold text-gray-800">Groups</h3>
                   <button
                     onClick={async () => {
                       const groupName = prompt('Enter group name:');
                       if (groupName && groupName.trim()) {
-                        const newGroup = {
-                          id: Date.now().toString(),
-                          name: groupName.trim(),
-                          createdAt: new Date().toISOString()
-                        };
+                        const newGroup = { id: Date.now().toString(), name: groupName.trim(), createdAt: new Date().toISOString() };
                         await saveGroups([...groups, newGroup]);
                       }
                     }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-sm"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    Create Group
+                    <UserPlus className="w-4 h-4" />Create Group
                   </button>
                 </div>
-
                 {groups.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No groups created yet</p>
-                    <p className="text-sm text-gray-500 mt-2">Create a group to organize your clients</p>
-                  </div>
+                  <p className="text-gray-400 text-sm text-center py-6">No groups yet. Create one to organize clients.</p>
                 ) : (
-                  <div className="grid gap-4">
+                  <div className="space-y-3">
                     {groups.map(group => {
                       const groupUsers = users.filter(u => u.groupId === group.id && !u.parentClientId);
                       return (
-                        <div key={group.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-4">
+                        <div key={group.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex justify-between items-center mb-3">
                             <div>
-                              <h4 className="text-lg font-semibold text-gray-800">{group.name}</h4>
-                              <p className="text-sm text-gray-600">{groupUsers.length} client{groupUsers.length !== 1 ? 's' : ''}</p>
+                              <h4 className="font-semibold text-gray-800">{group.name}</h4>
+                              <p className="text-xs text-gray-500">{groupUsers.length} client{groupUsers.length !== 1 ? 's' : ''}</p>
                             </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={async () => {
-                                  const newName = prompt('Enter new group name:', group.name);
-                                  if (newName && newName.trim() && newName !== group.name) {
-                                    const updatedGroups = groups.map(g =>
-                                      g.id === group.id ? { ...g, name: newName.trim() } : g
-                                    );
-                                    await saveGroups(updatedGroups);
-                                  }
-                                }}
-                                className="text-blue-600 hover:text-blue-800 px-3 py-1 text-sm"
-                              >
-                                Rename
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  if (confirm(`Delete group "${group.name}"? Users in this group will be ungrouped.`)) {
-                                    // Remove group from all users
-                                    const updatedUsers = users.map(u =>
-                                      u.groupId === group.id ? { ...u, groupId: null } : u
-                                    );
-                                    await saveUsers(updatedUsers);
-                                    // Delete group from Firestore - onSnapshot will automatically update local state
-                                    if (db) {
-                                      await deleteDoc(doc(db, 'groups', group.id));
-                                    } else {
-                                      const updatedGroups = groups.filter(g => g.id !== group.id);
-                                      setGroups(updatedGroups);
-                                    }
-                                  }
-                                }}
-                                className="text-red-600 hover:text-red-800 px-3 py-1 text-sm"
-                              >
-                                Delete
-                              </button>
+                            <div className="flex gap-3">
+                              <button onClick={async () => { const n = prompt('New name:', group.name); if (n && n.trim() && n !== group.name) await saveGroups(groups.map(g => g.id === group.id ? { ...g, name: n.trim() } : g)); }} className="text-sm text-blue-600 hover:underline">Rename</button>
+                              <button onClick={async () => { if (confirm(`Delete "${group.name}"?`)) { await saveUsers(users.map(u => u.groupId === group.id ? { ...u, groupId: null } : u)); if (db) await deleteDoc(doc(db, 'groups', group.id)); else setGroups(groups.filter(g => g.id !== group.id)); } }} className="text-sm text-red-500 hover:underline">Delete</button>
                             </div>
                           </div>
-
                           {groupUsers.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium text-gray-700 mb-2">Clients in this group:</p>
+                            <div className="space-y-1.5">
                               {groupUsers.map(user => (
-                                <div key={user.id} className="flex justify-between items-center bg-gray-50 p-3 rounded">
-                                  <div>
-                                    <p className="font-medium text-sm">{user.firstName} {user.lastName}</p>
-                                    <p className="text-xs text-gray-600">{user.companyName}</p>
-                                  </div>
-                                  <button
-                                    onClick={async () => {
-                                      const updatedUsers = users.map(u =>
-                                        u.id === user.id ? { ...u, groupId: null } : u
-                                      );
-                                      await saveUsers(updatedUsers);
-                                    }}
-                                    className="text-red-600 hover:text-red-800 text-xs"
-                                  >
-                                    Remove
-                                  </button>
+                                <div key={user.id} className="flex justify-between items-center text-sm bg-gray-50 p-2 rounded">
+                                  <span>{user.firstName} {user.lastName} – {user.companyName}</span>
+                                  <button onClick={async () => { await saveUsers(users.map(u => u.id === user.id ? { ...u, groupId: null } : u)); }} className="text-red-500 text-xs hover:underline">Remove</button>
                                 </div>
                               ))}
                             </div>
@@ -5356,379 +5379,135 @@ const ClientPortal = () => {
                     })}
                   </div>
                 )}
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Assign Clients to Groups</h3>
-                {users.filter(u => !u.parentClientId).length === 0 ? (
-                  <p className="text-gray-600 text-center py-8">No clients available</p>
-                ) : (
-                  <div className="space-y-3">
-                    {users.filter(u => !u.parentClientId).map(user => {
-                      const userGroup = groups.find(g => g.id === user.groupId);
-                      return (
-                        <div key={user.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                          <div className="flex-1">
-                            <p className="font-medium">{user.firstName} {user.lastName} - {user.companyName}</p>
-                            <p className="text-sm text-gray-600">{user.email}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {userGroup && (
-                              <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full font-medium">
-                                {userGroup.name}
-                              </span>
-                            )}
-                            <select
-                              value={user.groupId || ''}
-                              onChange={async (e) => {
-                                const newGroupId = e.target.value || null;
-                                const updatedUsers = users.map(u =>
-                                  u.id === user.id ? { ...u, groupId: newGroupId } : u
-                                );
-                                await saveUsers(updatedUsers);
-                              }}
-                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            >
-                              <option value="">No Group</option>
-                              {groups.map(group => (
-                                <option key={group.id} value={group.id}>{group.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-            {/* Send SMS */}
-            <button onClick={() => toggleSection('sms')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('sms') ? 'bg-green-600 text-white shadow-green-200' : 'bg-white text-gray-700 hover:bg-green-50 hover:border-green-200 border border-gray-200'}`}>
-              <div className="flex items-center gap-3"><MessageSquare className="w-5 h-5" />Send SMS</div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('sms') ? 'rotate-180' : ''}`} />
-            </button>
-          {expandedSections.has('sms') && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">📱 Send Manual SMS Notifications</h3>
-                <p className="text-sm text-gray-600 mb-6">
-                  Select clients and choose a template or write a custom message to send SMS notifications.
-                  Automatic notifications have been disabled - all texts must be sent manually.
-                </p>
-
-                {/* Client Selection */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Select Clients ({smsSelectedClients.length} selected)
-                  </label>
-                  <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-4 bg-gray-50">
-                    <label className="flex items-center gap-3 p-2 hover:bg-white rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={smsSelectedClients.length === users.filter(u => !u.parentClientId).length}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSmsSelectedClients(users.filter(u => !u.parentClientId).map(u => u.id));
-                          } else {
-                            setSmsSelectedClients([]);
-                          }
-                        }}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="font-semibold text-gray-900">Select All Clients</span>
-                    </label>
-                    <div className="border-t pt-2 mt-2">
+                {users.filter(u => !u.parentClientId).length > 0 && (
+                  <div className="mt-5 pt-5 border-t border-gray-100">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Assign Clients to Groups</h4>
+                    <div className="space-y-2">
                       {users.filter(u => !u.parentClientId).map(user => (
-                        <label key={user.id} className="flex items-center gap-3 p-2 hover:bg-white rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={smsSelectedClients.includes(user.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSmsSelectedClients([...smsSelectedClients, user.id]);
-                              } else {
-                                setSmsSelectedClients(smsSelectedClients.filter(id => id !== user.id));
-                              }
-                            }}
-                            className="w-4 h-4 text-blue-600"
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">{user.companyName}</p>
-                            <p className="text-xs text-gray-600">{user.firstName} {user.lastName} - {user.phoneNumber}</p>
+                        <div key={user.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{user.firstName} {user.lastName} – {user.companyName}</p>
+                            <p className="text-xs text-gray-500">{user.email}</p>
                           </div>
-                        </label>
+                          <select
+                            value={user.groupId || ''}
+                            onChange={async (e) => { const newGroupId = e.target.value || null; await saveUsers(users.map(u => u.id === user.id ? { ...u, groupId: newGroupId } : u)); }}
+                            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                          >
+                            <option value="">No Group</option>
+                            {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+                          </select>
+                        </div>
                       ))}
                     </div>
                   </div>
-                </div>
-
-                {/* Template Selection */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Select Message Template</label>
-                  <select
-                    value={smsTemplate}
-                    onChange={(e) => {
-                      setSmsTemplate(e.target.value);
-                      if (e.target.value !== 'custom') {
-                        setSmsCustomMessage('');
-                      }
-                    }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  >
-                    <option value="">-- Select a template --</option>
-                    {Object.entries(smsTemplates).map(([key, template]) => (
-                      <option key={key} value={key}>{template.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Message Preview or Custom Message */}
-                {smsTemplate && (
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      {smsTemplate === 'custom' ? 'Custom Message' : 'Message Preview'}
-                    </label>
-                    {smsTemplate === 'custom' ? (
-                      <textarea
-                        value={smsCustomMessage}
-                        onChange={(e) => setSmsCustomMessage(e.target.value)}
-                        placeholder="Enter your custom message here..."
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                        rows="6"
-                      />
-                    ) : (
-                      <div className="bg-gray-50 border border-gray-300 rounded-lg p-4">
-                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{smsTemplates[smsTemplate]?.message}</p>
-                      </div>
-                    )}
-                    <p className="text-xs text-gray-500 mt-2">
-                      Character count: {(smsTemplate === 'custom' ? smsCustomMessage : smsTemplates[smsTemplate]?.message || '').length} / 160 (1 SMS)
-                    </p>
-                  </div>
                 )}
-
-                {/* Send Button */}
-                <div className="flex gap-4">
-                  <button
-                    onClick={handleSendManualSMS}
-                    disabled={smsSending || smsSelectedClients.length === 0 || !smsTemplate}
-                    className={`flex-1 px-6 py-3 rounded-lg font-medium ${
-                      smsSending || smsSelectedClients.length === 0 || !smsTemplate
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {smsSending ? '📤 Sending...' : `📱 Send SMS to ${smsSelectedClients.length} Client${smsSelectedClients.length !== 1 ? 's' : ''}`}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSmsSelectedClients([]);
-                      setSmsTemplate('');
-                      setSmsCustomMessage('');
-                    }}
-                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300"
-                  >
-                    Clear
-                  </button>
-                </div>
               </div>
 
-              {/* SMS Templates Reference */}
-              <div className="bg-blue-50 rounded-lg p-6">
-                <h4 className="font-semibold text-blue-900 mb-3">📋 Available Templates</h4>
-                <div className="space-y-3">
-                  {Object.entries(smsTemplates).filter(([key]) => key !== 'custom').map(([key, template]) => (
-                    <div key={key} className="bg-white rounded-lg p-3 border border-blue-200">
-                      <p className="font-medium text-sm text-blue-900 mb-1">{template.name}</p>
-                      <p className="text-xs text-gray-600 italic">{template.message.substring(0, 100)}...</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-            {/* Activity Log */}
-            <button onClick={() => toggleSection('activity')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('activity') ? 'bg-amber-600 text-white shadow-amber-200' : 'bg-white text-gray-700 hover:bg-amber-50 hover:border-amber-200 border border-gray-200'}`}>
-              <div className="flex items-center gap-3"><Clock className="w-5 h-5" />Activity Log <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{adminActivities.length}</span></div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('activity') ? 'rotate-180' : ''}`} />
-            </button>
-          {expandedSections.has('activity') && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-lg shadow p-6">
-                <p className="text-sm text-gray-600 mb-6">Track what your team has accomplished</p>
-
+              {/* Activity Log */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-base font-semibold text-gray-800 mb-4">Activity Log</h3>
                 {adminActivities.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p>No activity recorded yet</p>
-                    <p className="text-sm mt-1">Activities will appear here as team members complete tasks</p>
+                  <div className="text-center py-8 text-gray-400">
+                    <Clock className="w-10 h-10 mx-auto mb-2 text-gray-200" />
+                    <p className="text-sm">No activity recorded yet</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {[...adminActivities]
                       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                       .slice(0, 100)
                       .map(activity => {
                         const activityDate = new Date(activity.timestamp);
-                        const isToday = formatDateLocal(activityDate) === formatDateLocal(new Date());
+                        const isActivityToday = formatDateLocal(activityDate) === formatDateLocal(new Date());
                         const isYesterday = formatDateLocal(activityDate) === formatDateLocal(new Date(Date.now() - 86400000));
-
                         return (
-                          <div key={activity.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              activity.action === 'content_completed' ? 'bg-green-100 text-green-600' :
-                              activity.action === 'daily_task_completed' ? 'bg-amber-100 text-amber-600' :
-                              activity.action === 'content_approved' ? 'bg-blue-100 text-blue-600' :
-                              'bg-gray-100 text-gray-600'
-                            }`}>
-                              {activity.action === 'content_completed' ? <Check className="w-5 h-5" /> :
-                               activity.action === 'daily_task_completed' ? <CheckSquare className="w-5 h-5" /> :
-                               activity.action === 'content_approved' ? <Sparkles className="w-5 h-5" /> :
-                               <Clock className="w-5 h-5" />}
+                          <div key={activity.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${activity.action === 'content_completed' ? 'bg-green-100 text-green-600' : activity.action === 'daily_task_completed' ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
+                              {activity.action === 'content_completed' ? <Check className="w-4 h-4" /> : activity.action === 'daily_task_completed' ? <CheckSquare className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium text-gray-900">{activity.adminName}</span>
-                                <span className="text-xs text-gray-500">
-                                  {isToday ? 'Today' : isYesterday ? 'Yesterday' : activityDate.toLocaleDateString()}
-                                  {' at '}
-                                  {activityDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm text-gray-800">{activity.adminName}</span>
+                                <span className="text-xs text-gray-400">{isActivityToday ? 'Today' : isYesterday ? 'Yesterday' : activityDate.toLocaleDateString()} at {activityDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               </div>
-                              <p className="text-sm text-gray-700">{activity.details}</p>
+                              <p className="text-sm text-gray-600">{activity.details}</p>
                             </div>
                           </div>
                         );
                       })}
                   </div>
                 )}
-              </div>
-
-              {/* Activity Summary by Team Member */}
-              {adminActivities.length > 0 && (
-                <div className="bg-white rounded-lg shadow p-6">
-                  <h3 className="text-lg font-semibold mb-4">Team Summary (Last 7 Days)</h3>
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {(() => {
-                      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
-                      const recentActivities = adminActivities.filter(a => new Date(a.timestamp) >= sevenDaysAgo);
-
-                      // Group by admin
-                      const byAdmin = recentActivities.reduce((acc, activity) => {
-                        const adminId = activity.adminId;
-                        if (!acc[adminId]) {
-                          acc[adminId] = {
-                            name: activity.adminName,
-                            contentCompleted: 0,
-                            tasksCompleted: 0,
-                            total: 0
-                          };
-                        }
-                        acc[adminId].total++;
-                        if (activity.action === 'content_completed') acc[adminId].contentCompleted++;
-                        if (activity.action === 'daily_task_completed') acc[adminId].tasksCompleted++;
-                        return acc;
-                      }, {});
-
-                      const adminStats = Object.values(byAdmin);
-                      if (adminStats.length === 0) {
-                        return <p className="text-gray-500 col-span-full">No activity in the last 7 days</p>;
-                      }
-
-                      return adminStats.map((admin: any) => (
-                        <div key={admin.name} className="bg-gray-50 rounded-lg p-4">
-                          <h4 className="font-semibold text-gray-800 mb-3">{admin.name}</h4>
-                          <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Content completed</span>
-                              <span className="font-medium text-green-600">{admin.contentCompleted}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-600">Tasks completed</span>
-                              <span className="font-medium text-amber-600">{admin.tasksCompleted}</span>
-                            </div>
-                            <div className="flex justify-between pt-2 border-t">
-                              <span className="text-gray-700 font-medium">Total actions</span>
-                              <span className="font-bold text-gray-900">{admin.total}</span>
+                {adminActivities.length > 0 && (
+                  <div className="mt-5 pt-5 border-t border-gray-100">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Team Summary (Last 7 Days)</h4>
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {(() => {
+                        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+                        const recentActivities = adminActivities.filter(a => new Date(a.timestamp) >= sevenDaysAgo);
+                        const byAdmin = recentActivities.reduce((acc, activity) => {
+                          if (!acc[activity.adminId]) acc[activity.adminId] = { name: activity.adminName, contentCompleted: 0, tasksCompleted: 0, total: 0 };
+                          acc[activity.adminId].total++;
+                          if (activity.action === 'content_completed') acc[activity.adminId].contentCompleted++;
+                          if (activity.action === 'daily_task_completed') acc[activity.adminId].tasksCompleted++;
+                          return acc;
+                        }, {});
+                        const adminStats = Object.values(byAdmin);
+                        if (!adminStats.length) return <p className="text-sm text-gray-400 col-span-full">No activity in the last 7 days</p>;
+                        return adminStats.map((admin: any) => (
+                          <div key={admin.name} className="bg-gray-50 rounded-lg p-3">
+                            <h5 className="font-medium text-sm text-gray-800 mb-2">{admin.name}</h5>
+                            <div className="space-y-1 text-xs">
+                              <div className="flex justify-between"><span className="text-gray-500">Content</span><span className="font-medium text-green-600">{admin.contentCompleted}</span></div>
+                              <div className="flex justify-between"><span className="text-gray-500">Tasks</span><span className="font-medium text-amber-600">{admin.tasksCompleted}</span></div>
+                              <div className="flex justify-between pt-1 border-t"><span className="text-gray-600 font-medium">Total</span><span className="font-bold">{admin.total}</span></div>
                             </div>
                           </div>
-                        </div>
-                      ));
-                    })()}
+                        ));
+                      })()}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
 
-            {/* Team */}
-            <button onClick={() => toggleSection('team')} className={`w-full px-5 py-3.5 rounded-xl font-medium flex items-center justify-between shadow-sm transition-all ${expandedSections.has('team') ? 'bg-gray-600 text-white shadow-gray-200' : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'}`}>
-              <div className="flex items-center gap-3"><Users className="w-5 h-5" />Team <span className="text-xs opacity-70 bg-white/20 px-2 py-0.5 rounded-full">{adminUsers.length}</span></div>
-              <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.has('team') ? 'rotate-180' : ''}`} />
-            </button>
-          {expandedSections.has('team') && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-lg shadow p-6">
-                <p className="text-sm text-gray-600 mb-6">Manage admin users who can access the portal</p>
-
-                {/* Current User Info */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              {/* Team */}
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-base font-semibold text-gray-800 mb-4">Team</h3>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                    <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                       {currentUser?.name?.charAt(0) || currentUser?.email?.charAt(0) || 'A'}
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Logged in as: {currentUser?.name || currentUser?.email}</p>
-                      <p className="text-sm text-gray-600">{currentUser?.email}</p>
+                      <p className="font-medium text-sm text-gray-900">{currentUser?.name || currentUser?.email}</p>
+                      <p className="text-xs text-gray-500">{currentUser?.email}</p>
                     </div>
                   </div>
                 </div>
-
-                {/* Admin Users List */}
-                <h4 className="font-medium text-gray-800 mb-3">Team Members ({adminUsers.length})</h4>
-                <div className="space-y-3">
+                <div className="space-y-2 mb-4">
                   {adminUsers.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                      <p>No team members found</p>
+                    <div className="text-center py-6 text-gray-400">
+                      <Users className="w-8 h-8 mx-auto mb-2 text-gray-200" />
+                      <p className="text-sm">No team members yet</p>
                     </div>
                   ) : (
                     adminUsers.map(admin => (
-                      <div key={admin.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div key={admin.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gray-600 rounded-full flex items-center justify-center text-white font-semibold">
+                          <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
                             {admin.name?.charAt(0) || admin.email?.charAt(0) || 'A'}
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{admin.name}</p>
-                            <p className="text-sm text-gray-600">{admin.email}</p>
+                            <p className="font-medium text-sm text-gray-800">{admin.name}</p>
+                            <p className="text-xs text-gray-500">{admin.email}</p>
                           </div>
-                          {admin.isOwner && (
-                            <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">Owner</span>
-                          )}
-                          {admin.id === currentUser?.id && (
-                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">You</span>
-                          )}
+                          {admin.isOwner && <span className="bg-purple-100 text-purple-700 text-xs px-1.5 py-0.5 rounded-full">Owner</span>}
+                          {admin.id === currentUser?.id && <span className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">You</span>}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">
-                            Joined {new Date(admin.createdAt).toLocaleDateString()}
-                          </span>
+                          <span className="text-xs text-gray-400">Joined {new Date(admin.createdAt).toLocaleDateString()}</span>
                           {admin.id !== currentUser?.id && !admin.isOwner && (
-                            <button
-                              onClick={async () => {
-                                if (confirm(`Remove ${admin.name} from the team?`)) {
-                                  if (db) {
-                                    await deleteDoc(doc(db, 'adminUsers', admin.id));
-                                  }
-                                }
-                              }}
-                              className="text-red-500 hover:text-red-700 p-1"
-                              title="Remove team member"
-                            >
+                            <button onClick={async () => { if (confirm(`Remove ${admin.name}?`)) { if (db) await deleteDoc(doc(db, 'adminUsers', admin.id)); } }} className="text-red-400 hover:text-red-600 p-1">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
@@ -5737,25 +5516,18 @@ const ClientPortal = () => {
                     ))
                   )}
                 </div>
-
-                {/* Add Team Member Instructions */}
-                <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                  <h4 className="font-medium text-amber-900 mb-2">Adding New Team Members</h4>
-                  <p className="text-sm text-amber-800 mb-2">
-                    To add a new team member, have them visit the admin login page and click "Need to create an account? Enter setup code".
-                  </p>
-                  <p className="text-sm text-amber-800">
-                    <strong>Setup Code:</strong> <code className="bg-amber-100 px-2 py-1 rounded">SETUP2024</code>
-                  </p>
-                  <p className="text-xs text-amber-700 mt-2">
-                    Share this code only with trusted team members who should have admin access.
-                  </p>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <h4 className="font-medium text-amber-900 text-sm mb-1">Adding New Team Members</h4>
+                  <p className="text-xs text-amber-700 mb-1">Have them visit admin login and click "Need to create an account? Enter setup code".</p>
+                  <p className="text-xs text-amber-700"><strong>Setup Code:</strong> <code className="bg-amber-100 px-1.5 py-0.5 rounded">SETUP2024</code></p>
                 </div>
               </div>
+
             </div>
           )}
-          </div>
+
         </div>
+
 
         {showForm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

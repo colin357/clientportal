@@ -3521,6 +3521,7 @@ const ClientPortal = () => {
 
     const [selectedContent, setSelectedContent] = useState(null);
     const [selectedTodayContent, setSelectedTodayContent] = useState(null); // For today's scheduled content modal
+    const [scheduledContentOpen, setScheduledContentOpen] = useState(false);
     const [contentDetailItem, setContentDetailItem] = useState(null); // For viewing content details in All Content section
 
     const [groupFilter, setGroupFilterState] = useState(() => getStoredFilter('groupFilter', 'all') as string);
@@ -4290,76 +4291,70 @@ const ClientPortal = () => {
             const today = formatDateLocal(new Date());
             const todaysEvents = calendarEvents.filter(event => event.date === today);
             const completedCount = todaysEvents.filter(e => e.completed).length;
-
-            if (todaysEvents.length > 0) {
-              return (
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-8">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Calendar className="w-6 h-6 text-blue-600" />
-                    <h3 className="text-xl font-semibold text-gray-800">Today's Scheduled Content</h3>
-                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">{completedCount}/{todaysEvents.length}</span>
-                    {completedCount === todaysEvents.length && todaysEvents.length > 0 && (
-                      <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">All Done!</span>
-                    )}
+            if (todaysEvents.length === 0) return null;
+            return (
+              <div className="bg-white border border-gray-200 rounded-lg mb-6">
+                <button
+                  onClick={() => setScheduledContentOpen(o => !o)}
+                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Calendar className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                    <span className="font-semibold text-gray-800">Today's Scheduled Content</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${completedCount === todaysEvents.length ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {completedCount}/{todaysEvents.length}{completedCount === todaysEvents.length ? ' — All Done!' : ''}
+                    </span>
                   </div>
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {todaysEvents.map(event => {
-                      const client = users.find(u => u.id === event.clientId);
-                      const linkedContent = content.find(c => c.id === event.contentId);
-                      const isCompleted = event.completed || false;
-                      return (
-                        <div
-                          key={event.id}
-                          className={`bg-white rounded-lg p-4 shadow-sm border transition-all ${
-                            isCompleted
-                              ? 'border-green-300 bg-green-50/50'
-                              : 'border-gray-200 hover:shadow-md hover:border-blue-300'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleContentCompletion(event.id, isCompleted, event.title, client?.companyName);
-                              }}
-                              className={`mt-0.5 flex-shrink-0 transition-colors ${
-                                isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-blue-600'
-                              }`}
-                            >
-                              {isCompleted ? (
-                                <CheckSquare className="w-5 h-5" />
-                              ) : (
-                                <Square className="w-5 h-5" />
-                              )}
-                            </button>
-                            <div
-                              className="flex-1 cursor-pointer"
-                              onClick={() => setSelectedTodayContent({ event, client, linkedContent })}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <h4 className={`font-semibold text-sm ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{event.title}</h4>
-                                <span className={`inline-block px-2 py-1 rounded text-xs ${
-                                  event.type === 'social' ? 'bg-blue-100 text-blue-800' :
-                                  event.type === 'email' ? 'bg-green-100 text-green-800' :
-                                  event.type === 'blog' ? 'bg-purple-100 text-purple-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>{event.type}</span>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${scheduledContentOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {scheduledContentOpen && (
+                  <div className="px-5 pb-5 border-t border-gray-100">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
+                      {todaysEvents.map(event => {
+                        const client = users.find(u => u.id === event.clientId);
+                        const linkedContent = content.find(c => c.id === event.contentId);
+                        const isCompleted = event.completed || false;
+                        return (
+                          <div
+                            key={event.id}
+                            className={`rounded-lg p-4 border transition-all ${
+                              isCompleted ? 'border-green-200 bg-green-50/50' : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleContentCompletion(event.id, isCompleted, event.title, client?.companyName);
+                                }}
+                                className={`mt-0.5 flex-shrink-0 transition-colors ${isCompleted ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-blue-600'}`}
+                              >
+                                {isCompleted ? <CheckSquare className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                              </button>
+                              <div className="flex-1 cursor-pointer" onClick={() => setSelectedTodayContent({ event, client, linkedContent })}>
+                                <div className="flex items-start justify-between mb-1.5">
+                                  <h4 className={`font-semibold text-sm ${isCompleted ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{event.title}</h4>
+                                  <span className={`ml-2 flex-shrink-0 px-1.5 py-0.5 rounded text-xs ${
+                                    event.type === 'social' ? 'bg-blue-100 text-blue-700' :
+                                    event.type === 'email' ? 'bg-green-100 text-green-700' :
+                                    event.type === 'blog' ? 'bg-purple-100 text-purple-700' :
+                                    'bg-gray-100 text-gray-600'
+                                  }`}>{event.type}</span>
+                                </div>
+                                <p className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>{client?.companyName || 'Unknown Client'}</p>
+                                {event.description && (
+                                  <p className={`text-xs line-clamp-2 mt-1 ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>{event.description}</p>
+                                )}
                               </div>
-                              <p className={`text-xs mb-2 ${isCompleted ? 'text-gray-400' : 'text-gray-600'}`}>{client?.companyName || 'Unknown Client'}</p>
-                              {event.description && (
-                                <p className={`text-xs line-clamp-2 ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>{event.description}</p>
-                              )}
-                              <p className="text-xs text-blue-600 mt-2 font-medium">Click for details →</p>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            }
-            return null;
+                )}
+              </div>
+            );
           })()}
 
           {/* Today's Content Details Modal */}

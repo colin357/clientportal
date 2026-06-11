@@ -3501,6 +3501,7 @@ const ClientPortal = () => {
     };
 
     const [selectedUser, setSelectedUser] = useState(null);
+    const [newAdditionalPhone, setNewAdditionalPhone] = useState('');
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [aiGenerationResult, setAiGenerationResult] = useState(null);
     const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -3914,15 +3915,18 @@ const ClientPortal = () => {
           const eventList = userEvents.map(e => `- ${e.title} (${e.type})`).join('\n');
           const message = `Hi ${user.firstName}! You have ${userEvents.length} content piece${userEvents.length > 1 ? 's' : ''} scheduled for today:\n\n${eventList}\n\nCheck your portal for details!`;
 
-          try {
-            await sendSMS(user.phoneNumber, message);
-            sent++;
-          } catch {
-            failed++;
+          const recipients = [user.phoneNumber, ...(user.additionalPhoneNumbers || [])];
+          for (const phoneNumber of recipients) {
+            try {
+              await sendSMS(phoneNumber, message);
+              sent++;
+            } catch {
+              failed++;
+            }
           }
         }
 
-        alert(`Daily texts sent to ${sent} client${sent !== 1 ? 's' : ''}!${failed > 0 ? ` (${failed} failed)` : ''}`);
+        alert(`Sent ${sent} daily text${sent !== 1 ? 's' : ''}!${failed > 0 ? ` (${failed} failed)` : ''}`);
       } catch (error) {
         console.error('Error sending daily texts:', error);
         alert('Error sending daily texts.');
@@ -6329,6 +6333,62 @@ const ClientPortal = () => {
                         {selectedUser.receiveDailyTexts ? 'Enabled' : 'Disabled'}
                       </button>
                     </div>
+                    {selectedUser.receiveDailyTexts && (
+                      <div className="col-span-2">
+                        <span className="text-gray-600">Additional Daily Text Numbers:</span>
+                        <div className="mt-2 space-y-2">
+                          {(selectedUser.additionalPhoneNumbers || []).map((phone, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <span className="font-medium text-sm">{phone}</span>
+                              <button
+                                onClick={async () => {
+                                  const updatedNumbers = (selectedUser.additionalPhoneNumbers || []).filter((_, i) => i !== idx);
+                                  const updatedUser = { ...selectedUser, additionalPhoneNumbers: updatedNumbers };
+                                  setSelectedUser(updatedUser);
+                                  const updatedUsers = users.map(u => u.id === selectedUser.id ? updatedUser : u);
+                                  await saveUsers(updatedUsers);
+                                }}
+                                className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="tel"
+                              placeholder="+1234567890"
+                              value={newAdditionalPhone}
+                              onChange={(e) => setNewAdditionalPhone(e.target.value)}
+                              className="px-2 py-1 border rounded text-sm w-44"
+                            />
+                            <button
+                              onClick={async () => {
+                                const digits = newAdditionalPhone.replace(/\D/g, '');
+                                if (digits.length < 10) {
+                                  alert('Please enter a valid phone number.');
+                                  return;
+                                }
+                                const formatted = formatPhoneE164(newAdditionalPhone);
+                                const existing = selectedUser.additionalPhoneNumbers || [];
+                                if (formatted === selectedUser.phoneNumber || existing.includes(formatted)) {
+                                  alert('That number is already on this client.');
+                                  return;
+                                }
+                                const updatedUser = { ...selectedUser, additionalPhoneNumbers: [...existing, formatted] };
+                                setSelectedUser(updatedUser);
+                                setNewAdditionalPhone('');
+                                const updatedUsers = users.map(u => u.id === selectedUser.id ? updatedUser : u);
+                                await saveUsers(updatedUsers);
+                              }}
+                              className="px-3 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200"
+                            >
+                              Add Number
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

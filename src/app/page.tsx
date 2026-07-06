@@ -439,8 +439,6 @@ function OnboardingFormView({ currentUser, onSubmit, onOpenReferral, uploadFile,
     instagram: '',
     industry: [],
     industryOther: '',
-    businessRevenue: '',
-    businessProfit: '',
     primaryMarkets: '',
     pricePoint: '',
     teamMembers: '',
@@ -612,18 +610,6 @@ function OnboardingFormView({ currentUser, onSubmit, onOpenReferral, uploadFile,
               <input type="text" value={form.industryOther} onChange={(e) => set('industryOther', e.target.value)} placeholder="Optional — e.g., team lead, broker/owner..." className={inputClass} />
             </div>
           )}
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>📝 Business Revenue</label>
-              <p className={hintClass}>Roughly, last quarter. Format: $</p>
-              <input type="text" value={form.businessRevenue} onChange={(e) => set('businessRevenue', e.target.value)} placeholder="$" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>📝 Business Profit</label>
-              <p className={hintClass}>Roughly, last quarter. Format: $</p>
-              <input type="text" value={form.businessProfit} onChange={(e) => set('businessProfit', e.target.value)} placeholder="$" className={inputClass} />
-            </div>
-          </div>
           <div>
             <label className={labelClass}>📍 Primary Markets *</label>
             <input type="text" value={form.primaryMarkets} onChange={(e) => set('primaryMarkets', e.target.value)} placeholder="e.g., Los Angeles, Orange County, San Diego" className={inputClass} />

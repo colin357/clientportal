@@ -4097,6 +4097,7 @@ const ClientPortal = () => {
     const [taskForm, setTaskForm] = useState(emptyTaskForm);
     const [taskNotifySms, setTaskNotifySms] = useState(true);
     const [savingTask, setSavingTask] = useState(false);
+    const [clientTagFilter, setClientTagFilter] = useState('all');
     const setActiveTab = (tab: string) => {
       setActiveTabState(tab);
       setStoredFilter('activeTab', tab);
@@ -5262,7 +5263,7 @@ const ClientPortal = () => {
           {/* ===== CLIENTS TAB ===== */}
           {activeTab === 'clients' && (
           <div>
-              <div className="mb-6 flex items-center gap-4">
+              <div className="mb-6 flex items-center gap-4 flex-wrap">
                 <label className="text-sm font-medium text-gray-700">Filter by Group:</label>
                 <select
                   value={groupFilter}
@@ -5275,10 +5276,28 @@ const ClientPortal = () => {
                     <option key={group.id} value={group.id}>{group.name}</option>
                   ))}
                 </select>
+                {(() => {
+                  const allTags = [...new Set(users.filter(u => !u.parentClientId).flatMap(u => u.tags || []))].sort();
+                  if (allTags.length === 0 && clientTagFilter === 'all') return null;
+                  return (
+                    <>
+                      <label className="text-sm font-medium text-gray-700">Tag:</label>
+                      <select
+                        value={clientTagFilter}
+                        onChange={(e) => setClientTagFilter(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      >
+                        <option value="all">All Tags</option>
+                        {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                      </select>
+                    </>
+                  );
+                })()}
               </div>
               <div className="grid md:grid-cols-2 gap-4 mb-8">
                 {users.filter(u => {
                   if (u.parentClientId) return false;
+                  if (clientTagFilter !== 'all' && !(u.tags || []).includes(clientTagFilter)) return false;
                   if (groupFilter === 'all') return true;
                   if (groupFilter === 'ungrouped') return !u.groupId;
                   return u.groupId === groupFilter;
@@ -5300,6 +5319,40 @@ const ClientPortal = () => {
                             {user.approvalGroup === 'auto-approve' ? 'Auto-Approve' : 'Review Required'}
                           </span>
                         </div>
+                      </div>
+                      {/* Tags */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                        {(user.tags || []).map(tag => (
+                          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-xs rounded-full">
+                            🏷 {tag}
+                            <button
+                              onClick={async () => {
+                                const updated = { ...user, tags: (user.tags || []).filter(t => t !== tag) };
+                                await saveUsers(users.map(u => u.id === user.id ? updated : u), [user.id]);
+                              }}
+                              className="text-blue-400 hover:text-red-500"
+                              title="Remove tag"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <button
+                          onClick={async () => {
+                            const tag = prompt('Add a tag (e.g., "VIP", "Onboarding", "Realtor"):');
+                            const clean = tag?.trim();
+                            if (!clean) return;
+                            if ((user.tags || []).some(t => t.toLowerCase() === clean.toLowerCase())) {
+                              alert('This client already has that tag.');
+                              return;
+                            }
+                            const updated = { ...user, tags: [...(user.tags || []), clean] };
+                            await saveUsers(users.map(u => u.id === user.id ? updated : u), [user.id]);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-gray-400 hover:text-blue-600 border border-dashed border-gray-300 hover:border-blue-400 rounded-full transition"
+                        >
+                          <Plus className="w-3 h-3" /> Tag
+                        </button>
                       </div>
                       <div className="flex gap-3 mb-3">
                         <div className="flex-1 bg-amber-50 rounded-lg p-3 text-center">

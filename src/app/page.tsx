@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown, Home, Gift, LogOut, Menu, Circle, CheckCircle2, ArrowRight, ExternalLink, ListChecks, LayoutGrid, List, ChevronsLeft, ChevronsRight, ClipboardList } from 'lucide-react';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 
@@ -72,122 +72,679 @@ try {
   console.error('❌ Firebase initialization error:', error);
 }
 
-// OnboardingView is defined outside ClientPortal to prevent state reset on parent re-renders
-// (Firebase real-time listeners cause parent re-renders which would reset the form)
-function OnboardingView({ currentUser, handleOnboarding }) {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [answers, setAnswers] = useState({
-    industry: [], targetAudience: [], brandVoice: [], specialties: [],
-    primaryMarkets: '', pricePoint: '', clientPainPoints: '', topicsToAvoid: '', styleInspirations: '', successMetrics: '', agencyExperience: ''
-  });
-  const [otherInputs, setOtherInputs] = useState({
-    industry: '', targetAudience: '', brandVoice: '', specialties: ''
-  });
+// ---------------------------------------------------------------------------
+// Client Tasks
+// ---------------------------------------------------------------------------
 
-  const industries = ['Realtor', 'Loan Officer'];
-  const audiences = ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'];
-  const voiceOptions = ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'];
-  const specialtyOptions = ['First-Time Buyers', 'Luxury Homes', 'Investment Properties', 'Commercial', 'VA Loans', 'FHA Loans', 'Refinancing', 'New Construction', 'Relocation', 'Downsizing'];
+const TASK_STATUSES = [
+  { id: 'todo', label: 'To Do', icon: Circle, iconClass: 'text-red-500', badgeClass: 'bg-red-50 text-red-600 border-red-200', dotClass: 'bg-red-500' },
+  { id: 'in_progress', label: 'In Progress', icon: ArrowRight, iconClass: 'text-amber-500', badgeClass: 'bg-amber-50 text-amber-600 border-amber-200', dotClass: 'bg-amber-500' },
+  { id: 'under_review', label: 'Under Review', icon: Eye, iconClass: 'text-violet-500', badgeClass: 'bg-violet-50 text-violet-600 border-violet-200', dotClass: 'bg-violet-500' },
+  { id: 'done', label: 'Done', icon: CheckCircle2, iconClass: 'text-emerald-500', badgeClass: 'bg-emerald-50 text-emerald-600 border-emerald-200', dotClass: 'bg-emerald-500' },
+];
 
-  const questions = [
-    { type: 'buttons', key: 'industry', label: 'What do you do?', options: industries },
-    { type: 'buttons', key: 'targetAudience', label: 'Who is your target audience? (Select all that apply)', options: audiences },
-    { type: 'buttons', key: 'brandVoice', label: 'How would you describe your brand voice? (Select all that apply)', options: voiceOptions },
-    { type: 'buttons', key: 'specialties', label: 'What are your specialties? (Select all that apply)', options: specialtyOptions },
-    { type: 'text', key: 'primaryMarkets', label: 'What are your primary markets? (locations)', placeholder: 'e.g., Los Angeles, Orange County, San Diego' },
-    { type: 'text', key: 'pricePoint', label: 'Average price point or loan size', placeholder: 'e.g., $500K-$1M, $300K loans' },
-    { type: 'text', key: 'clientPainPoints', label: 'What are the biggest pain points or challenges your clients face?', placeholder: 'e.g., Saving for a down payment, understanding the loan process, finding the right neighborhood...' },
-    { type: 'text', key: 'topicsToAvoid', label: 'Are there any topics you want to AVOID in your content?', placeholder: 'e.g., Political topics, specific competitors, certain neighborhoods...' },
-    { type: 'text', key: 'styleInspirations', label: 'Are there creators or competitors whose style you like?', placeholder: 'List any accounts or brands you admire...' },
-    { type: 'text', key: 'successMetrics', label: 'What does success look like in the next 30, 60, and 90 days?', placeholder: 'Describe your goals for each timeframe...' },
-    { type: 'text', key: 'agencyExperience', label: 'Have you worked with a marketing agency before? What did you like or dislike?', placeholder: 'Share your experience...' }
-  ];
+const taskStatusMeta = (status) => TASK_STATUSES.find(s => s.id === status) || TASK_STATUSES[0];
 
-  const currentQuestion = questions[currentStep];
+const daysFromNow = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+};
 
-  const toggleOption = (key, option) => {
-    const current = answers[key] || [];
-    if (current.includes(option)) {
-      setAnswers({ ...answers, [key]: current.filter(item => item !== option) });
-    } else {
-      setAnswers({ ...answers, [key]: [...current, option] });
-    }
-  };
+const formatDueDate = (dateStr) => {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
-  const isAnswerValid = () => {
-    if (currentQuestion.type === 'text') {
-      return answers[currentQuestion.key]?.trim();
-    } else {
-      const hasSelection = answers[currentQuestion.key]?.length > 0;
-      const hasOtherText = answers[currentQuestion.key]?.includes('Other') ? otherInputs[currentQuestion.key]?.trim() : true;
-      return hasSelection && hasOtherText;
+// Default tasks waiting for every new client right after signup.
+// Deterministic ids keep seeding idempotent across signup + login.
+const buildDefaultClientTasks = (clientId) => {
+  const createdAt = new Date().toISOString();
+  return [
+    {
+      id: `${clientId}_welcome`,
+      title: 'Welcome to Own It Social! 🎉',
+      instructions: "😀 We're excited to have you! Take a look around your new portal — your tasks here will guide you through getting fully set up.",
+      link: null,
+      dueDate: daysFromNow(2),
+      order: 1,
+    },
+    {
+      id: `${clientId}_onboarding_form`,
+      title: 'Complete Your Onboarding Form',
+      instructions: '👉 Tell us about your business, brand, and goals so we can create content that sounds like you. It takes about 10 minutes.',
+      link: { type: 'onboarding-form', label: 'Open Onboarding Form' },
+      dueDate: daysFromNow(3),
+      order: 2,
+    },
+    {
+      id: `${clientId}_social_logins`,
+      title: 'Add Your Social Media Logins',
+      instructions: '🔑 Add your account logins in Settings so we can publish content on your behalf.',
+      link: { type: 'page', page: 'settings', label: 'Go to Settings' },
+      dueDate: daysFromNow(5),
+      order: 3,
+    },
+    {
+      id: `${clientId}_headshot`,
+      title: 'Upload Your Headshot & Logo',
+      instructions: '📸 Add a headshot and company logo in Settings so your content stays on-brand.',
+      link: { type: 'page', page: 'settings', label: 'Go to Settings' },
+      dueDate: daysFromNow(5),
+      order: 4,
+    },
+    {
+      id: `${clientId}_review_content`,
+      title: 'Review Your First Content Ideas',
+      instructions: "✅ Once your onboarding form is in, we'll generate your first content ideas. Review them and approve your favorites.",
+      link: { type: 'page', page: 'content', label: 'Open Content Review' },
+      dueDate: daysFromNow(7),
+      order: 5,
+    },
+  ].map(t => ({ ...t, clientId, tag: 'Getting Started', status: 'todo', notes: '', createdAt }));
+};
+
+// Module-level so state survives ClientPortal re-renders (Firebase listeners
+// re-render the parent, which remounts components defined inside it).
+function TaskDetailModal({ task, onClose, onUpdate, onOpenLink }) {
+  const [notes, setNotes] = useState(task.notes || '');
+  const meta = taskStatusMeta(task.status);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-6">
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${meta.badgeClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${meta.dotClass}`} />
+              {meta.label.toUpperCase()}
+            </span>
+            {task.dueDate && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-zinc-200 text-zinc-600">
+                <Calendar className="w-3 h-3" />
+                {formatDueDate(task.dueDate)}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 p-1"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="px-6 py-5">
+          <h2 className="text-2xl font-bold text-zinc-900 mb-1">{task.title}</h2>
+          {task.tag && <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 border border-zinc-200 rounded-full px-2.5 py-0.5 mb-4 mt-1">🏷 {task.tag}</span>}
+
+          {task.instructions && (
+            <div className="mt-4">
+              <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-zinc-800">
+                <FileText className="w-4 h-4" /> Instructions
+              </div>
+              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-sm text-zinc-700 whitespace-pre-wrap">
+                {task.instructions}
+              </div>
+            </div>
+          )}
+
+          {task.link && (
+            <button
+              onClick={() => onOpenLink(task)}
+              className="mt-4 w-full bg-zinc-900 text-white py-3 rounded-xl hover:bg-zinc-800 transition font-medium flex items-center justify-center gap-2"
+            >
+              <ExternalLink className="w-4 h-4" />
+              {task.link.label || 'Open'}
+            </button>
+          )}
+
+          <div className="mt-6">
+            <p className="text-sm font-semibold text-zinc-800 mb-2">Update Status</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {TASK_STATUSES.map(s => {
+                const Icon = s.icon;
+                const active = task.status === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => onUpdate(task, { status: s.id, completedAt: s.id === 'done' ? new Date().toISOString() : null })}
+                    className={`flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl border text-xs font-semibold transition ${active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-zinc-200 text-zinc-600 hover:border-zinc-400 bg-white'}`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 ${active ? 'text-white' : s.iconClass}`} />
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <p className="text-sm font-semibold text-zinc-800 mb-2">Your Notes</p>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add your own notes about this task..."
+              rows={3}
+              className="w-full px-4 py-3 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900 resize-none text-sm"
+            />
+            {notes !== (task.notes || '') && (
+              <button
+                onClick={() => onUpdate(task, { notes })}
+                className="mt-2 px-4 py-2 bg-zinc-900 text-white rounded-lg text-sm font-medium hover:bg-zinc-800"
+              >
+                Save Notes
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Referral Modal — refer a friend, get a free month of service
+// ---------------------------------------------------------------------------
+
+function ReferralModal({ currentUser, onClose, onSubmit }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [company, setCompany] = useState('');
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async () => {
+    setError('');
+    if (!name.trim()) { setError('Please add their name.'); return; }
+    if (!email.trim() && !phone.trim()) { setError('Please add an email or phone number so we can reach out.'); return; }
+    setSubmitting(true);
+    try {
+      await onSubmit({ name: name.trim(), email: email.trim(), phone: phone.trim(), company: company.trim(), notes: notes.trim() });
+      setSubmitted(true);
+    } catch (e) {
+      console.error('Error submitting referral:', e);
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4 flex items-center justify-center">
-      <div className="max-w-3xl w-full bg-white rounded-lg shadow-xl p-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome, {currentUser.firstName}! 👋</h1>
-        <p className="text-gray-600 mb-8">Let's get to know your business</p>
-
-        <div className="flex gap-2 mb-8">
-          {questions.map((_, idx) => (
-            <div key={idx} className={`h-2 flex-1 rounded-full transition ${idx <= currentStep ? 'bg-purple-600' : 'bg-gray-200'}`} />
-          ))}
-        </div>
-
-        <div className="mb-2 text-sm text-purple-600 font-medium">Question {currentStep + 1} of {questions.length}</div>
-        <label className="block text-xl font-semibold text-gray-800 mb-4">{currentQuestion.label}</label>
-
-        {currentQuestion.type === 'text' ? (
-          <textarea value={answers[currentQuestion.key]} onChange={(e) => setAnswers({ ...answers, [currentQuestion.key]: e.target.value })} placeholder={currentQuestion.placeholder} className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none mb-6" rows="4" />
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        {submitted ? (
+          <div className="text-center py-6">
+            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check className="w-7 h-7 text-emerald-600" />
+            </div>
+            <h2 className="text-xl font-bold text-zinc-900 mb-2">Thanks, {currentUser.firstName}! 🎉</h2>
+            <p className="text-sm text-zinc-600 mb-6">
+              We'll reach out to {name} and handle the rest. If they join, you'll get a <strong>free month of service</strong> on us.
+            </p>
+            <button onClick={onClose} className="w-full bg-zinc-900 text-white py-3 rounded-xl hover:bg-zinc-800 font-medium">Done</button>
+          </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-              {currentQuestion.options.map(opt => (
-                <button key={opt} onClick={() => toggleOption(currentQuestion.key, opt)} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes(opt) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
-                  {opt}
-                </button>
-              ))}
-              <button onClick={() => toggleOption(currentQuestion.key, 'Other')} className={`px-4 py-3 rounded-lg border-2 transition ${(answers[currentQuestion.key] || []).includes('Other') ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300 hover:border-purple-400'}`}>
-                Other
+            <div className="flex items-start justify-between mb-1">
+              <div className="w-11 h-11 bg-zinc-900 rounded-xl flex items-center justify-center">
+                <Gift className="w-5 h-5 text-white" />
+              </div>
+              <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 p-1"><X className="w-5 h-5" /></button>
+            </div>
+            <h2 className="text-xl font-bold text-zinc-900 mt-3">Refer a Friend</h2>
+            <p className="text-sm text-zinc-600 mt-1 mb-5">
+              💸 Know someone we can help? Drop their name and best contact — we'll reach out and handle the rest.
+              For every successful referral, you get <strong>one month of service free</strong>.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Their Name *</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@email.com" className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Phone</label>
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 (555) 555-5555" className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Company / What they do</label>
+                <input type="text" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="e.g., Realtor at ABC Realty" className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">Anything we should know?</label>
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="How you know them, what they need..." className="w-full px-4 py-2.5 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900 text-sm resize-none" />
+              </div>
+
+              {error && <p className="text-red-500 text-sm">{error}</p>}
+
+              <button onClick={handleSubmit} disabled={submitting} className="w-full bg-zinc-900 text-white py-3 rounded-xl hover:bg-zinc-800 disabled:bg-zinc-300 font-medium flex items-center justify-center gap-2">
+                <Gift className="w-4 h-4" />
+                {submitting ? 'Sending...' : 'Send Referral'}
               </button>
             </div>
-            {(answers[currentQuestion.key] || []).includes('Other') && (
-              <input type="text" value={otherInputs[currentQuestion.key] || ''} onChange={(e) => setOtherInputs({ ...otherInputs, [currentQuestion.key]: e.target.value })} placeholder="Please specify..." className="w-full px-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none mb-6" />
-            )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
 
-        <div className="flex gap-3">
-          {currentStep > 0 && (
-            <button onClick={() => setCurrentStep(currentStep - 1)} className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 flex items-center gap-2">
-              <ChevronLeft className="w-5 h-5" />Back
-            </button>
-          )}
-          <button onClick={() => {
-            if (currentStep < questions.length - 1) {
-              setCurrentStep(currentStep + 1);
-            } else {
-              const finalAnswers = { ...answers, otherInputs };
-              handleOnboarding(finalAnswers);
-            }
-          }} className="px-6 py-3 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
-            Skip
+// ---------------------------------------------------------------------------
+// Onboarding Form — replaces the old signup question wizard. Opened from the
+// "Complete Your Onboarding Form" task. Module-level so answers survive
+// parent re-renders from Firebase listeners.
+// ---------------------------------------------------------------------------
+
+const ONBOARDING_MULTI_OPTIONS = {
+  industry: ['Realtor', 'Loan Officer'],
+  targetAudience: ['Young Professionals', 'Small Business Owners', 'Students', 'Parents', 'Seniors', 'Millennials', 'Gen Z', 'Entrepreneurs'],
+  brandVoice: ['Professional', 'Casual', 'Friendly', 'Inspirational', 'Authoritative', 'Playful', 'Educational', 'Empathetic', 'Bold'],
+  specialties: ['First-Time Buyers', 'Luxury Homes', 'Investment Properties', 'Commercial', 'VA Loans', 'FHA Loans', 'Refinancing', 'New Construction', 'Relocation', 'Downsizing'],
+};
+
+const RATING_FIELDS = [
+  { key: 'socialPresenceRating', label: 'Your current social media presence' },
+  { key: 'contentSystemRating', label: 'How consistently you post content today' },
+  { key: 'videoComfortRating', label: 'How comfortable you are on video' },
+  { key: 'leadFollowUpRating', label: 'Your lead follow-up / CRM system' },
+];
+
+// Hoisted to module level so React keeps a stable component type across
+// re-renders — defining these inside the form would remount inputs (and drop
+// focus) on every keystroke.
+function FormSection({ emoji, title, subtitle, children }) {
+  return (
+    <div className="bg-white border border-zinc-200 rounded-2xl p-6 sm:p-8 mb-6">
+      <h2 className="text-lg font-bold text-zinc-900 mb-1">{emoji} {title}</h2>
+      {subtitle && <p className="text-sm text-zinc-500 mb-5">{subtitle}</p>}
+      <div className="space-y-5">{children}</div>
+    </div>
+  );
+}
+
+function FormMultiSelect({ field, label, values, onToggle }) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-zinc-800 mb-1.5">{label} *</label>
+      <div className="flex flex-wrap gap-2">
+        {ONBOARDING_MULTI_OPTIONS[field].map(opt => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onToggle(field, opt)}
+            className={`px-3.5 py-2 rounded-full border text-sm font-medium transition ${(values || []).includes(opt) ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'}`}
+          >
+            {opt}
           </button>
-          <button onClick={() => {
-            if (isAnswerValid()) {
-              if (currentStep < questions.length - 1) {
-                setCurrentStep(currentStep + 1);
-              } else {
-                const finalAnswers = { ...answers, otherInputs };
-                handleOnboarding(finalAnswers);
-              }
-            }
-          }} disabled={!isAnswerValid()} className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
-            {currentStep < questions.length - 1 ? <><span>Next</span><ChevronRight className="w-5 h-5" /></> : 'Complete Setup'}
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FormRating({ field, label, value, onSelect }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-1">
+      <span className="text-sm text-zinc-700">{label}</span>
+      <div className="flex gap-1.5">
+        {[1, 2, 3, 4, 5].map(n => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onSelect(field, String(n))}
+            className={`w-9 h-9 rounded-lg border text-sm font-semibold transition ${value === String(n) ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-500 border-zinc-200 hover:border-zinc-400'}`}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const ONBOARDING_REQUIRED_FIELDS = [
+  ['companyName', 'Company Name'],
+  ['contactName', 'Contact Name'],
+  ['email', 'Email Address'],
+  ['phoneNumber', 'Phone Number'],
+  ['instagram', 'Instagram'],
+  ['industry', 'What You Do'],
+  ['targetAudience', 'Target Audience'],
+  ['brandVoice', 'Brand Voice'],
+  ['specialties', 'Specialties'],
+  ['primaryMarkets', 'Primary Markets'],
+  ['pricePoint', 'Price Point'],
+  ['clientPainPoints', 'Client Pain Points'],
+  ['vision', 'Vision'],
+  ['objectives', 'Objectives'],
+  ['roadblocks', 'Roadblocks'],
+  ['successMetrics', 'Success'],
+  ['win', 'Biggest Win'],
+  ['excitement', 'Excitement'],
+  ['marketingSource', 'How You Found Us'],
+];
+
+function OnboardingFormView({ currentUser, onSubmit, onOpenReferral, uploadFile, onClose }) {
+  const [form, setForm] = useState({
+    companyName: currentUser.companyName || '',
+    contactName: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
+    email: currentUser.email || '',
+    phoneNumber: currentUser.phoneNumber || '',
+    birthday: '',
+    shippingAddress: '',
+    instagram: '',
+    industry: [],
+    industryOther: '',
+    primaryMarkets: '',
+    pricePoint: '',
+    teamMembers: '',
+    targetAudience: [],
+    brandVoice: [],
+    specialties: [],
+    identity: '',
+    clientPainPoints: '',
+    topicsToAvoid: '',
+    styleInspirations: '',
+    vision: '',
+    objectives: '',
+    roadblocks: '',
+    dislikes: '',
+    successMetrics: '',
+    win: '',
+    excitement: '',
+    socialPresenceRating: '',
+    contentSystemRating: '',
+    videoComfortRating: '',
+    leadFollowUpRating: '',
+    ratingNotes: '',
+    marketingSource: '',
+    differentiator: '',
+    pastResources: '',
+    anythingElse: '',
+  });
+  const [headshotUrl, setHeadshotUrl] = useState(currentUser.headshot || '');
+  const [uploadingHeadshot, setUploadingHeadshot] = useState(false);
+  const [headshotProgress, setHeadshotProgress] = useState(0);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+
+  const toggleMulti = (key, option) => {
+    setForm(prev => {
+      const current = prev[key] || [];
+      return { ...prev, [key]: current.includes(option) ? current.filter(o => o !== option) : [...current, option] };
+    });
+  };
+
+  const missingFields = () => ONBOARDING_REQUIRED_FIELDS
+    .filter(([key]) => {
+      const v = form[key];
+      return Array.isArray(v) ? v.length === 0 : !String(v || '').trim();
+    })
+    .map(([, label]) => label);
+
+  const handleSubmit = async () => {
+    const missing = missingFields();
+    if (missing.length > 0) {
+      setError(`Please fill in: ${missing.join(', ')}`);
+      window.scrollTo({ top: 0 });
+      return;
+    }
+    setError('');
+    setSubmitting(true);
+    try {
+      await onSubmit({ ...form, headshot: headshotUrl });
+    } catch (e) {
+      console.error('Error submitting onboarding form:', e);
+      setError('Something went wrong saving your answers. Please try again.');
+      setSubmitting(false);
+    }
+  };
+
+  const inputClass = 'w-full px-4 py-2.5 border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-zinc-900 text-sm bg-white';
+  const labelClass = 'block text-sm font-semibold text-zinc-800 mb-1.5';
+  const hintClass = 'text-xs text-zinc-500 mb-1.5 -mt-1';
+
+  const Section = FormSection;
+  const MultiSelect = (props) => <FormMultiSelect {...props} values={form[props.field]} onToggle={toggleMulti} />;
+  const Rating = (props) => <FormRating {...props} value={form[props.field]} onSelect={set} />;
+
+  return (
+    <div className="fixed inset-0 bg-zinc-100 overflow-y-auto z-50">
+      <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">Your Onboarding Form</h1>
+            <p className="text-sm text-zinc-600 mt-2 max-w-lg">
+              Please take your time filling this out. It helps us get to know your business and your brand so we can create content that sounds like you. 🙂
+            </p>
+          </div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600 p-2 bg-white border border-zinc-200 rounded-xl" title="Save for later">
+            <X className="w-5 h-5" />
           </button>
         </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mb-6">{error}</div>
+        )}
+
+        <Section emoji="💼" title="Your Details" subtitle="The basics — so we know who we're working with.">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Company Name *</label>
+              <input type="text" value={form.companyName} onChange={(e) => set('companyName', e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Contact Name *</label>
+              <input type="text" value={form.contactName} onChange={(e) => set('contactName', e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Email Address *</label>
+              <input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Phone Number *</label>
+              <input type="tel" value={form.phoneNumber} onChange={(e) => set('phoneNumber', e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>🎂 Birthday</label>
+              <input type="date" value={form.birthday} onChange={(e) => set('birthday', e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>📲 Instagram *</label>
+              <input type="text" value={form.instagram} onChange={(e) => set('instagram', e.target.value)} placeholder="www.instagram.com/yourhandle" className={inputClass} />
+            </div>
+          </div>
+          <div>
+            <label className={labelClass}>📍 Shipping Address</label>
+            <p className={hintClass}>Best address in case we ever send you something. 👀</p>
+            <input type="text" value={form.shippingAddress} onChange={(e) => set('shippingAddress', e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>📸 Headshot</label>
+            <p className={hintClass}>A current photo of you — we'll use it across your content and profile.</p>
+            <div className="border-2 border-dashed border-zinc-300 rounded-xl p-4 hover:border-zinc-400 transition">
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadingHeadshot}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploadingHeadshot(true);
+                  setHeadshotProgress(0);
+                  try {
+                    const url = await uploadFile(file, 'headshots', (p) => setHeadshotProgress(Math.round(p)));
+                    setHeadshotUrl(url);
+                  } catch (err) {
+                    console.error('Headshot upload failed:', err);
+                    alert('Upload failed — you can also add your headshot later in Settings.');
+                  } finally {
+                    setUploadingHeadshot(false);
+                  }
+                }}
+                className="text-sm"
+              />
+              {uploadingHeadshot && (
+                <div className="w-full bg-zinc-200 rounded-full h-1.5 mt-3">
+                  <div className="bg-zinc-900 h-1.5 rounded-full transition-all" style={{ width: `${headshotProgress}%` }} />
+                </div>
+              )}
+              {headshotUrl && !uploadingHeadshot && (
+                <img src={headshotUrl} alt="Headshot preview" className="w-20 h-20 object-cover rounded-full mt-3" onError={(e) => e.target.style.display = 'none'} />
+              )}
+            </div>
+          </div>
+        </Section>
+
+        <Section emoji="📈" title="Your Business" subtitle="A snapshot of where things stand today.">
+          <MultiSelect field="industry" label="What do you do?" />
+          {(form.industry || []).length > 0 && (
+            <div>
+              <label className={labelClass}>Anything else about what you do?</label>
+              <input type="text" value={form.industryOther} onChange={(e) => set('industryOther', e.target.value)} placeholder="Optional — e.g., team lead, broker/owner..." className={inputClass} />
+            </div>
+          )}
+          <div>
+            <label className={labelClass}>📍 Primary Markets *</label>
+            <input type="text" value={form.primaryMarkets} onChange={(e) => set('primaryMarkets', e.target.value)} placeholder="e.g., Los Angeles, Orange County, San Diego" className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>💰 Average Price Point or Loan Size *</label>
+            <input type="text" value={form.pricePoint} onChange={(e) => set('pricePoint', e.target.value)} placeholder="e.g., $500K-$1M homes, $300K loans" className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>👥 Team Size</label>
+            <input type="text" value={form.teamMembers} onChange={(e) => set('teamMembers', e.target.value)} placeholder="How many people work with you, if any?" className={inputClass} />
+          </div>
+        </Section>
+
+        <Section emoji="🎨" title="Your Brand & Audience" subtitle="This is what shapes the content we create for you.">
+          <MultiSelect field="targetAudience" label="Who is your target audience?" />
+          <MultiSelect field="brandVoice" label="How would you describe your brand voice?" />
+          <MultiSelect field="specialties" label="What are your specialties?" />
+          <div>
+            <label className={labelClass}>📝 Identity</label>
+            <p className={hintClass}>What words would you use to describe yourself? What would your clients say?</p>
+            <textarea value={form.identity} onChange={(e) => set('identity', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Client Pain Points *</label>
+            <p className={hintClass}>What are the biggest challenges your clients face?</p>
+            <textarea value={form.clientPainPoints} onChange={(e) => set('clientPainPoints', e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>🚫 Topics to Avoid</label>
+            <p className={hintClass}>Anything you never want us to create content about?</p>
+            <textarea value={form.topicsToAvoid} onChange={(e) => set('topicsToAvoid', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>✨ Style Inspirations</label>
+            <p className={hintClass}>Creators or competitors whose content style you love.</p>
+            <textarea value={form.styleInspirations} onChange={(e) => set('styleInspirations', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+        </Section>
+
+        <Section emoji="🎯" title="Goals & Vision" subtitle="Where you're headed — and what's in the way.">
+          <div>
+            <label className={labelClass}>📝 Vision *</label>
+            <p className={hintClass}>What's the 3-5 year vision for your business?</p>
+            <textarea value={form.vision} onChange={(e) => set('vision', e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Objectives *</label>
+            <p className={hintClass}>What are your goals for this quarter and this year? Include deals, revenue, and follower/lead goals if you have them.</p>
+            <textarea value={form.objectives} onChange={(e) => set('objectives', e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Roadblocks *</label>
+            <p className={hintClass}>What are the biggest roadblocks getting in the way of those goals?</p>
+            <textarea value={form.roadblocks} onChange={(e) => set('roadblocks', e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Dislikes</label>
+            <p className={hintClass}>Top 3 things you hate dealing with day-to-day in your business.</p>
+            <textarea value={form.dislikes} onChange={(e) => set('dislikes', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Success *</label>
+            <p className={hintClass}>What does success look like in the next 30, 60, and 90 days? What would make working together a huge win?</p>
+            <textarea value={form.successMetrics} onChange={(e) => set('successMetrics', e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Win *</label>
+            <p className={hintClass}>If there's one urgent, pressing pain we could solve for you right away, what would it be?</p>
+            <textarea value={form.win} onChange={(e) => set('win', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Excitement *</label>
+            <p className={hintClass}>What are you most excited about?</p>
+            <textarea value={form.excitement} onChange={(e) => set('excitement', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+        </Section>
+
+        <Section emoji="⚙️" title="Systems Check" subtitle="Rate each from 1 (needs work) to 5 (dialed in).">
+          {RATING_FIELDS.map(f => <Rating key={f.key} field={f.key} label={f.label} />)}
+          <div>
+            <label className={labelClass}>📝 Anything we should know about your ratings?</label>
+            <textarea value={form.ratingNotes} onChange={(e) => set('ratingNotes', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+        </Section>
+
+        <Section emoji="🔍" title="About Us" subtitle="Help us understand what brought you here.">
+          <div>
+            <label className={labelClass}>📝 What made you join Own It Social? *</label>
+            <p className={hintClass}>What did you see or hear from us before signing up that made you want to work together?</p>
+            <textarea value={form.marketingSource} onChange={(e) => set('marketingSource', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Differentiator</label>
+            <p className={hintClass}>What stood out about us compared to other options?</p>
+            <textarea value={form.differentiator} onChange={(e) => set('differentiator', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Past Resources</label>
+            <p className={hintClass}>Books, podcasts, YouTube channels, or influencers you've followed for marketing advice. Have you worked with an agency before?</p>
+            <textarea value={form.pastResources} onChange={(e) => set('pastResources', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
+          </div>
+          <div>
+            <label className={labelClass}>📝 Anything Else?</label>
+            <p className={hintClass}>What else should we know about you or your business?</p>
+            <textarea value={form.anythingElse} onChange={(e) => set('anythingElse', e.target.value)} rows={3} className={`${inputClass} resize-none`} />
+          </div>
+        </Section>
+
+        {/* Referral section */}
+        <div className="bg-zinc-900 text-white rounded-2xl p-6 sm:p-8 mb-6">
+          <h2 className="text-lg font-bold mb-2">💸 Get a FREE month of service</h2>
+          <p className="text-sm text-zinc-300 mb-4">
+            Refer someone you think we can help and you'll get <strong className="text-white">one month of service free</strong> for
+            every referral that joins. Just drop their name and best contact — we'll reach out and handle the rest.
+          </p>
+          <button
+            type="button"
+            onClick={onOpenReferral}
+            className="w-full sm:w-auto bg-white text-zinc-900 px-6 py-3 rounded-xl font-semibold hover:bg-zinc-100 transition flex items-center justify-center gap-2"
+          >
+            <Gift className="w-4 h-4" />
+            👉 Click here to share someone you think we can help
+          </button>
+          <p className="text-xs text-zinc-400 mt-3">...or hit submit below to finish the form 🙂</p>
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="w-full bg-zinc-900 text-white py-4 rounded-2xl hover:bg-zinc-800 disabled:bg-zinc-300 font-semibold text-lg flex items-center justify-center gap-2 mb-12"
+        >
+          <Check className="w-5 h-5" />
+          {submitting ? 'Submitting...' : 'Submit Onboarding Form'}
+        </button>
       </div>
     </div>
   );
@@ -204,6 +761,16 @@ const ClientPortal = () => {
   const [dailyTaskCompletions, setDailyTaskCompletions] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminActivities, setAdminActivities] = useState([]);
+  const [clientTasks, setClientTasks] = useState([]);
+  // Dashboard UI state lives here (not in DashboardView) so it survives the
+  // re-renders triggered by Firebase real-time listeners.
+  const [activePage, setActivePage] = useState('home');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [taskView, setTaskView] = useState('kanban');
+  const [showOnboardingForm, setShowOnboardingForm] = useState(false);
+  const [showReferralModal, setShowReferralModal] = useState(false);
 
   useEffect(() => {
     // Set up real-time listeners for data sync across devices/tabs
@@ -227,6 +794,7 @@ const ClientPortal = () => {
       unsubscribers.push(listen('dailyTaskCompletions', setDailyTaskCompletions));
       unsubscribers.push(listen('adminUsers', setAdminUsers));
       unsubscribers.push(listen('adminActivities', setAdminActivities));
+      unsubscribers.push(listen('clientTasks', setClientTasks));
     } else {
       // Fallback to one-time load if db not available
       loadData();
@@ -475,13 +1043,46 @@ const ClientPortal = () => {
     }
   };
 
+  const updateClientTask = async (task, patch) => {
+    const updated = { ...task, ...patch };
+    if (!db) {
+      setClientTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'clientTasks', task.id), updated);
+    } catch (e) {
+      console.error('Error updating task:', e);
+    }
+  };
+
+  // Seed the default onboarding tasks for a client. Idempotent: deterministic
+  // ids + an existence check, so calling it on every login is safe.
+  const ensureDefaultClientTasks = async (user) => {
+    if (!user || user.parentClientId) return;
+    const defaults = buildDefaultClientTasks(user.id);
+    if (!db) {
+      setClientTasks(prev => prev.some(t => t.clientId === user.id) ? prev : [...prev, ...defaults]);
+      return;
+    }
+    try {
+      const marker = await getDoc(doc(db, 'clientTasks', `${user.id}_onboarding_form`));
+      if (marker.exists()) return;
+      await Promise.all(defaults.map(t => setDoc(doc(db, 'clientTasks', t.id), t)));
+    } catch (e) {
+      console.error('Error seeding default tasks:', e);
+    }
+  };
+
   const handleLogin = (email, password) => {
     const user = users.find(u => u.email === email && u.password === password);
     if (user) {
-      const targetView = user.onboarded ? 'dashboard' : 'onboarding';
       setCurrentUser(user);
-      setView(targetView);
-      saveSession(user, targetView);
+      setView('dashboard');
+      saveSession(user, 'dashboard');
+      if (!user.onboarded) {
+        ensureDefaultClientTasks(user);
+      }
       return true;
     }
     return false;
@@ -500,17 +1101,52 @@ const ClientPortal = () => {
       createdAt: new Date().toISOString()
     };
     setCurrentUser(newUser);
-    setView('onboarding');
-    saveSession(newUser, 'onboarding');
+    setActivePage('tasks');
+    setView('dashboard');
+    saveSession(newUser, 'dashboard');
     await saveUsers([...users, newUser]);
+    await ensureDefaultClientTasks(newUser);
   };
 
-  const handleOnboarding = async (answers) => {
-    const updatedUser = { ...currentUser, onboarded: true, onboardingAnswers: answers };
+  // Called when the client submits the in-portal onboarding form (opened from
+  // the "Complete Your Onboarding Form" task).
+  const handleOnboardingFormSubmit = async (answers) => {
+    const updatedUser = {
+      ...currentUser,
+      onboarded: true,
+      onboardingAnswers: answers,
+      onboardingFormCompletedAt: new Date().toISOString(),
+      ...(answers.headshot ? { headshot: answers.headshot } : {})
+    };
     setCurrentUser(updatedUser);
-    setView('dashboard');
     saveSession(updatedUser, 'dashboard');
     await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
+
+    // Mark the onboarding form task as done
+    const formTask = clientTasks.find(t => t.clientId === currentUser.id && t.link?.type === 'onboarding-form');
+    if (formTask && formTask.status !== 'done') {
+      await updateClientTask(formTask, { status: 'done', completedAt: new Date().toISOString() });
+    }
+
+    setShowOnboardingForm(false);
+    setActivePage('tasks');
+    sendSMS('+17867882699', `📋 ${updatedUser.firstName} ${updatedUser.lastName || ''} (${updatedUser.companyName}) completed their onboarding form!`);
+  };
+
+  const handleReferralSubmit = async (referral) => {
+    const referralDoc = {
+      id: Date.now().toString(),
+      referrerId: currentUser?.id || '',
+      referrerName: `${currentUser?.firstName || ''} ${currentUser?.lastName || ''}`.trim(),
+      referrerCompany: currentUser?.companyName || '',
+      ...referral,
+      status: 'new',
+      createdAt: new Date().toISOString()
+    };
+    if (db) {
+      await setDoc(doc(db, 'referrals', referralDoc.id), referralDoc);
+    }
+    sendSMS('+17867882699', `🎁 New referral from ${referralDoc.referrerName} (${referralDoc.referrerCompany}): ${referral.name}${referral.phone ? ` • ${referral.phone}` : ''}${referral.email ? ` • ${referral.email}` : ''}${referral.company ? ` • ${referral.company}` : ''}`);
   };
 
   const handleContentAction = async (contentId, action, feedback = '') => {
@@ -674,59 +1310,67 @@ const ClientPortal = () => {
       }
     };
 
+    const inputClass = "w-full px-4 py-2.5 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-zinc-900 outline-none text-sm bg-white";
+    const labelClass = "block text-xs font-semibold text-zinc-700 mb-1.5";
+
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Client Portal</h1>
-          <p className="text-gray-600 mb-6">Streamline your marketing content review</p>
-          
+      <div className="min-h-screen bg-zinc-100 flex items-center justify-center p-4">
+        <div className="bg-white border border-zinc-200 rounded-2xl shadow-xl p-8 w-full max-w-md">
+          <div className="w-11 h-11 bg-zinc-900 rounded-xl flex items-center justify-center mb-5">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-zinc-900 mb-1">{isSignup ? 'Create your account' : 'Welcome back'}</h1>
+          <p className="text-sm text-zinc-500 mb-6">{isSignup ? 'Join the Own It Social client portal' : 'Sign in to your Own It Social portal'}</p>
+
           <div className="space-y-4">
             {isSignup && (
               <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                  <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>First Name</label>
+                    <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Last Name</label>
+                    <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass} />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                  <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <label className={labelClass}>Phone Number</label>
+                  <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+1234567890" className={inputClass} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                  <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+1234567890" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
-                  <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <label className={labelClass}>Company Name</label>
+                  <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className={inputClass} />
                 </div>
               </>
             )}
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              <label className={labelClass}>Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label className={labelClass}>Password</label>
               <div className="relative">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none pr-10" />
-                <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSubmit()} className={`${inputClass} pr-10`} />
+                <button onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
             {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button onClick={handleSubmit} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">{isSignup ? 'Sign Up' : 'Log In'}</button>
+            <button onClick={handleSubmit} className="w-full bg-zinc-900 text-white py-3 rounded-xl hover:bg-zinc-800 transition font-semibold text-sm">{isSignup ? 'Create Account' : 'Sign In'}</button>
           </div>
-          
-          <button onClick={() => setIsSignup(!isSignup)} className="w-full mt-4 text-blue-600 hover:underline">
-            {isSignup ? 'Already have an account? Log in' : 'New client? Sign up'}
+
+          <button onClick={() => setIsSignup(!isSignup)} className="w-full mt-4 text-sm text-zinc-600 hover:text-zinc-900 font-medium">
+            {isSignup ? 'Already have an account? Sign in' : "New client? Create an account"}
           </button>
 
-          <div className="mt-6 pt-6 border-t">
-            <button onClick={() => setView('admin-login')} className="w-full text-gray-600 hover:text-gray-800 text-sm">Admin Access →</button>
+          <div className="mt-6 pt-5 border-t border-zinc-100">
+            <button onClick={() => setView('admin-login')} className="w-full text-zinc-400 hover:text-zinc-700 text-xs font-medium">Admin Access →</button>
           </div>
         </div>
       </div>
@@ -948,25 +1592,12 @@ const ClientPortal = () => {
     const clientContent = content.filter(c => c.clientId === effectiveClientId);
     const [selectedContent, setSelectedContent] = useState(null);
     const [feedback, setFeedback] = useState('');
-    const [activePage, setActivePage] = useState('content');
     const [teamEmail, setTeamEmail] = useState('');
     const [teamPass, setTeamPass] = useState('');
     const [teamName, setTeamName] = useState('');
     const [expanded, setExpanded] = useState(null);
     const [expandedContentType, setExpandedContentType] = useState(null); // For content review sections
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
-    // Check both Firestore data AND localStorage to prevent tutorial from showing multiple times
-    // localStorage acts as a backup in case of race conditions with real-time sync
-    const getTutorialCompleted = () => {
-      if (currentUser.tutorialCompleted) return true;
-      try {
-        return localStorage.getItem(`tutorialCompleted_${currentUser.id}`) === 'true';
-      } catch {
-        return false;
-      }
-    };
-    const [showTutorial, setShowTutorial] = useState(!getTutorialCompleted());
-    const [tutorialStep, setTutorialStep] = useState(0);
     const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
     const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
     const [generationTakingLong, setGenerationTakingLong] = useState(false);
@@ -1007,36 +1638,6 @@ const ClientPortal = () => {
     const [headerVideoDescription, setHeaderVideoDescription] = useState('');
     const [headerVideoUploading, setHeaderVideoUploading] = useState(false);
     const [headerVideoProgress, setHeaderVideoProgress] = useState(0);
-
-    // Onboarding tasks state - shown after tutorial is completed
-    const getOnboardingTasksCompleted = () => {
-      try {
-        const stored = localStorage.getItem(`onboardingTasks_${currentUser.id}`);
-        if (stored) return JSON.parse(stored);
-        if (currentUser.onboardingTasksCompleted) return currentUser.onboardingTasksCompleted;
-      } catch {}
-      return {};
-    };
-    const [onboardingTasksCompleted, setOnboardingTasksCompleted] = useState(getOnboardingTasksCompleted());
-
-    const onboardingTasks = [
-      { id: 'logins', label: 'Add logins to the settings', action: () => setActivePage('settings') },
-      { id: 'review', label: 'Review Content Ideas', action: () => setActivePage('content') },
-      { id: 'video', label: 'Upload a video', action: () => setActivePage('settings') },
-      { id: 'headshot', label: 'Add your headshot in settings', action: () => setActivePage('settings') },
-    ];
-
-    const toggleOnboardingTask = async (taskId: string) => {
-      const newCompleted = { ...onboardingTasksCompleted, [taskId]: !onboardingTasksCompleted[taskId] };
-      setOnboardingTasksCompleted(newCompleted);
-      try { localStorage.setItem(`onboardingTasks_${currentUser.id}`, JSON.stringify(newCompleted)); } catch {}
-      const updatedUser = { ...currentUser, onboardingTasksCompleted: newCompleted };
-      setCurrentUser(updatedUser);
-      await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-    };
-
-    const completedTasksCount = onboardingTasks.filter(t => onboardingTasksCompleted[t.id]).length;
-    const allOnboardingTasksCompleted = completedTasksCount === onboardingTasks.length;
 
     useEffect(() => {
       generatePersonalizedContent();
@@ -1187,15 +1788,6 @@ const ClientPortal = () => {
       }
     };
 
-    const navItems = [
-      { id: 'social', label: 'Social Media', icon: Share2 },
-      { id: 'calendar', label: 'Content Calendar', icon: Calendar },
-      { id: 'crm', label: 'CRM', icon: Users },
-      { id: 'ai', label: 'AI Optimization', icon: Sparkles },
-      { id: 'ai-generator', label: 'AI Content Generator', icon: Wand2 },
-      { id: 'settings', label: 'Settings', icon: Settings }
-    ];
-
     // Calendar helper functions
     const formatDateLocal = (date) => {
       const year = date.getFullYear();
@@ -1310,31 +1902,154 @@ const ClientPortal = () => {
       );
     }
 
+    const myTasks = clientTasks
+      .filter(t => t.clientId === effectiveClientId)
+      .sort((a, b) => (a.order || 0) - (b.order || 0) || (a.dueDate || '').localeCompare(b.dueDate || ''));
+    const openTasks = myTasks.filter(t => t.status !== 'done');
+    const pendingContentCount = clientContent.filter(c => c.status === 'pending').length;
+    const onboardingFormTask = myTasks.find(t => t.link?.type === 'onboarding-form');
+
+    const openTaskLink = (task) => {
+      setSelectedTaskId(null);
+      setMobileNavOpen(false);
+      if (task.link?.type === 'onboarding-form') {
+        setShowOnboardingForm(true);
+      } else if (task.link?.type === 'page' && task.link.page) {
+        setActivePage(task.link.page);
+      }
+    };
+
+    const sidebarNav = [
+      { id: 'home', label: 'Home', icon: Home },
+      { id: 'tasks', label: 'Tasks', icon: CheckSquare, badge: openTasks.length },
+      { id: 'content', label: 'Content Review', icon: FileText, badge: pendingContentCount },
+      { id: 'social', label: 'Social Media', icon: Share2 },
+      { id: 'calendar', label: 'Calendar', icon: Calendar },
+      { id: 'crm', label: 'CRM', icon: Users },
+      { id: 'ai', label: 'AI Optimization', icon: Sparkles },
+      { id: 'ai-generator', label: 'AI Generator', icon: Wand2 },
+      { id: 'settings', label: 'Settings', icon: Settings },
+    ];
+
+    const pageTitle = sidebarNav.find(n => n.id === activePage)?.label || '';
+    const initials = `${(currentUser.firstName || ' ')[0] || ''}${(currentUser.lastName || ' ')[0] || ''}`.trim().toUpperCase() || '?';
+
     return (
-      <div className="min-h-screen bg-gray-50">
-        <nav className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              {currentUser.companyLogo && (
-                <img src={currentUser.companyLogo} alt="Company Logo" className="h-12 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
-              )}
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">{currentUser.companyName}</h1>
-                <p className="text-sm text-gray-600">Content Review Portal</p>
+      <div className="min-h-screen bg-zinc-100">
+        {/* Mobile nav backdrop */}
+        {mobileNavOpen && (
+          <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={() => setMobileNavOpen(false)} />
+        )}
+
+        {/* Sidebar */}
+        <aside className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-zinc-200 flex flex-col w-64 transition-all duration-200 ${sidebarCollapsed ? 'lg:w-[76px]' : 'lg:w-64'} ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+          {/* Brand */}
+          <div className={`flex items-center gap-3 px-4 pt-5 pb-4 ${sidebarCollapsed ? 'lg:justify-center lg:px-2' : ''}`}>
+            {currentUser.companyLogo ? (
+              <img src={currentUser.companyLogo} alt="Logo" className="w-9 h-9 rounded-lg object-contain flex-shrink-0" onError={(e) => e.target.style.display = 'none'} />
+            ) : (
+              <div className="w-9 h-9 bg-zinc-900 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
+            )}
+            {!sidebarCollapsed && (
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-zinc-900 truncate">Own It Social</p>
+                <p className="text-[11px] text-zinc-500 truncate">Client Portal</p>
+              </div>
+            )}
+            <button onClick={() => setMobileNavOpen(false)} className="ml-auto text-zinc-400 hover:text-zinc-600 lg:hidden">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* User card */}
+          <div className={`flex items-center gap-3 mx-3 mb-4 px-3 py-3 bg-zinc-50 border border-zinc-200 rounded-xl ${sidebarCollapsed ? 'lg:justify-center lg:px-1' : ''}`}>
+            {currentUser.headshot ? (
+              <img src={currentUser.headshot} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" onError={(e) => e.target.style.display = 'none'} />
+            ) : (
+              <div className="w-9 h-9 bg-zinc-900 text-white rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">{initials}</div>
+            )}
+            {!sidebarCollapsed && (
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-zinc-900 truncate">{currentUser.firstName} {currentUser.lastName}</p>
+                <p className="text-[11px] text-zinc-500 truncate">{currentUser.email}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Nav */}
+          <nav className="flex-1 overflow-y-auto px-3 space-y-1">
+            {sidebarNav.map(item => {
+              const Icon = item.icon;
+              const active = activePage === item.id;
+              return (
+                <button
+                  key={item.id}
+                  id={`nav-${item.id}`}
+                  onClick={() => { setActivePage(item.id); setMobileNavOpen(false); }}
+                  title={item.label}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${sidebarCollapsed ? 'lg:justify-center' : ''} ${active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'}`}
+                >
+                  <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+                  {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                  {!sidebarCollapsed && item.badge > 0 && (
+                    <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full ${active ? 'bg-white text-zinc-900' : 'bg-red-500 text-white'}`}>{item.badge}</span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Bottom actions */}
+          <div className="px-3 pb-4 pt-3 border-t border-zinc-200 space-y-1">
+            <button
+              onClick={() => { setShowReferralModal(true); setMobileNavOpen(false); }}
+              title="Refer a Friend — get a free month"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 transition ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
+            >
+              <Gift className="w-[18px] h-[18px] flex-shrink-0 text-emerald-600" />
+              {!sidebarCollapsed && <span>Refer a Friend</span>}
+            </button>
+            <button
+              onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }}
+              title="Sign Out"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 transition ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
+            >
+              <LogOut className="w-[18px] h-[18px] flex-shrink-0" />
+              {!sidebarCollapsed && <span>Sign Out</span>}
+            </button>
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              title={sidebarCollapsed ? 'Expand' : 'Collapse'}
+              className={`w-full hidden lg:flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition ${sidebarCollapsed ? 'lg:justify-center' : ''}`}
+            >
+              {sidebarCollapsed ? <ChevronsRight className="w-[18px] h-[18px] flex-shrink-0" /> : <ChevronsLeft className="w-[18px] h-[18px] flex-shrink-0" />}
+              {!sidebarCollapsed && <span>Collapse</span>}
+            </button>
+          </div>
+        </aside>
+
+        {/* Main column */}
+        <div className={`min-w-0 transition-all duration-200 ${sidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-64'}`}>
+          {/* Top bar */}
+          <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-zinc-200">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+              <button onClick={() => setMobileNavOpen(true)} className="lg:hidden text-zinc-600 hover:text-zinc-900 p-1">
+                <Menu className="w-5 h-5" />
+              </button>
+              <h1 className="text-lg font-bold text-zinc-900">{pageTitle}</h1>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setShowHeaderVideoModal(true)}
+                  className="bg-zinc-900 text-white px-4 py-2 rounded-xl hover:bg-zinc-800 flex items-center gap-2 text-sm font-medium transition"
+                >
+                  <Video className="w-4 h-4" />
+                  <span className="hidden sm:inline">Upload Video</span>
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowHeaderVideoModal(true)}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 text-sm font-medium transition-colors"
-              >
-                <Video className="w-4 h-4" />
-                Upload Video
-              </button>
-              <button onClick={() => { setCurrentUser(null); setView('login'); clearSession(); }} className="text-gray-600 hover:text-gray-800">Logout</button>
-            </div>
-          </div>
-        </nav>
+          </header>
 
         {/* Header Video Upload Modal */}
         {showHeaderVideoModal && (
@@ -1495,84 +2210,61 @@ const ClientPortal = () => {
           </div>
         )}
 
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-8 mb-8 text-white">
-            <h2 className="text-3xl font-bold mb-2">Let's Get Started, {currentUser.firstName}! 👋</h2>
-            <p className="text-blue-100">Review your marketing materials and provide feedback</p>
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+          {activePage === 'home' && (
+          <>
+          <div className="bg-zinc-900 rounded-2xl p-8 mb-6 text-white relative overflow-hidden">
+            <div className="absolute -right-10 -top-10 w-48 h-48 bg-white/5 rounded-full" />
+            <div className="absolute -right-2 top-16 w-24 h-24 bg-white/5 rounded-full" />
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back, {currentUser.firstName}! 👋</h2>
+            <p className="text-zinc-300">Here's what's happening with your marketing today.</p>
           </div>
 
-          {/* Getting Started To-Do List - shown after tutorial is completed */}
-          {!showTutorial && !allOnboardingTasksCompleted && (
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-lg shadow-lg p-6 mb-8">
+          {/* Onboarding form callout */}
+          {onboardingFormTask && onboardingFormTask.status !== 'done' && (
+            <div className="bg-white border border-zinc-200 rounded-2xl p-6 mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="w-11 h-11 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <ClipboardList className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-zinc-900">Complete your onboarding form</h3>
+                <p className="text-sm text-zinc-500">Tell us about your business so we can create content that sounds like you. Takes ~10 minutes.</p>
+              </div>
+              <button
+                onClick={() => setShowOnboardingForm(true)}
+                className="bg-zinc-900 text-white px-5 py-2.5 rounded-xl hover:bg-zinc-800 text-sm font-semibold flex items-center justify-center gap-2 flex-shrink-0"
+              >
+                Start Now <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Open tasks preview */}
+          {openTasks.length > 0 && (
+            <div className="bg-white border border-zinc-200 rounded-2xl p-6 mb-6">
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-amber-500 rounded-full p-2">
-                    <ListTodo className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800">Getting Started Checklist</h3>
-                    <p className="text-sm text-gray-600">Complete these tasks to get the most out of your portal</p>
-                  </div>
-                </div>
                 <div className="flex items-center gap-2">
-                  <span className="bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full">
-                    {completedTasksCount}/{onboardingTasks.length}
-                  </span>
+                  <CheckSquare className="w-5 h-5 text-zinc-900" />
+                  <h3 className="font-bold text-zinc-900">Your Tasks</h3>
+                  <span className="bg-red-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">{openTasks.length} open</span>
                 </div>
+                <button onClick={() => setActivePage('tasks')} className="text-sm font-medium text-zinc-500 hover:text-zinc-900 flex items-center gap-1">
+                  View all <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
-
-              {/* Progress bar */}
-              <div className="w-full bg-amber-200 rounded-full h-2 mb-4">
-                <div
-                  className="bg-amber-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(completedTasksCount / onboardingTasks.length) * 100}%` }}
-                ></div>
-              </div>
-
-              <div className="space-y-3">
-                {onboardingTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg transition cursor-pointer ${
-                      onboardingTasksCompleted[task.id]
-                        ? 'bg-green-50 border border-green-200'
-                        : 'bg-white border border-gray-200 hover:border-amber-300 hover:bg-amber-50'
-                    }`}
-                  >
-                    <button
-                      onClick={() => toggleOnboardingTask(task.id)}
-                      className="flex-shrink-0"
-                    >
-                      {onboardingTasksCompleted[task.id] ? (
-                        <CheckSquare className="w-6 h-6 text-green-600" />
-                      ) : (
-                        <Square className="w-6 h-6 text-gray-400 hover:text-amber-500" />
-                      )}
+              <div className="space-y-2">
+                {openTasks.slice(0, 3).map(task => {
+                  const meta = taskStatusMeta(task.status);
+                  return (
+                    <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className="w-full flex items-center gap-3 px-4 py-3 border border-zinc-100 rounded-xl hover:border-zinc-300 hover:bg-zinc-50 transition text-left">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dotClass}`} />
+                      <span className="text-sm font-medium text-zinc-800 truncate flex-1">{task.title}</span>
+                      {task.dueDate && <span className="text-xs text-zinc-400 flex-shrink-0">{formatDueDate(task.dueDate)}</span>}
+                      <ChevronRight className="w-4 h-4 text-zinc-300 flex-shrink-0" />
                     </button>
-                    <span
-                      className={`flex-grow font-medium ${
-                        onboardingTasksCompleted[task.id] ? 'text-green-700 line-through' : 'text-gray-700'
-                      }`}
-                    >
-                      {task.label}
-                    </span>
-                    {!onboardingTasksCompleted[task.id] && (
-                      <button
-                        onClick={task.action}
-                        className="text-amber-600 hover:text-amber-700 text-sm font-medium flex items-center gap-1"
-                      >
-                        Go <ChevronRight className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-
-              {completedTasksCount === onboardingTasks.length - 1 && (
-                <p className="text-center text-amber-700 font-medium mt-4">
-                  Almost there! Just one more task to go!
-                </p>
-              )}
             </div>
           )}
 
@@ -1605,7 +2297,7 @@ const ClientPortal = () => {
             const emailsApproved = thisMonthContent.filter(c => c.type === 'email' && c.status === 'approved').length;
 
             return (
-              <div className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-blue-100">
+              <div className="bg-white rounded-2xl p-6 mb-6 border border-zinc-200">
                 <div className="flex items-center gap-2 mb-4">
                   <h3 className="text-xl font-bold text-gray-800">This Month's Progress</h3>
                   <span className="text-sm text-gray-500">({now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })})</span>
@@ -1660,38 +2352,120 @@ const ClientPortal = () => {
             );
           })()}
 
-          <div className="mb-8">
-            <button onClick={() => setActivePage('content')} className={`w-full p-6 rounded-lg transition shadow-lg flex items-center justify-between ${activePage === 'content' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
-              <div className="flex items-center gap-4">
-                <FileText className={`w-8 h-8 ${activePage === 'content' ? 'text-white' : 'text-blue-600'}`} />
-                <div className="text-left">
-                  <h3 className="text-xl font-semibold">Content Review</h3>
-                  <p className={`text-sm ${activePage === 'content' ? 'text-blue-100' : 'text-gray-600'}`}>Review and approve your marketing materials</p>
-                </div>
-              </div>
-              <ChevronRight className="w-6 h-6" />
-            </button>
-          </div>
+          </>
+          )}
 
-          <div className="grid grid-cols-3 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-            {navItems.map(item => {
-              const Icon = item.icon;
+          {/* ---------------- Tasks ---------------- */}
+          {activePage === 'tasks' && (() => {
+            const doneCount = myTasks.filter(t => t.status === 'done').length;
+            const pct = myTasks.length > 0 ? Math.round((doneCount / myTasks.length) * 100) : 0;
+
+            const TaskCard = (task) => {
               return (
                 <button
-                  key={item.id}
-                  id={`nav-${item.id}`}
-                  onClick={() => setActivePage(item.id)}
-                  className={`p-3 rounded-lg transition ${
-                    activePage === item.id ? 'bg-blue-600 text-white shadow-lg' :
-                    'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
+                  key={task.id}
+                  onClick={() => setSelectedTaskId(task.id)}
+                  className="w-full text-left bg-white border border-zinc-200 rounded-xl p-4 hover:border-zinc-300 hover:shadow-md transition"
                 >
-                  <Icon className={`w-5 h-5 mx-auto mb-1 ${activePage === item.id ? 'text-white' : 'text-gray-600'}`} />
-                  <p className="text-xs font-medium text-center">{item.label}</p>
+                  <p className="font-semibold text-zinc-900 text-sm leading-snug mb-2">{task.title}</p>
+                  {task.tag && (
+                    <span className="inline-flex items-center text-[11px] font-medium text-zinc-500 border border-zinc-200 rounded-full px-2 py-0.5 mb-2">🏷 {task.tag}</span>
+                  )}
+                  {task.instructions && (
+                    <p className="text-xs text-zinc-500 mb-2 line-clamp-2">{task.instructions}</p>
+                  )}
+                  {task.dueDate && (
+                    <p className="text-xs text-zinc-400 flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDueDate(task.dueDate)}</p>
+                  )}
                 </button>
               );
-            })}
-          </div>
+            };
+
+            return (
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                  <div className="flex items-center gap-2">
+                    <CheckSquare className="w-6 h-6 text-zinc-900" />
+                    <h2 className="text-2xl font-bold text-zinc-900">Your Tasks</h2>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white border border-zinc-200 rounded-xl p-1">
+                    <button
+                      onClick={() => setTaskView('list')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${taskView === 'list' ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900'}`}
+                    >
+                      <List className="w-4 h-4" /> List
+                    </button>
+                    <button
+                      onClick={() => setTaskView('kanban')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${taskView === 'kanban' ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900'}`}
+                    >
+                      <LayoutGrid className="w-4 h-4" /> Kanban
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress */}
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-zinc-600">{doneCount} of {myTasks.length} completed</span>
+                    <span className="text-2xl font-bold text-zinc-900">{pct}%</span>
+                  </div>
+                  <div className="w-full bg-zinc-200 rounded-full h-2.5 overflow-hidden">
+                    <div className="bg-zinc-900 h-2.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+
+                {myTasks.length === 0 ? (
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-12 text-center">
+                    <CheckCircle2 className="w-12 h-12 text-zinc-300 mx-auto mb-3" />
+                    <h3 className="font-bold text-zinc-900 mb-1">No tasks yet</h3>
+                    <p className="text-sm text-zinc-500">When we have something for you, it'll show up here.</p>
+                  </div>
+                ) : taskView === 'kanban' ? (
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+                    {TASK_STATUSES.map(status => {
+                      const Icon = status.icon;
+                      const tasks = myTasks.filter(t => t.status === status.id);
+                      return (
+                        <div key={status.id} className="min-w-0">
+                          <div className="flex items-center justify-between mb-3 px-1">
+                            <div className="flex items-center gap-2">
+                              <Icon className={`w-4 h-4 ${status.iconClass}`} />
+                              <span className="text-sm font-bold text-zinc-900">{status.label}</span>
+                            </div>
+                            <span className="bg-zinc-200 text-zinc-700 text-xs font-bold px-2 py-0.5 rounded-full">{tasks.length}</span>
+                          </div>
+                          <div className="space-y-3 bg-zinc-50 border border-zinc-200/60 rounded-2xl p-3 min-h-[120px]">
+                            {tasks.length === 0 ? (
+                              <p className="text-xs text-zinc-400 text-center py-8">No tasks</p>
+                            ) : tasks.map(TaskCard)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden divide-y divide-zinc-100">
+                    {[...myTasks].sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0)).map(task => {
+                      const meta = taskStatusMeta(task.status);
+                      const Icon = meta.icon;
+                      return (
+                        <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className="w-full flex items-center gap-3 px-5 py-4 hover:bg-zinc-50 transition text-left">
+                          <Icon className={`w-5 h-5 flex-shrink-0 ${meta.iconClass}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-semibold truncate ${task.status === 'done' ? 'text-zinc-400 line-through' : 'text-zinc-900'}`}>{task.title}</p>
+                            {task.tag && <p className="text-xs text-zinc-400 truncate">🏷 {task.tag}</p>}
+                          </div>
+                          {task.dueDate && <span className="text-xs text-zinc-400 flex-shrink-0">{formatDueDate(task.dueDate)}</span>}
+                          <ChevronRight className="w-4 h-4 text-zinc-300 flex-shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {activePage === 'content' && (
             <>
@@ -3158,7 +3932,7 @@ const ClientPortal = () => {
               </div>
             </div>
           )}
-        </div>
+        </main>
 
         {selectedContent && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -3193,251 +3967,7 @@ const ClientPortal = () => {
             </div>
           </div>
         )}
-
-        {/* Tutorial Overlay */}
-        {showTutorial && (
-          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-8 relative">
-                <button
-                  onClick={async () => {
-                    setShowTutorial(false);
-                    // Save to localStorage immediately to prevent race conditions
-                    try { localStorage.setItem(`tutorialCompleted_${currentUser.id}`, 'true'); } catch {}
-                    const updatedUser = { ...currentUser, tutorialCompleted: true };
-                    setCurrentUser(updatedUser);
-                    await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-                    saveSession(updatedUser, 'dashboard');
-                  }}
-                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-
-              {tutorialStep === 0 && (
-                <div>
-                  <h2 className="text-3xl font-bold text-gray-800 mb-4">Welcome to Your Client Portal!</h2>
-                  <p className="text-gray-600 mb-6">
-                    Let's take a quick tour of the key features to help you get started. This will only take a minute!
-                  </p>
-                  <div className="flex justify-between">
-                    <button
-                      onClick={async () => {
-                        setShowTutorial(false);
-                        // Save to localStorage immediately to prevent race conditions
-                        try { localStorage.setItem(`tutorialCompleted_${currentUser.id}`, 'true'); } catch {}
-                        const updatedUser = { ...currentUser, tutorialCompleted: true };
-                        setCurrentUser(updatedUser);
-                        await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-                        saveSession(updatedUser, 'dashboard');
-                      }}
-                      className="text-gray-600 hover:underline"
-                    >
-                      Skip Tutorial
-                    </button>
-                    <button
-                      onClick={() => setTutorialStep(1)}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                      Get Started
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {tutorialStep === 1 && (
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">📊 Review Your Content</h2>
-                  <p className="text-gray-600 mb-4">
-                    Your main dashboard shows all the content we've created for you. You'll find:
-                  </p>
-                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
-                    <li><strong>Social Media Posts</strong> - Ready-to-publish content for your social channels</li>
-                    <li><strong>Blog Posts</strong> - Long-form content to drive traffic to your site</li>
-                    <li><strong>Email Campaigns</strong> - Engaging emails to nurture your audience</li>
-                  </ul>
-                  <p className="text-gray-600 mb-6">
-                    Click on any content item to review it in detail, approve it, or request changes.
-                  </p>
-                  <div className="flex justify-between">
-                    <button
-                      onClick={() => setTutorialStep(0)}
-                      className="text-gray-600 hover:underline flex items-center gap-2"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                      Back
-                    </button>
-                    <button
-                      onClick={() => setTutorialStep(2)}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                      Next
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {tutorialStep === 2 && (
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">✅ Approve or Request Changes</h2>
-                  <p className="text-gray-600 mb-4">
-                    For each piece of content, you have three options:
-                  </p>
-                  <div className="space-y-3 mb-6">
-                    <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
-                      <Check className="w-6 h-6 text-green-600 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-green-800">Approve</p>
-                        <p className="text-sm text-green-700">Content is ready to publish!</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg">
-                      <X className="w-6 h-6 text-red-600 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-red-800">Request Changes</p>
-                        <p className="text-sm text-red-700">Provide feedback and we'll revise it for you</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                      <Clock className="w-6 h-6 text-gray-600 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-gray-800">Review Later</p>
-                        <p className="text-sm text-gray-700">Content stays in pending status</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-between">
-                    <button
-                      onClick={() => setTutorialStep(1)}
-                      className="text-gray-600 hover:underline flex items-center gap-2"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                      Back
-                    </button>
-                    <button
-                      onClick={() => setTutorialStep(3)}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                      Next
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {tutorialStep === 3 && (
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">🗓️ Content Calendar</h2>
-                  <p className="text-gray-600 mb-6">
-                    Navigate to the <strong>Content Calendar</strong> tab to see when your approved content is scheduled to be published.
-                    This helps you visualize your entire content strategy at a glance.
-                  </p>
-                  <div className="flex justify-between">
-                    <button
-                      onClick={() => setTutorialStep(2)}
-                      className="text-gray-600 hover:underline flex items-center gap-2"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                      Back
-                    </button>
-                    <button
-                      onClick={() => setTutorialStep(4)}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                      Next
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {tutorialStep === 4 && (
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">⚙️ Manage Your Settings</h2>
-                  <p className="text-gray-600 mb-4">
-                    In the <strong>Settings</strong> tab, you can:
-                  </p>
-                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
-                    <li>Update your business information and preferences</li>
-                    <li>Connect your social media accounts</li>
-                    <li>Upload your headshot and company logo</li>
-                    <li>Add team members to collaborate on content</li>
-                  </ul>
-                  <div className="flex justify-between">
-                    <button
-                      onClick={() => setTutorialStep(3)}
-                      className="text-gray-600 hover:underline flex items-center gap-2"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                      Back
-                    </button>
-                    <button
-                      onClick={() => setTutorialStep(5)}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                    >
-                      Next
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {tutorialStep === 5 && (
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4">🚀 You're All Set!</h2>
-                  <p className="text-gray-600 mb-6">
-                    You now know the basics of your client portal. Remember:
-                  </p>
-                  <ul className="list-disc list-inside text-gray-600 mb-6 space-y-2">
-                    <li>Review content regularly to keep your marketing on track</li>
-                    <li>Provide detailed feedback when requesting changes</li>
-                    <li>Check the calendar to stay organized</li>
-                    <li>Update your settings to get the most personalized content</li>
-                  </ul>
-                  <p className="text-gray-600 mb-6">
-                    Have questions? Don't hesitate to reach out to your account manager!
-                  </p>
-                  <div className="flex justify-between">
-                    <button
-                      onClick={() => setTutorialStep(4)}
-                      className="text-gray-600 hover:underline flex items-center gap-2"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                      Back
-                    </button>
-                    <button
-                      onClick={async () => {
-                        setShowTutorial(false);
-                        // Save to localStorage immediately to prevent race conditions
-                        try { localStorage.setItem(`tutorialCompleted_${currentUser.id}`, 'true'); } catch {}
-                        const updatedUser = { ...currentUser, tutorialCompleted: true };
-                        setCurrentUser(updatedUser);
-                        await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-                        saveSession(updatedUser, 'dashboard');
-                      }}
-                      className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
-                    >
-                      <Check className="w-5 h-5" />
-                      Complete Tutorial
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-center gap-2 mt-6">
-                {[0, 1, 2, 3, 4, 5].map((step) => (
-                  <div
-                    key={step}
-                    className={`h-2 rounded-full transition-all ${
-                      step === tutorialStep ? 'w-8 bg-blue-600' : 'w-2 bg-gray-300'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -6722,12 +7252,52 @@ const ClientPortal = () => {
     );
   }
 
-  const onboardingViewProps = { currentUser, handleOnboarding };
-
   if (view === 'login') return <LoginView />;
   if (view === 'admin-login') return <AdminLoginView />;
-  if (view === 'onboarding') return <OnboardingView {...onboardingViewProps} />;
-  if (view === 'dashboard') return <DashboardView />;
+  // Legacy sessions saved with the old onboarding wizard view land on the dashboard
+  if (view === 'dashboard' || view === 'onboarding') {
+    if (!currentUser) return <LoginView />;
+    const selectedTask = clientTasks.find(t => t.id === selectedTaskId);
+    return (
+      <>
+        <DashboardView />
+        {/* Rendered here (module-level components) so their form state survives
+            the re-renders caused by Firebase real-time listeners. */}
+        {showOnboardingForm && (
+          <OnboardingFormView
+            currentUser={currentUser}
+            onSubmit={handleOnboardingFormSubmit}
+            onOpenReferral={() => setShowReferralModal(true)}
+            uploadFile={uploadFileToStorage}
+            onClose={() => setShowOnboardingForm(false)}
+          />
+        )}
+        {showReferralModal && (
+          <ReferralModal
+            currentUser={currentUser}
+            onClose={() => setShowReferralModal(false)}
+            onSubmit={handleReferralSubmit}
+          />
+        )}
+        {selectedTask && (
+          <TaskDetailModal
+            task={selectedTask}
+            onClose={() => setSelectedTaskId(null)}
+            onUpdate={updateClientTask}
+            onOpenLink={(task) => {
+              setSelectedTaskId(null);
+              setMobileNavOpen(false);
+              if (task.link?.type === 'onboarding-form') {
+                setShowOnboardingForm(true);
+              } else if (task.link?.type === 'page' && task.link.page) {
+                setActivePage(task.link.page);
+              }
+            }}
+          />
+        )}
+      </>
+    );
+  }
   if (view === 'admin') return <AdminView />;
 };
 

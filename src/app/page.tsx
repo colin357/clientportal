@@ -97,6 +97,36 @@ const formatDueDate = (dateStr) => {
   return new Date(year, month - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+// Pages a task can deep-link to inside the client portal
+const TASK_LINK_PAGES = [
+  { value: '', label: 'No link' },
+  { value: 'onboarding-form', label: 'Onboarding Form' },
+  { value: 'content', label: 'Content Review' },
+  { value: 'settings', label: 'Settings' },
+  { value: 'social', label: 'Social Media' },
+  { value: 'calendar', label: 'Calendar' },
+  { value: 'crm', label: 'CRM' },
+  { value: 'ai-generator', label: 'AI Generator' },
+];
+
+const buildTaskLink = (page) => {
+  if (!page) return null;
+  if (page === 'onboarding-form') return { type: 'onboarding-form', label: 'Open Onboarding Form' };
+  const label = TASK_LINK_PAGES.find(p => p.value === page)?.label || page;
+  return { type: 'page', page, label: `Open ${label}` };
+};
+
+// Built-in task templates available in the admin portal. Custom templates
+// live in the `taskTemplates` Firestore collection alongside these.
+const BUILT_IN_TASK_TEMPLATES = [
+  { id: 'builtin_video', title: 'Upload a New Video 🎥', tag: 'Content', linkPage: 'settings', dueInDays: 3, instructions: '🎬 We need fresh footage from you! Record and upload a new video so our team can edit it into content for your channels.' },
+  { id: 'builtin_review', title: 'Review Your New Content Ideas', tag: 'Content', linkPage: 'content', dueInDays: 3, instructions: '✅ We just added new content ideas for you. Review them and approve your favorites (or request changes) so we can get them scheduled.' },
+  { id: 'builtin_logins', title: 'Update Your Social Media Logins', tag: 'Account', linkPage: 'settings', dueInDays: 5, instructions: '🔑 One or more of your account logins needs updating. Head to Settings and make sure they\'re current so we can keep posting for you.' },
+  { id: 'builtin_headshot', title: 'Upload a New Headshot 📸', tag: 'Branding', linkPage: 'settings', dueInDays: 7, instructions: '📸 Time to refresh your headshot! Upload a current photo in Settings so your content stays on-brand.' },
+  { id: 'builtin_onboarding', title: 'Complete Your Onboarding Form', tag: 'Onboarding', linkPage: 'onboarding-form', dueInDays: 3, instructions: '👉 Tell us about your business, brand, and goals so we can create content that sounds like you. It takes about 10 minutes.' },
+  { id: 'builtin_call', title: 'Book a Check-In Call 📞', tag: 'Strategy', linkPage: '', dueInDays: 7, instructions: '📞 Let\'s catch up on your strategy and results. Reply to our text or email to grab a time that works for you.' },
+];
+
 // Default tasks waiting for every new client right after signup.
 // Deterministic ids keep seeding idempotent across signup + login.
 const buildDefaultClientTasks = (clientId) => {
@@ -762,6 +792,7 @@ const ClientPortal = () => {
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminActivities, setAdminActivities] = useState([]);
   const [clientTasks, setClientTasks] = useState([]);
+  const [taskTemplates, setTaskTemplates] = useState([]);
   // Dashboard UI state lives here (not in DashboardView) so it survives the
   // re-renders triggered by Firebase real-time listeners.
   const [activePage, setActivePage] = useState('home');
@@ -795,6 +826,7 @@ const ClientPortal = () => {
       unsubscribers.push(listen('adminUsers', setAdminUsers));
       unsubscribers.push(listen('adminActivities', setAdminActivities));
       unsubscribers.push(listen('clientTasks', setClientTasks));
+      unsubscribers.push(listen('taskTemplates', setTaskTemplates));
     } else {
       // Fallback to one-time load if db not available
       loadData();
@@ -1053,6 +1085,60 @@ const ClientPortal = () => {
       await setDoc(doc(db, 'clientTasks', task.id), updated);
     } catch (e) {
       console.error('Error updating task:', e);
+    }
+  };
+
+  // Admin: add a task to a client's portal, optionally texting them about it
+  const createClientTask = async (client, taskData, notifyBySms) => {
+    const task = {
+      id: `${client.id}_${Date.now()}`,
+      clientId: client.id,
+      title: taskData.title.trim(),
+      instructions: (taskData.instructions || '').trim(),
+      tag: (taskData.tag || '').trim(),
+      link: buildTaskLink(taskData.linkPage),
+      dueDate: taskData.dueDate || '',
+      status: 'todo',
+      notes: '',
+      order: 100 + clientTasks.filter(t => t.clientId === client.id).length,
+      createdAt: new Date().toISOString(),
+    };
+    if (db) {
+      await setDoc(doc(db, 'clientTasks', task.id), task);
+    } else {
+      setClientTasks(prev => [...prev, task]);
+    }
+    if (notifyBySms && client.phoneNumber) {
+      await sendSMS(
+        client.phoneNumber,
+        `📌 Hi ${client.firstName}, we just added a new task to your portal: "${task.title}"${task.dueDate ? ` (due ${formatDueDate(task.dueDate)})` : ''}. Log in to check it out!`
+      );
+    }
+    return task;
+  };
+
+  const deleteClientTask = async (taskId) => {
+    if (db) {
+      await deleteDoc(doc(db, 'clientTasks', taskId));
+    } else {
+      setClientTasks(prev => prev.filter(t => t.id !== taskId));
+    }
+  };
+
+  const saveTaskTemplate = async (template) => {
+    const tpl = { id: Date.now().toString(), ...template, createdAt: new Date().toISOString() };
+    if (db) {
+      await setDoc(doc(db, 'taskTemplates', tpl.id), tpl);
+    } else {
+      setTaskTemplates(prev => [...prev, tpl]);
+    }
+  };
+
+  const deleteTaskTemplate = async (templateId) => {
+    if (db) {
+      await deleteDoc(doc(db, 'taskTemplates', templateId));
+    } else {
+      setTaskTemplates(prev => prev.filter(t => t.id !== templateId));
     }
   };
 
@@ -4005,6 +4091,13 @@ const ClientPortal = () => {
 
     // Initialize filter states from sessionStorage to persist across re-renders/actions
     const [activeTab, setActiveTabState] = useState(() => getStoredFilter('activeTab', 'today') as string);
+    // Tasks tab state
+    const emptyTaskForm = { title: '', instructions: '', tag: '', dueDate: '', linkPage: '' };
+    const [taskClientId, setTaskClientId] = useState('');
+    const [taskForm, setTaskForm] = useState(emptyTaskForm);
+    const [taskNotifySms, setTaskNotifySms] = useState(true);
+    const [savingTask, setSavingTask] = useState(false);
+    const [clientTagFilter, setClientTagFilter] = useState('all');
     const setActiveTab = (tab: string) => {
       setActiveTabState(tab);
       setStoredFilter('activeTab', tab);
@@ -4651,12 +4744,13 @@ const ClientPortal = () => {
 
             {/* Tab navigation */}
             <div className="flex items-center overflow-x-auto">
-              {(['today', 'clients', 'calendar', 'videos', 'sms', 'more'] as const).map(tabId => {
+              {(['today', 'clients', 'tasks', 'calendar', 'videos', 'sms', 'more'] as const).map(tabId => {
                 const badge = tabId === 'today' ? calendarEvents.filter(e => e.date === formatDateLocal(new Date())).length
                   : tabId === 'clients' ? users.filter(u => !u.parentClientId).length
+                  : tabId === 'tasks' ? clientTasks.filter(t => t.status === 'under_review').length
                   : tabId === 'videos' ? videos.filter(v => v.status !== 'completed').length
                   : 0;
-                const label = { today: 'Today', clients: 'Clients', calendar: 'Calendar', videos: 'Videos', sms: 'SMS', more: 'More' }[tabId];
+                const label = { today: 'Today', clients: 'Clients', tasks: 'Tasks', calendar: 'Calendar', videos: 'Videos', sms: 'SMS', more: 'More' }[tabId];
                 return (
                   <button
                     key={tabId}
@@ -5169,7 +5263,7 @@ const ClientPortal = () => {
           {/* ===== CLIENTS TAB ===== */}
           {activeTab === 'clients' && (
           <div>
-              <div className="mb-6 flex items-center gap-4">
+              <div className="mb-6 flex items-center gap-4 flex-wrap">
                 <label className="text-sm font-medium text-gray-700">Filter by Group:</label>
                 <select
                   value={groupFilter}
@@ -5182,10 +5276,28 @@ const ClientPortal = () => {
                     <option key={group.id} value={group.id}>{group.name}</option>
                   ))}
                 </select>
+                {(() => {
+                  const allTags = [...new Set(users.filter(u => !u.parentClientId).flatMap(u => u.tags || []))].sort();
+                  if (allTags.length === 0 && clientTagFilter === 'all') return null;
+                  return (
+                    <>
+                      <label className="text-sm font-medium text-gray-700">Tag:</label>
+                      <select
+                        value={clientTagFilter}
+                        onChange={(e) => setClientTagFilter(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                      >
+                        <option value="all">All Tags</option>
+                        {allTags.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+                      </select>
+                    </>
+                  );
+                })()}
               </div>
               <div className="grid md:grid-cols-2 gap-4 mb-8">
                 {users.filter(u => {
                   if (u.parentClientId) return false;
+                  if (clientTagFilter !== 'all' && !(u.tags || []).includes(clientTagFilter)) return false;
                   if (groupFilter === 'all') return true;
                   if (groupFilter === 'ungrouped') return !u.groupId;
                   return u.groupId === groupFilter;
@@ -5207,6 +5319,40 @@ const ClientPortal = () => {
                             {user.approvalGroup === 'auto-approve' ? 'Auto-Approve' : 'Review Required'}
                           </span>
                         </div>
+                      </div>
+                      {/* Tags */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                        {(user.tags || []).map(tag => (
+                          <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 text-xs rounded-full">
+                            🏷 {tag}
+                            <button
+                              onClick={async () => {
+                                const updated = { ...user, tags: (user.tags || []).filter(t => t !== tag) };
+                                await saveUsers(users.map(u => u.id === user.id ? updated : u), [user.id]);
+                              }}
+                              className="text-blue-400 hover:text-red-500"
+                              title="Remove tag"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <button
+                          onClick={async () => {
+                            const tag = prompt('Add a tag (e.g., "VIP", "Onboarding", "Realtor"):');
+                            const clean = tag?.trim();
+                            if (!clean) return;
+                            if ((user.tags || []).some(t => t.toLowerCase() === clean.toLowerCase())) {
+                              alert('This client already has that tag.');
+                              return;
+                            }
+                            const updated = { ...user, tags: [...(user.tags || []), clean] };
+                            await saveUsers(users.map(u => u.id === user.id ? updated : u), [user.id]);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-gray-400 hover:text-blue-600 border border-dashed border-gray-300 hover:border-blue-400 rounded-full transition"
+                        >
+                          <Plus className="w-3 h-3" /> Tag
+                        </button>
                       </div>
                       <div className="flex gap-3 mb-3">
                         <div className="flex-1 bg-amber-50 rounded-lg p-3 text-center">
@@ -5295,6 +5441,195 @@ const ClientPortal = () => {
           )}
 
           {/* ===== CALENDAR TAB ===== */}
+          {activeTab === 'tasks' && (() => {
+            const clients = users.filter(u => !u.parentClientId);
+            const selectedClient = clients.find(c => c.id === taskClientId);
+            const selectedClientTasks = clientTasks
+              .filter(t => t.clientId === taskClientId)
+              .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || (a.dueDate || '').localeCompare(b.dueDate || ''));
+            const allTemplates = [
+              ...BUILT_IN_TASK_TEMPLATES,
+              ...taskTemplates.map(t => ({ ...t, isCustom: true })),
+            ];
+
+            const applyTemplate = (tpl) => {
+              setTaskForm({
+                title: tpl.title || '',
+                instructions: tpl.instructions || '',
+                tag: tpl.tag || '',
+                linkPage: tpl.linkPage || '',
+                dueDate: daysFromNow(tpl.dueInDays || 7),
+              });
+            };
+
+            const handleAddTask = async () => {
+              if (!selectedClient) { alert('Select a client first.'); return; }
+              if (!taskForm.title.trim()) { alert('Task title is required.'); return; }
+              setSavingTask(true);
+              try {
+                await createClientTask(selectedClient, taskForm, taskNotifySms);
+                setTaskForm(emptyTaskForm);
+                alert(`✅ Task added to ${selectedClient.companyName}'s portal${taskNotifySms && selectedClient.phoneNumber ? ' — text notification sent.' : '.'}`);
+              } catch (e) {
+                console.error('Error adding task:', e);
+                alert('❌ Failed to add task. Please try again.');
+              } finally {
+                setSavingTask(false);
+              }
+            };
+
+            return (
+              <div className="space-y-6">
+                {/* Client selector */}
+                <div className="bg-white border border-gray-200 rounded-lg p-5">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Client</label>
+                  <select
+                    value={taskClientId}
+                    onChange={(e) => setTaskClientId(e.target.value)}
+                    className="w-full max-w-md px-4 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Select a client --</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>{c.companyName} ({c.firstName} {c.lastName || ''})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedClient && (
+                  <div className="grid lg:grid-cols-2 gap-6 items-start">
+                    {/* Add task form */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <PlusCircle className="w-5 h-5 text-blue-600" />
+                        <h3 className="font-bold text-gray-800">Add Task for {selectedClient.companyName}</h3>
+                      </div>
+
+                      {/* Templates */}
+                      <div className="mb-5">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Start from a template</p>
+                        <div className="flex flex-wrap gap-2">
+                          {allTemplates.map(tpl => (
+                            <span key={tpl.id} className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-full text-sm hover:border-blue-400 transition">
+                              <button onClick={() => applyTemplate(tpl)} className="pl-3 pr-1 py-1.5 text-gray-700 hover:text-blue-700 font-medium">
+                                {tpl.title}
+                              </button>
+                              {tpl.isCustom ? (
+                                <button
+                                  onClick={() => { if (confirm(`Delete template "${tpl.title}"?`)) deleteTaskTemplate(tpl.id); }}
+                                  className="pr-2 text-gray-400 hover:text-red-500"
+                                  title="Delete template"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              ) : <span className="pr-3" />}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                          <input type="text" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="e.g., Upload a new video" className="w-full px-4 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Instructions</label>
+                          <textarea value={taskForm.instructions} onChange={(e) => setTaskForm({ ...taskForm, instructions: e.target.value })} rows={3} placeholder="What should the client do?" className="w-full px-4 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                        </div>
+                        <div className="grid sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Tag</label>
+                            <input type="text" value={taskForm.tag} onChange={(e) => setTaskForm({ ...taskForm, tag: e.target.value })} placeholder="e.g., Content" className="w-full px-4 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                            <input type="date" value={taskForm.dueDate} onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })} className="w-full px-4 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Link to</label>
+                            <select value={taskForm.linkPage} onChange={(e) => setTaskForm({ ...taskForm, linkPage: e.target.value })} className="w-full px-4 py-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500">
+                              {TASK_LINK_PAGES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                            </select>
+                          </div>
+                        </div>
+
+                        <label className="flex items-center gap-2.5 p-3 bg-blue-50 border border-blue-100 rounded-lg cursor-pointer">
+                          <input type="checkbox" checked={taskNotifySms} onChange={(e) => setTaskNotifySms(e.target.checked)} className="w-4 h-4 text-blue-600" />
+                          <span className="text-sm text-gray-700">
+                            📱 Text {selectedClient.firstName} about this task
+                            {!selectedClient.phoneNumber && <span className="text-red-500 font-medium"> (no phone number on file)</span>}
+                          </span>
+                        </label>
+
+                        <div className="flex gap-3">
+                          <button onClick={handleAddTask} disabled={savingTask || !taskForm.title.trim()} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 font-medium flex items-center justify-center gap-2">
+                            <Plus className="w-4 h-4" />{savingTask ? 'Adding...' : 'Add Task'}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!taskForm.title.trim()) { alert('Fill in the task first, then save it as a template.'); return; }
+                              await saveTaskTemplate({ title: taskForm.title.trim(), instructions: taskForm.instructions.trim(), tag: taskForm.tag.trim(), linkPage: taskForm.linkPage, dueInDays: 7 });
+                              alert('✅ Template saved!');
+                            }}
+                            disabled={!taskForm.title.trim()}
+                            className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 text-sm font-medium"
+                            title="Save this task as a reusable template"
+                          >
+                            Save as Template
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Client's current tasks */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <ListChecks className="w-5 h-5 text-gray-700" />
+                        <h3 className="font-bold text-gray-800">{selectedClient.companyName}'s Tasks</h3>
+                        <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">{selectedClientTasks.length}</span>
+                      </div>
+                      {selectedClientTasks.length === 0 ? (
+                        <p className="text-sm text-gray-500 py-6 text-center">No tasks yet for this client.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {selectedClientTasks.map(task => {
+                            const meta = taskStatusMeta(task.status);
+                            return (
+                              <div key={task.id} className="flex items-center gap-3 p-3 border border-gray-100 rounded-lg hover:border-gray-200">
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dotClass}`} />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium truncate ${task.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{task.title}</p>
+                                  <p className="text-xs text-gray-400 truncate">
+                                    {task.dueDate ? `Due ${formatDueDate(task.dueDate)}` : 'No due date'}
+                                    {task.notes ? ` • 📝 ${task.notes}` : ''}
+                                  </p>
+                                </div>
+                                <select
+                                  value={task.status}
+                                  onChange={(e) => updateClientTask(task, { status: e.target.value, completedAt: e.target.value === 'done' ? new Date().toISOString() : null })}
+                                  className="text-xs border rounded-lg px-2 py-1.5 outline-none flex-shrink-0"
+                                >
+                                  {TASK_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                                </select>
+                                <button
+                                  onClick={() => { if (confirm(`Delete task "${task.title}"?`)) deleteClientTask(task.id); }}
+                                  className="text-gray-300 hover:text-red-500 flex-shrink-0"
+                                  title="Delete task"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {activeTab === 'calendar' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Visual Calendar */}

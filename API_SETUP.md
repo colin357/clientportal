@@ -6,6 +6,7 @@ All endpoints are Next.js App Router route handlers under `src/app/api/`. They r
 
 ## Contents
 
+0. [Portal Management API](#0-portal-management-api) — update the portal via POST requests
 1. [Environment Variables](#1-environment-variables)
 2. [Third-Party Service Setup](#2-third-party-service-setup)
 3. [Endpoint Reference](#3-endpoint-reference)
@@ -13,6 +14,141 @@ All endpoints are Next.js App Router route handlers under `src/app/api/`. They r
 5. [Production (Vercel) Setup](#5-production-vercel-setup)
 6. [Security Notes](#6-security-notes)
 7. [Troubleshooting](#7-troubleshooting)
+
+---
+
+## 0. Portal Management API
+
+The `/api/portal/*` endpoints let you update the portal directly with HTTP requests — no admin UI needed. Add tasks for users, schedule their content calendars, read data back, and update statuses. (To *create* content ideas, use the existing [`POST /api/bulk-add-content-ideas`](#37-post-apibulk-add-content-ideas).)
+
+### Conventions (all portal endpoints)
+
+- **Client matching:** anywhere a client is needed, pass **one** of `clientId`, `clientEmail` (case-insensitive), or `companyName` (case-insensitive) — checked in that order. Don't know the id? `GET /api/portal/clients` lists everyone.
+- **Bulk-friendly:** create endpoints accept a single object, a bare array, or a wrapped array (`{"tasks": [...]}` / `{"events": [...]}`). Results come back per item, so one bad entry never blocks the rest.
+- **Auth (optional but recommended):** set a `PORTAL_API_KEY` env var and every portal request must include it as an `x-api-key` header (or `?apiKey=` query param). If the var is unset, the endpoints are open.
+- Dates are always `YYYY-MM-DD` strings.
+
+### 0.1 Clients — `GET /api/portal/clients`
+
+Lists all clients (id, email, company name, name, approval group, tags) so you can find the right reference for other calls. Add `?clientEmail=jane@x.com` (or `clientId`/`companyName`) to get one client's full profile (passwords/social logins are stripped).
+
+```bash
+curl -s https://your-portal.com/api/portal/clients -H "x-api-key: $PORTAL_API_KEY"
+```
+
+### 0.2 Tasks — `/api/portal/tasks`
+
+Tasks appear on the client's task list in the portal (the `clientTasks` collection, same shape the UI uses).
+
+**Create — `POST`** (single object, bare array, or `{"tasks": [...]}`):
+
+```bash
+curl -s -X POST https://your-portal.com/api/portal/tasks \
+  -H "x-api-key: $PORTAL_API_KEY" -H 'Content-Type: application/json' \
+  -d '{
+    "tasks": [
+      { "clientEmail": "jane@x.com",
+        "title": "Upload a New Video 🎥",
+        "instructions": "Record and upload a new video so we can edit it into content.",
+        "tag": "Content",
+        "linkPage": "settings",
+        "dueInDays": 3 },
+      { "companyName": "Acme Realty",
+        "title": "Review Your New Content Ideas",
+        "linkPage": "content",
+        "dueDate": "2026-07-25" }
+    ]
+  }'
+```
+
+Per-task fields: `title` (required), `instructions`, `tag` (default `"General"`), `status` (`todo` | `in_progress` | `under_review` | `done`, default `todo`), `dueDate` or `dueInDays`, `notes`, `order`, and `linkPage` — a deep link into the portal: `onboarding-form`, `content`, `settings`, `social`, `calendar`, `crm`, or `ai-generator`.
+
+**Read — `GET`** with optional `?clientEmail=...&status=todo` filters:
+
+```bash
+curl -s "https://your-portal.com/api/portal/tasks?clientEmail=jane@x.com&status=todo" \
+  -H "x-api-key: $PORTAL_API_KEY"
+```
+
+**Update — `PATCH`** with the task `id` plus any fields to change:
+
+```bash
+curl -s -X PATCH https://your-portal.com/api/portal/tasks \
+  -H "x-api-key: $PORTAL_API_KEY" -H 'Content-Type: application/json' \
+  -d '{ "id": "TASK_ID", "status": "done", "notes": "Completed by phone" }'
+```
+
+**Delete — `DELETE`** with `?id=TASK_ID` or a `{"id": "..."}` body.
+
+### 0.3 Content calendar — `/api/portal/calendar`
+
+Reads and writes the `calendarEvents` collection — exactly what the admin Calendar tab and clients' "Today" view show.
+
+**Read — `GET`** with optional client, date-range, and type filters:
+
+```bash
+# Jane's calendar for August
+curl -s "https://your-portal.com/api/portal/calendar?clientEmail=jane@x.com&from=2026-08-01&to=2026-08-31" \
+  -H "x-api-key: $PORTAL_API_KEY"
+```
+
+Events come back sorted by date with `clientName` attached.
+
+**Schedule — `POST`** (single object, bare array, or `{"events": [...]}`). Two ways to create an event:
+
+```bash
+curl -s -X POST https://your-portal.com/api/portal/calendar \
+  -H "x-api-key: $PORTAL_API_KEY" -H 'Content-Type: application/json' \
+  -d '{
+    "events": [
+      { "clientEmail": "jane@x.com", "date": "2026-07-22",
+        "title": "Rate buydown explainer video", "type": "social" },
+
+      { "contentId": "EXISTING_CONTENT_ID", "date": "2026-07-24" }
+    ]
+  }'
+```
+
+- **Standalone event:** provide `title` (plus optional `description`, `type` — default `"social"`).
+- **Schedule existing content:** provide `contentId` and a `date`; title, description, type, and client are copied from the content item (matching the UI's drag-to-calendar behavior).
+
+**Move / edit — `PATCH`**: `{ "id": "EVENT_ID", "date": "2026-07-30" }` (also `title`, `description`, `type`).
+
+**Unschedule — `DELETE`** with `?id=EVENT_ID` or a `{"id": "..."}` body.
+
+### 0.4 Content items — `/api/portal/content`
+
+**Read — `GET`** with optional `?clientEmail=...&status=pending&type=social` filters — newest first, with `clientName` attached. Useful for finding `contentId`s to schedule on the calendar.
+
+**Update — `PATCH`**: `{ "id": "CONTENT_ID", "status": "approved" }` (also `title`, `content`, `description`, `type`, `fileLink`).
+
+**Create** content ideas via the existing [`POST /api/bulk-add-content-ideas`](#37-post-apibulk-add-content-ideas).
+
+### 0.5 Typical weekly workflow
+
+```bash
+BASE=https://your-portal.com/api
+KEY="x-api-key: $PORTAL_API_KEY"
+
+# 1. Find the client
+curl -s "$BASE/portal/clients" -H "$KEY"
+
+# 2. Add this week's content ideas
+curl -s -X POST "$BASE/bulk-add-content-ideas" -H 'Content-Type: application/json' \
+  -d '{"clients":[{"clientEmail":"jane@x.com","ideas":[{"title":"...","content":"..."}]}]}'
+
+# 3. Give them a task to review the ideas
+curl -s -X POST "$BASE/portal/tasks" -H "$KEY" -H 'Content-Type: application/json' \
+  -d '{"clientEmail":"jane@x.com","title":"Review Your New Content Ideas","linkPage":"content","dueInDays":3}'
+
+# 4. Once approved, schedule the content on their calendar
+curl -s "$BASE/portal/content?clientEmail=jane@x.com&status=approved" -H "$KEY"
+curl -s -X POST "$BASE/portal/calendar" -H "$KEY" -H 'Content-Type: application/json' \
+  -d '{"contentId":"CONTENT_ID_FROM_STEP_4","date":"2026-07-28"}'
+
+# 5. Read the calendar back to confirm
+curl -s "$BASE/portal/calendar?clientEmail=jane@x.com&from=2026-07-20&to=2026-08-03" -H "$KEY"
+```
 
 ---
 
@@ -53,6 +189,14 @@ TWILIO_AUTH_TOKEN=your-auth-token
 TWILIO_PHONE_NUMBER=+15551234567
 ```
 
+### Portal management API (optional)
+
+Protects all `/api/portal/*` endpoints when set (see [section 0](#0-portal-management-api)):
+
+```bash
+PORTAL_API_KEY=some-long-random-string
+```
+
 ### Which endpoints need what
 
 | Endpoint | Firebase | OpenAI | Twilio |
@@ -64,6 +208,7 @@ TWILIO_PHONE_NUMBER=+15551234567
 | `POST /api/send-sms` | – | – | ✅ |
 | `POST /api/check-reminders` | – | – | ✅ |
 | `POST /api/bulk-add-content-ideas` | ✅ | – | – |
+| `/api/portal/*` (tasks, calendar, content, clients) | ✅ | – | – |
 | `GET /api/placeholder/{w}/{h}` | – | – | – |
 
 Endpoints return HTTP 500 with a descriptive error (e.g. `"OpenAI API key not configured"`) when their required credentials are missing — the rest of the app keeps working.

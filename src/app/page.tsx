@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown, Home, Gift, LogOut, Menu, Circle, CheckCircle2, ArrowRight, ExternalLink, ListChecks, LayoutGrid, List, ChevronsLeft, ChevronsRight, ClipboardList } from 'lucide-react';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
+import AiAssistant from '@/components/AiAssistant';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -7630,6 +7631,7 @@ const ClientPortal = () => {
             }}
           />
         )}
+        <AiAssistant clientId={currentUser.id} />
       </>
     );
   }

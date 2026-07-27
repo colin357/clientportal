@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown, Home, Gift, LogOut, Menu, Circle, CheckCircle2, ArrowRight, ExternalLink, ListChecks, LayoutGrid, List, ChevronsLeft, ChevronsRight, ClipboardList } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown, Home, Gift, LogOut, Menu, Circle, CheckCircle2, ArrowRight, ExternalLink, ListChecks, LayoutGrid, List, ChevronsLeft, ChevronsRight, ClipboardList, FolderKanban, Pencil, Flag, AlertCircle, BarChart3, Target } from 'lucide-react';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 import AiAssistant from '@/components/AiAssistant';
@@ -85,6 +85,24 @@ const TASK_STATUSES = [
 ];
 
 const taskStatusMeta = (status) => TASK_STATUSES.find(s => s.id === status) || TASK_STATUSES[0];
+
+const PROJECT_STATUSES = [
+  { id: 'not_started', label: 'Not Started', icon: Circle, iconClass: 'text-gray-400', badgeClass: 'bg-gray-50 text-gray-600 border-gray-200', dotClass: 'bg-gray-400' },
+  { id: 'in_progress', label: 'In Progress', icon: ArrowRight, iconClass: 'text-blue-500', badgeClass: 'bg-blue-50 text-blue-600 border-blue-200', dotClass: 'bg-blue-500' },
+  { id: 'on_hold', label: 'On Hold', icon: Clock, iconClass: 'text-amber-500', badgeClass: 'bg-amber-50 text-amber-600 border-amber-200', dotClass: 'bg-amber-500' },
+  { id: 'completed', label: 'Completed', icon: CheckCircle2, iconClass: 'text-emerald-500', badgeClass: 'bg-emerald-50 text-emerald-600 border-emerald-200', dotClass: 'bg-emerald-500' },
+];
+
+const projectStatusMeta = (status) => PROJECT_STATUSES.find(s => s.id === status) || PROJECT_STATUSES[0];
+
+const PROJECT_PRIORITIES = [
+  { id: 'low', label: 'Low', bgClass: 'bg-gray-100 text-gray-600' },
+  { id: 'medium', label: 'Medium', bgClass: 'bg-blue-100 text-blue-600' },
+  { id: 'high', label: 'High', bgClass: 'bg-orange-100 text-orange-600' },
+  { id: 'urgent', label: 'Urgent', bgClass: 'bg-red-100 text-red-600' },
+];
+
+const projectPriorityMeta = (priority) => PROJECT_PRIORITIES.find(p => p.id === priority) || PROJECT_PRIORITIES[1];
 
 const daysFromNow = (days) => {
   const d = new Date();
@@ -794,6 +812,8 @@ const ClientPortal = () => {
   const [adminActivities, setAdminActivities] = useState([]);
   const [clientTasks, setClientTasks] = useState([]);
   const [taskTemplates, setTaskTemplates] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [projectTasks, setProjectTasks] = useState([]);
   // Dashboard UI state lives here (not in DashboardView) so it survives the
   // re-renders triggered by Firebase real-time listeners.
   const [activePage, setActivePage] = useState('home');
@@ -828,6 +848,8 @@ const ClientPortal = () => {
       unsubscribers.push(listen('adminActivities', setAdminActivities));
       unsubscribers.push(listen('clientTasks', setClientTasks));
       unsubscribers.push(listen('taskTemplates', setTaskTemplates));
+      unsubscribers.push(listen('projects', setProjects));
+      unsubscribers.push(listen('projectTasks', setProjectTasks));
     } else {
       // Fallback to one-time load if db not available
       loadData();
@@ -4252,6 +4274,122 @@ const ClientPortal = () => {
     const [showAddTaskModal, setShowAddTaskModal] = useState(false);
     const [newTask, setNewTask] = useState({ clientId: 'all', name: '', description: '', frequency: 'daily' });
 
+    // Projects state
+    const [selectedProject, setSelectedProject] = useState(null);
+    const [showProjectForm, setShowProjectForm] = useState(false);
+    const [editingProject, setEditingProject] = useState(null);
+    const emptyProjectForm = { name: '', description: '', clientId: '', status: 'not_started', priority: 'medium', startDate: '', dueDate: '' };
+    const [projectForm, setProjectForm] = useState(emptyProjectForm);
+    const [showProjectTaskForm, setShowProjectTaskForm] = useState(false);
+    const emptyProjectTaskForm = { title: '', description: '', assignee: '', status: 'todo', priority: 'medium', dueDate: '' };
+    const [projectTaskForm, setProjectTaskForm] = useState(emptyProjectTaskForm);
+    const [editingProjectTask, setEditingProjectTask] = useState(null);
+    const [projectStatusFilter, setProjectStatusFilterState] = useState(() => getStoredFilter('projectStatusFilter', 'all') as string);
+    const setProjectStatusFilter = (f: string) => { setProjectStatusFilterState(f); setStoredFilter('projectStatusFilter', f); };
+    const [projectClientFilter, setProjectClientFilterState] = useState(() => getStoredFilter('projectClientFilter', 'all') as string);
+    const setProjectClientFilter = (f: string) => { setProjectClientFilterState(f); setStoredFilter('projectClientFilter', f); };
+    const [projectPriorityFilter, setProjectPriorityFilterState] = useState(() => getStoredFilter('projectPriorityFilter', 'all') as string);
+    const setProjectPriorityFilter = (f: string) => { setProjectPriorityFilterState(f); setStoredFilter('projectPriorityFilter', f); };
+    const [savingProject, setSavingProject] = useState(false);
+    const [savingProjectTask, setSavingProjectTask] = useState(false);
+
+    const openProjectForm = (project = null) => {
+      if (project) {
+        setEditingProject(project);
+        setProjectForm({ name: project.name || '', description: project.description || '', clientId: project.clientId || '', status: project.status || 'not_started', priority: project.priority || 'medium', startDate: project.startDate || '', dueDate: project.dueDate || '' });
+      } else {
+        setEditingProject(null);
+        setProjectForm(emptyProjectForm);
+      }
+      setShowProjectForm(true);
+    };
+
+    const saveProject = async () => {
+      if (!db || !projectForm.name.trim()) return;
+      setSavingProject(true);
+      try {
+        const now = new Date().toISOString();
+        if (editingProject) {
+          await updateDoc(doc(db, 'projects', editingProject.id), { ...projectForm, updatedAt: now });
+          if (selectedProject?.id === editingProject.id) setSelectedProject({ ...selectedProject, ...projectForm, updatedAt: now });
+          await logAdminActivity('Updated project', `Updated project "${projectForm.name}"`, { projectId: editingProject.id });
+        } else {
+          const projectId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          await setDoc(doc(db, 'projects', projectId), { id: projectId, ...projectForm, createdAt: now, updatedAt: now });
+          await logAdminActivity('Created project', `Created project "${projectForm.name}"`, { projectId });
+        }
+        setShowProjectForm(false);
+        setEditingProject(null);
+        setProjectForm(emptyProjectForm);
+      } catch (e) { console.error('Error saving project:', e); }
+      setSavingProject(false);
+    };
+
+    const deleteProject = async (projectId, projectName) => {
+      if (!db || !confirm(`Delete "${projectName}"? All tasks in this project will also be deleted.`)) return;
+      try {
+        await deleteDoc(doc(db, 'projects', projectId));
+        const tasksToDelete = projectTasks.filter(t => t.projectId === projectId);
+        for (const task of tasksToDelete) await deleteDoc(doc(db, 'projectTasks', task.id));
+        if (selectedProject?.id === projectId) setSelectedProject(null);
+        await logAdminActivity('Deleted project', `Deleted project "${projectName}" and ${tasksToDelete.length} tasks`, { projectId });
+      } catch (e) { console.error('Error deleting project:', e); }
+    };
+
+    const openProjectTaskForm = (task = null) => {
+      if (task) {
+        setEditingProjectTask(task);
+        setProjectTaskForm({ title: task.title || '', description: task.description || '', assignee: task.assignee || '', status: task.status || 'todo', priority: task.priority || 'medium', dueDate: task.dueDate || '' });
+      } else {
+        setEditingProjectTask(null);
+        setProjectTaskForm(emptyProjectTaskForm);
+      }
+      setShowProjectTaskForm(true);
+    };
+
+    const saveProjectTask = async (projectId) => {
+      if (!db || !projectTaskForm.title.trim()) return;
+      setSavingProjectTask(true);
+      try {
+        const now = new Date().toISOString();
+        if (editingProjectTask) {
+          const updates = { ...projectTaskForm, updatedAt: now };
+          if (projectTaskForm.status === 'done' && editingProjectTask.status !== 'done') updates.completedAt = now;
+          if (projectTaskForm.status !== 'done') updates.completedAt = null;
+          await updateDoc(doc(db, 'projectTasks', editingProjectTask.id), updates);
+          await logAdminActivity('Updated project task', `Updated task "${projectTaskForm.title}"`, { taskId: editingProjectTask.id, projectId });
+        } else {
+          const taskId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const taskCount = projectTasks.filter(t => t.projectId === projectId).length;
+          await setDoc(doc(db, 'projectTasks', taskId), { id: taskId, projectId, ...projectTaskForm, order: taskCount, createdAt: now, updatedAt: now, completedAt: null });
+          await logAdminActivity('Created project task', `Created task "${projectTaskForm.title}"`, { taskId, projectId });
+        }
+        setShowProjectTaskForm(false);
+        setEditingProjectTask(null);
+        setProjectTaskForm(emptyProjectTaskForm);
+      } catch (e) { console.error('Error saving project task:', e); }
+      setSavingProjectTask(false);
+    };
+
+    const deleteProjectTask = async (taskId, taskTitle) => {
+      if (!db || !confirm(`Delete task "${taskTitle}"?`)) return;
+      try {
+        await deleteDoc(doc(db, 'projectTasks', taskId));
+        await logAdminActivity('Deleted project task', `Deleted task "${taskTitle}"`, { taskId });
+      } catch (e) { console.error('Error deleting project task:', e); }
+    };
+
+    const updateProjectTaskStatus = async (taskId, newStatus) => {
+      if (!db) return;
+      try {
+        const now = new Date().toISOString();
+        const updates: any = { status: newStatus, updatedAt: now };
+        if (newStatus === 'done') updates.completedAt = now;
+        else updates.completedAt = null;
+        await updateDoc(doc(db, 'projectTasks', taskId), updates);
+      } catch (e) { console.error('Error updating task status:', e); }
+    };
+
     // Log admin activity
     const logAdminActivity = async (action: string, details: string, metadata?: Record<string, any>) => {
       if (!db || !currentUser) return;
@@ -4745,13 +4883,14 @@ const ClientPortal = () => {
 
             {/* Tab navigation */}
             <div className="flex items-center overflow-x-auto">
-              {(['today', 'clients', 'tasks', 'calendar', 'videos', 'sms', 'more'] as const).map(tabId => {
+              {(['today', 'clients', 'tasks', 'calendar', 'projects', 'videos', 'sms', 'more'] as const).map(tabId => {
                 const badge = tabId === 'today' ? calendarEvents.filter(e => e.date === formatDateLocal(new Date())).length
                   : tabId === 'clients' ? users.filter(u => !u.parentClientId).length
                   : tabId === 'tasks' ? clientTasks.filter(t => t.status === 'under_review').length
+                  : tabId === 'projects' ? projects.filter(p => p.status === 'in_progress').length
                   : tabId === 'videos' ? videos.filter(v => v.status !== 'completed').length
                   : 0;
-                const label = { today: 'Today', clients: 'Clients', tasks: 'Tasks', calendar: 'Calendar', videos: 'Videos', sms: 'SMS', more: 'More' }[tabId];
+                const label = { today: 'Today', clients: 'Clients', tasks: 'Tasks', calendar: 'Calendar', projects: 'Projects', videos: 'Videos', sms: 'SMS', more: 'More' }[tabId];
                 return (
                   <button
                     key={tabId}
@@ -4804,6 +4943,11 @@ const ClientPortal = () => {
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <span className="text-base font-bold text-teal-600">{users.filter(u => !u.parentClientId && u.approvalGroup === 'auto-approve').length}</span>
               <span className="text-gray-400">Auto-Approve</span>
+            </div>
+            <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-base font-bold text-indigo-600">{projects.length}</span>
+              <span className="text-gray-400">Projects</span>
             </div>
           </div>
         </div>
@@ -5924,6 +6068,404 @@ const ClientPortal = () => {
                   })()}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ===== PROJECTS TAB ===== */}
+          {activeTab === 'projects' && (
+            <div className="space-y-6">
+              {selectedProject ? (() => {
+                const proj = projects.find(p => p.id === selectedProject.id) || selectedProject;
+                const tasks = projectTasks.filter(t => t.projectId === proj.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+                const completedTasks = tasks.filter(t => t.status === 'done').length;
+                const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+                const client = users.find(u => u.id === proj.clientId);
+                const statusMeta = projectStatusMeta(proj.status);
+                const priorityMeta = projectPriorityMeta(proj.priority);
+
+                return (
+                  <div>
+                    {/* Back button */}
+                    <button onClick={() => setSelectedProject(null)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4 transition-colors">
+                      <ChevronLeft className="w-4 h-4" />
+                      Back to Projects
+                    </button>
+
+                    {/* Project header */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h2 className="text-xl font-bold text-gray-800">{proj.name}</h2>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusMeta.badgeClass}`}>{statusMeta.label}</span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityMeta.bgClass}`}>{priorityMeta.label}</span>
+                          </div>
+                          {proj.description && <p className="text-sm text-gray-600 mb-3">{proj.description}</p>}
+                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                            {client && (
+                              <div className="flex items-center gap-1.5">
+                                <Users className="w-4 h-4" />
+                                <span>{client.companyName || client.email}</span>
+                              </div>
+                            )}
+                            {proj.startDate && (
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="w-4 h-4" />
+                                <span>Start: {formatDueDate(proj.startDate)}</span>
+                              </div>
+                            )}
+                            {proj.dueDate && (
+                              <div className="flex items-center gap-1.5">
+                                <Flag className="w-4 h-4" />
+                                <span>Due: {formatDueDate(proj.dueDate)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openProjectForm(proj)} className="text-gray-500 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50 transition-colors">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => deleteProject(proj.id, proj.name)} className="text-gray-500 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="mt-4">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-sm font-medium text-gray-700">Progress</span>
+                          <span className="text-sm text-gray-500">{completedTasks}/{tasks.length} tasks ({progress}%)</span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2">
+                          <div className="bg-blue-600 h-2 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tasks section */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                      <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-2">
+                          <ListChecks className="w-5 h-5 text-blue-600" />
+                          <h3 className="text-base font-semibold text-gray-800">Tasks</h3>
+                          <span className="text-sm text-gray-400">({tasks.length})</span>
+                        </div>
+                        <button onClick={() => openProjectTaskForm()} className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-1.5 text-sm font-medium">
+                          <Plus className="w-4 h-4" />
+                          Add Task
+                        </button>
+                      </div>
+
+                      {/* Task status summary */}
+                      {tasks.length > 0 && (
+                        <div className="grid grid-cols-4 gap-3 mb-5">
+                          {TASK_STATUSES.map(s => {
+                            const count = tasks.filter(t => t.status === s.id).length;
+                            return (
+                              <div key={s.id} className="bg-gray-50 rounded-lg p-3 text-center">
+                                <div className={`text-lg font-bold ${s.iconClass}`}>{count}</div>
+                                <div className="text-xs text-gray-500">{s.label}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Task list */}
+                      {tasks.length === 0 ? (
+                        <div className="text-center py-8 text-gray-400">
+                          <ListChecks className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">No tasks yet. Add a task to get started.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {tasks.map(task => {
+                            const tMeta = taskStatusMeta(task.status);
+                            const tPriority = projectPriorityMeta(task.priority);
+                            const TIcon = tMeta.icon;
+                            return (
+                              <div key={task.id} className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 transition-colors group">
+                                <button
+                                  onClick={() => {
+                                    const statusOrder = ['todo', 'in_progress', 'under_review', 'done'];
+                                    const currentIdx = statusOrder.indexOf(task.status);
+                                    const nextStatus = statusOrder[(currentIdx + 1) % statusOrder.length];
+                                    updateProjectTaskStatus(task.id, nextStatus);
+                                  }}
+                                  className={`flex-shrink-0 ${tMeta.iconClass} hover:opacity-70 transition`}
+                                  title={`Status: ${tMeta.label} (click to advance)`}
+                                >
+                                  <TIcon className="w-5 h-5" />
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-sm font-medium ${task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800'}`}>{task.title}</span>
+                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${tPriority.bgClass}`}>{tPriority.label}</span>
+                                  </div>
+                                  {task.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</p>}
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {task.assignee && (
+                                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                                        <Users className="w-3 h-3" />
+                                        {(() => { const a = adminUsers.find(au => au.id === task.assignee); return a ? a.name || a.email : 'Unassigned'; })()}
+                                      </span>
+                                    )}
+                                    {task.dueDate && (
+                                      <span className={`text-xs flex items-center gap-1 ${task.status !== 'done' && task.dueDate < new Date().toISOString().split('T')[0] ? 'text-red-500' : 'text-gray-400'}`}>
+                                        <Clock className="w-3 h-3" />
+                                        {formatDueDate(task.dueDate)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => openProjectTaskForm(task)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => deleteProjectTask(task.id, task.title)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Project Task Form Modal */}
+                    {showProjectTaskForm && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowProjectTaskForm(false)}>
+                        <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+                          <div className="p-6 border-b border-gray-200">
+                            <h3 className="text-lg font-bold text-gray-800">{editingProjectTask ? 'Edit Task' : 'New Task'}</h3>
+                          </div>
+                          <div className="p-6 space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                              <input value={projectTaskForm.title} onChange={e => setProjectTaskForm(f => ({ ...f, title: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="Task title" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                              <textarea value={projectTaskForm.description} onChange={e => setProjectTaskForm(f => ({ ...f, description: e.target.value }))} rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none" placeholder="Task details..." />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                <select value={projectTaskForm.status} onChange={e => setProjectTaskForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                  {TASK_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                                <select value={projectTaskForm.priority} onChange={e => setProjectTaskForm(f => ({ ...f, priority: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                  {PROJECT_PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
+                                <select value={projectTaskForm.assignee} onChange={e => setProjectTaskForm(f => ({ ...f, assignee: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                  <option value="">Unassigned</option>
+                                  {adminUsers.map(a => <option key={a.id} value={a.id}>{a.name || a.email}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                                <input type="date" value={projectTaskForm.dueDate} onChange={e => setProjectTaskForm(f => ({ ...f, dueDate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                            <button onClick={() => setShowProjectTaskForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                            <button onClick={() => saveProjectTask(proj.id)} disabled={!projectTaskForm.title.trim() || savingProjectTask} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                              {savingProjectTask ? 'Saving...' : editingProjectTask ? 'Update Task' : 'Add Task'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (
+                <div>
+                  {/* Project list header */}
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-2">
+                      <FolderKanban className="w-5 h-5 text-indigo-600" />
+                      <h2 className="text-lg font-bold text-gray-800">Projects</h2>
+                      <span className="text-sm text-gray-400">({projects.length})</span>
+                    </div>
+                    <button onClick={() => openProjectForm()} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-1.5 text-sm font-medium">
+                      <Plus className="w-4 h-4" />
+                      New Project
+                    </button>
+                  </div>
+
+                  {/* Filters */}
+                  <div className="flex items-center gap-3 mb-5 flex-wrap">
+                    <select value={projectStatusFilter} onChange={e => setProjectStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                      <option value="all">All Statuses</option>
+                      {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                    <select value={projectClientFilter} onChange={e => setProjectClientFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                      <option value="all">All Clients</option>
+                      {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName || u.email}</option>)}
+                    </select>
+                    <select value={projectPriorityFilter} onChange={e => setProjectPriorityFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                      <option value="all">All Priorities</option>
+                      {PROJECT_PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Status overview cards */}
+                  <div className="grid grid-cols-4 gap-3 mb-6">
+                    {PROJECT_STATUSES.map(s => {
+                      const count = projects.filter(p => p.status === s.id).length;
+                      const SIcon = s.icon;
+                      return (
+                        <button key={s.id} onClick={() => setProjectStatusFilter(projectStatusFilter === s.id ? 'all' : s.id)} className={`rounded-lg p-4 text-center border transition-colors ${projectStatusFilter === s.id ? 'border-blue-300 bg-blue-50/50' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}`}>
+                          <SIcon className={`w-5 h-5 mx-auto mb-1 ${s.iconClass}`} />
+                          <div className="text-lg font-bold text-gray-800">{count}</div>
+                          <div className="text-xs text-gray-500">{s.label}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Project cards */}
+                  {(() => {
+                    let filtered = projects;
+                    if (projectStatusFilter !== 'all') filtered = filtered.filter(p => p.status === projectStatusFilter);
+                    if (projectClientFilter !== 'all') filtered = filtered.filter(p => p.clientId === projectClientFilter);
+                    if (projectPriorityFilter !== 'all') filtered = filtered.filter(p => p.priority === projectPriorityFilter);
+                    filtered = filtered.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+                    if (filtered.length === 0) return (
+                      <div className="text-center py-12 text-gray-400 bg-white rounded-lg border border-gray-200">
+                        <FolderKanban className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                        <p className="text-sm font-medium">No projects found</p>
+                        <p className="text-xs mt-1">{projects.length === 0 ? 'Create your first project to get started.' : 'Try adjusting your filters.'}</p>
+                      </div>
+                    );
+
+                    return (
+                      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filtered.map(proj => {
+                          const tasks = projectTasks.filter(t => t.projectId === proj.id);
+                          const completedTasks = tasks.filter(t => t.status === 'done').length;
+                          const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+                          const client = users.find(u => u.id === proj.clientId);
+                          const sMeta = projectStatusMeta(proj.status);
+                          const pMeta = projectPriorityMeta(proj.priority);
+                          const isOverdue = proj.dueDate && proj.status !== 'completed' && proj.dueDate < new Date().toISOString().split('T')[0];
+
+                          return (
+                            <div key={proj.id} onClick={() => setSelectedProject(proj)} className="bg-white rounded-lg border border-gray-200 p-5 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer group">
+                              <div className="flex items-start justify-between mb-3">
+                                <h3 className="font-semibold text-gray-800 group-hover:text-blue-600 transition-colors line-clamp-1">{proj.name}</h3>
+                                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${sMeta.badgeClass}`}>{sMeta.label}</span>
+                                </div>
+                              </div>
+                              {proj.description && <p className="text-xs text-gray-500 line-clamp-2 mb-3">{proj.description}</p>}
+                              <div className="space-y-3">
+                                {client && (
+                                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                    <Users className="w-3.5 h-3.5" />
+                                    <span>{client.companyName || client.email}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-3">
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${pMeta.bgClass}`}>{pMeta.label}</span>
+                                  {proj.dueDate && (
+                                    <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                                      <Clock className="w-3 h-3" />
+                                      {isOverdue && <AlertCircle className="w-3 h-3" />}
+                                      {formatDueDate(proj.dueDate)}
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Progress */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs text-gray-400">{completedTasks}/{tasks.length} tasks</span>
+                                    <span className="text-xs text-gray-400">{progress}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                    <div className={`h-1.5 rounded-full transition-all duration-500 ${progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${progress}%` }} />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Create/Edit Project Modal */}
+              {showProjectForm && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowProjectForm(false)}>
+                  <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+                    <div className="p-6 border-b border-gray-200">
+                      <h3 className="text-lg font-bold text-gray-800">{editingProject ? 'Edit Project' : 'New Project'}</h3>
+                    </div>
+                    <div className="p-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Project Name *</label>
+                        <input value={projectForm.name} onChange={e => setProjectForm(f => ({ ...f, name: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="e.g. Website Redesign" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea value={projectForm.description} onChange={e => setProjectForm(f => ({ ...f, description: e.target.value }))} rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none" placeholder="Project details..." />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+                        <select value={projectForm.clientId} onChange={e => setProjectForm(f => ({ ...f, clientId: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                          <option value="">No client assigned</option>
+                          {users.filter(u => !u.parentClientId).map(u => <option key={u.id} value={u.id}>{u.companyName || u.email}</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                          <select value={projectForm.status} onChange={e => setProjectForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            {PROJECT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                          <select value={projectForm.priority} onChange={e => setProjectForm(f => ({ ...f, priority: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            {PROJECT_PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                          <input type="date" value={projectForm.startDate} onChange={e => setProjectForm(f => ({ ...f, startDate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                          <input type="date" value={projectForm.dueDate} onChange={e => setProjectForm(f => ({ ...f, dueDate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+                      <button onClick={() => setShowProjectForm(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                      <button onClick={saveProject} disabled={!projectForm.name.trim() || savingProject} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                        {savingProject ? 'Saving...' : editingProject ? 'Update Project' : 'Create Project'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

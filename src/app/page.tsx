@@ -7635,7 +7635,12 @@ const ClientPortal = () => {
       </>
     );
   }
-  if (view === 'admin') return <AdminView />;
+  if (view === 'admin') return (
+    <>
+      <AdminView />
+      <AiAssistant clientId={currentUser.id} isAdmin />
+    </>
+  );
 };
 
 export default ClientPortal;

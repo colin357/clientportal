@@ -20,16 +20,24 @@ const TOOL_LABELS: Record<string, string> = {
   get_calendar_events: 'Checked calendar',
   create_calendar_event: 'Added to calendar',
   get_client_profile: 'Read profile',
+  list_clients: 'Listed clients',
 };
 
-const SUGGESTIONS = [
+const CLIENT_SUGGESTIONS = [
   'What tasks do I have?',
   'What content is scheduled this week?',
   'Create a social media post idea about market updates',
   'Add a task to review my content calendar',
 ];
 
-export default function AiAssistant({ clientId }: { clientId: string }) {
+const ADMIN_SUGGESTIONS = [
+  'Show me all pending content across clients',
+  'What tasks are overdue?',
+  'List all clients',
+  "What's on the calendar this week?",
+];
+
+export default function AiAssistant({ clientId, isAdmin = false }: { clientId: string; isAdmin?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -72,7 +80,7 @@ export default function AiAssistant({ clientId }: { clientId: string }) {
       const res = await fetch('/api/ai-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, clientId }),
+        body: JSON.stringify({ messages: apiMessages, clientId, isAdmin }),
       });
 
       if (!res.ok) {
@@ -229,10 +237,12 @@ export default function AiAssistant({ clientId }: { clientId: string }) {
                 </div>
                 <h4 className="font-semibold text-zinc-700 mb-1.5">How can I help?</h4>
                 <p className="text-sm text-zinc-500 mb-6 max-w-[280px]">
-                  I can manage tasks, create content ideas, schedule your calendar, and more.
+                  {isAdmin
+                    ? 'I can manage clients, tasks, content, and calendars across your portal.'
+                    : 'I can manage tasks, create content ideas, schedule your calendar, and more.'}
                 </p>
                 <div className="w-full space-y-2">
-                  {SUGGESTIONS.map((s) => (
+                  {(isAdmin ? ADMIN_SUGGESTIONS : CLIENT_SUGGESTIONS).map((s) => (
                     <button
                       key={s}
                       onClick={() => sendMessage(s)}

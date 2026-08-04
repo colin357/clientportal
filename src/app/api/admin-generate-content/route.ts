@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getClientSmsNumbers } from '@/lib/smsRecipients';
 
 export async function POST(request: NextRequest) {
   try {
@@ -171,27 +172,30 @@ Format as a JSON array with exactly 15 objects (5 social, 5 blog, 5 email).`;
         const emailCampaigns = contentPieces.filter(p => p.type === 'email').slice(0, 5);
         const limitedPieces = [...socialPosts, ...blogPosts, ...emailCampaigns];
 
-        // Send SMS notification if user has phone number
-        if (twilioSid && twilioToken && twilioPhone && user.phoneNumber) {
-          try {
-            const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
-            const credentials = Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
+        // Notify the client and everyone else on their account
+        const smsRecipients = getClientSmsNumbers(user);
+        if (twilioSid && twilioToken && twilioPhone && smsRecipients.length > 0) {
+          const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`;
+          const credentials = Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
 
-            await fetch(twilioUrl, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Basic ${credentials}`,
-                'Content-Type': 'application/x-www-form-urlencoded',
-              },
-              body: new URLSearchParams({
-                To: user.phoneNumber,
-                From: twilioPhone,
-                Body: `🎉 Great news! We've created ${limitedPieces.length} new personalized marketing pieces for you (${socialPosts.length} social posts, ${blogPosts.length} blog posts, ${emailCampaigns.length} emails). Check your portal to review and approve them!\n\n- The Team at Own It Social\nportal.ownitsocial.com`,
-              }),
-            });
-            console.log(`✅ SMS sent to ${user.companyName}`);
-          } catch (smsError) {
-            console.error(`Failed to send SMS to ${user.companyName}:`, smsError);
+          for (const to of smsRecipients) {
+            try {
+              await fetch(twilioUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Basic ${credentials}`,
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                  To: to,
+                  From: twilioPhone,
+                  Body: `🎉 Great news! We've created ${limitedPieces.length} new personalized marketing pieces for you (${socialPosts.length} social posts, ${blogPosts.length} blog posts, ${emailCampaigns.length} emails). Check your portal to review and approve them!\n\n- The Team at Own It Social\nportal.ownitsocial.com`,
+                }),
+              });
+              console.log(`✅ SMS sent to ${user.companyName} (${to})`);
+            } catch (smsError) {
+              console.error(`Failed to send SMS to ${user.companyName} (${to}):`, smsError);
+            }
           }
         }
 

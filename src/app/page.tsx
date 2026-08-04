@@ -4,6 +4,7 @@ import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, Che
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 import AiAssistant from '@/components/AiAssistant';
+import { formatPhoneE164, getClientSmsRecipients } from '@/lib/smsRecipients';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -1131,9 +1132,9 @@ const ClientPortal = () => {
     } else {
       setClientTasks(prev => [...prev, task]);
     }
-    if (notifyBySms && client.phoneNumber) {
-      await sendSMS(
-        client.phoneNumber,
+    if (notifyBySms) {
+      await sendSMSToClient(
+        client,
         `📌 Hi ${client.firstName}, we just added a new task to your portal: "${task.title}"${task.dueDate ? ` (due ${formatDueDate(task.dueDate)})` : ''}. Log in to check it out!`
       );
     }
@@ -1294,36 +1295,14 @@ const ClientPortal = () => {
     }
   };
 
-  const formatPhoneE164 = (phone) => {
-    // Remove all non-digit characters
-    const digits = phone.replace(/\D/g, '');
-
-    // If it's already 11 digits starting with 1, format it
-    if (digits.length === 11 && digits.startsWith('1')) {
-      return `+${digits}`;
-    }
-
-    // If it's 10 digits, add +1
-    if (digits.length === 10) {
-      return `+1${digits}`;
-    }
-
-    // If it already starts with +1, return as is
-    if (phone.startsWith('+1')) {
-      return phone;
-    }
-
-    // Default: assume 10 digits and add +1
-    return `+1${digits.slice(-10)}`;
-  };
-
   // Helper to parse date string (YYYY-MM-DD) as local date, not UTC
   const parseDateLocal = (dateStr) => {
     const [year, month, day] = dateStr.split('-').map(Number);
     return new Date(year, month - 1, day);
   };
 
-  // SMS notification helper function
+  // SMS notification helper function. Never throws — returns true/false so
+  // callers can report how many messages actually went out.
   const sendSMS = async (phoneNumber, message) => {
     try {
       console.log('📱 Sending SMS to:', phoneNumber);
@@ -1340,12 +1319,27 @@ const ClientPortal = () => {
       if (!response.ok) {
         console.error('❌ SMS failed:', result.error);
         console.error('Check Twilio credentials in environment variables');
-      } else {
-        console.log('✅ SMS sent successfully:', result.messageSid);
+        return false;
       }
+
+      console.log('✅ SMS sent successfully:', result.messageSid);
+      return true;
     } catch (error) {
       console.error('❌ Failed to send SMS:', error);
+      return false;
     }
+  };
+
+  // Send one message to a client and everyone else on their account.
+  // Returns { sent, failed, total } counted in phone numbers, not clients.
+  const sendSMSToClient = async (client, message) => {
+    const recipients = getClientSmsRecipients(client);
+    let sent = 0;
+    for (const recipient of recipients) {
+      const ok = await sendSMS(recipient.phoneNumber, message);
+      if (ok) sent++;
+    }
+    return { sent, failed: recipients.length - sent, total: recipients.length };
   };
 
   // File upload helper function
@@ -4238,6 +4232,11 @@ const ClientPortal = () => {
     const [smsSending, setSmsSending] = useState(false);
     const [sendingDailyTexts, setSendingDailyTexts] = useState(false);
 
+    // "Additional text recipients" form on the client details modal
+    const [newRecipientName, setNewRecipientName] = useState('');
+    const [newRecipientPhone, setNewRecipientPhone] = useState('');
+    const [savingRecipient, setSavingRecipient] = useState(false);
+
     // SMS Templates
     const smsTemplates = {
       'video-editing': {
@@ -4597,6 +4596,57 @@ const ClientPortal = () => {
       }
     };
 
+    // Additional people (besides the primary contact) who should get this
+    // client's portal texts. Stored on the client's user doc.
+    const saveAdditionalRecipients = async (client, recipients) => {
+      const updatedUser = { ...client, additionalSmsRecipients: recipients };
+      setSelectedUser(updatedUser);
+      await saveUsers(users.map(u => u.id === client.id ? updatedUser : u), [client.id]);
+    };
+
+    const handleAddSmsRecipient = async (client) => {
+      const phone = newRecipientPhone.trim();
+      if (phone.replace(/\D/g, '').length < 10) {
+        alert('Please enter a valid 10-digit phone number.');
+        return;
+      }
+
+      const phoneNumber = formatPhoneE164(phone);
+      const existing = client.additionalSmsRecipients || [];
+      const alreadyListed = getClientSmsRecipients(client).some(r => r.phoneNumber === phoneNumber);
+      if (alreadyListed) {
+        alert('That number is already receiving this client\'s texts.');
+        return;
+      }
+
+      setSavingRecipient(true);
+      try {
+        await saveAdditionalRecipients(client, [
+          ...existing,
+          { id: Date.now().toString(), name: newRecipientName.trim(), phoneNumber },
+        ]);
+        setNewRecipientName('');
+        setNewRecipientPhone('');
+      } catch (e) {
+        console.error('Error adding text recipient:', e);
+        alert('❌ Failed to add recipient. Please try again.');
+      } finally {
+        setSavingRecipient(false);
+      }
+    };
+
+    const handleRemoveSmsRecipient = async (client, recipientId) => {
+      try {
+        await saveAdditionalRecipients(
+          client,
+          (client.additionalSmsRecipients || []).filter(r => r.id !== recipientId)
+        );
+      } catch (e) {
+        console.error('Error removing text recipient:', e);
+        alert('❌ Failed to remove recipient. Please try again.');
+      }
+    };
+
     const handleSendManualSMS = async () => {
       if (smsSelectedClients.length === 0) {
         alert('⚠️ Please select at least one client to send SMS');
@@ -4616,23 +4666,29 @@ const ClientPortal = () => {
       setSmsSending(true);
       let successCount = 0;
       let errorCount = 0;
+      let numberCount = 0;
+      let skippedCount = 0;
 
       try {
         for (const clientId of smsSelectedClients) {
           const client = users.find(u => u.id === clientId);
-          if (client?.phoneNumber) {
-            try {
-              await sendSMS(client.phoneNumber, message);
-              successCount++;
-              console.log(`✅ SMS sent to ${client.companyName}`);
-            } catch (error) {
-              console.error(`❌ Failed to send SMS to ${client.companyName}:`, error);
-              errorCount++;
-            }
+          if (!client) continue;
+          // Goes to the client plus any additional recipients on their account.
+          const result = await sendSMSToClient(client, message);
+          if (result.total === 0) {
+            console.warn(`⏭️ Skipping ${client.companyName} - no phone numbers on file`);
+            skippedCount++;
+          } else if (result.sent > 0) {
+            successCount++;
+            numberCount += result.sent;
+            console.log(`✅ SMS sent to ${client.companyName} (${result.sent} number${result.sent > 1 ? 's' : ''})`);
+          } else {
+            console.error(`❌ Failed to send SMS to ${client.companyName}`);
+            errorCount++;
           }
         }
 
-        alert(`✅ SMS sent successfully to ${successCount} client${successCount > 1 ? 's' : ''}!${errorCount > 0 ? `\n⚠️ Failed to send to ${errorCount} client${errorCount > 1 ? 's' : ''}` : ''}`);
+        alert(`✅ SMS sent successfully to ${successCount} client${successCount !== 1 ? 's' : ''} (${numberCount} phone number${numberCount !== 1 ? 's' : ''})!${errorCount > 0 ? `\n⚠️ Failed to send to ${errorCount} client${errorCount > 1 ? 's' : ''}` : ''}${skippedCount > 0 ? `\n⚠️ Skipped ${skippedCount} client${skippedCount > 1 ? 's' : ''} with no phone number on file` : ''}`);
 
         // Reset form
         setSmsSelectedClients([]);
@@ -4648,7 +4704,7 @@ const ClientPortal = () => {
 
     const handleSendDailyTexts = async () => {
       const today = formatDateLocal(new Date());
-      const eligibleUsers = users.filter(u => !u.parentClientId && u.receiveDailyTexts && u.phoneNumber);
+      const eligibleUsers = users.filter(u => !u.parentClientId && u.receiveDailyTexts && getClientSmsRecipients(u).length > 0);
 
       if (eligibleUsers.length === 0) {
         alert('No users have daily text notifications enabled. Enable it in each client\'s details.');
@@ -4676,12 +4732,9 @@ const ClientPortal = () => {
           const eventList = userEvents.map(e => `- ${e.title} (${e.type})`).join('\n');
           const message = `Hi ${user.firstName}! You have ${userEvents.length} content piece${userEvents.length > 1 ? 's' : ''} scheduled for today:\n\n${eventList}\n\nCheck your portal for details!`;
 
-          try {
-            await sendSMS(user.phoneNumber, message);
-            sent++;
-          } catch {
-            failed++;
-          }
+          const result = await sendSMSToClient(user, message);
+          if (result.sent > 0) sent++;
+          else failed++;
         }
 
         alert(`Daily texts sent to ${sent} client${sent !== 1 ? 's' : ''}!${failed > 0 ? ` (${failed} failed)` : ''}`);
@@ -5614,7 +5667,8 @@ const ClientPortal = () => {
               try {
                 await createClientTask(selectedClient, taskForm, taskNotifySms);
                 setTaskForm(emptyTaskForm);
-                alert(`✅ Task added to ${selectedClient.companyName}'s portal${taskNotifySms && selectedClient.phoneNumber ? ' — text notification sent.' : '.'}`);
+                const notified = taskNotifySms ? getClientSmsRecipients(selectedClient).length : 0;
+                alert(`✅ Task added to ${selectedClient.companyName}'s portal${notified > 0 ? ` — text notification sent to ${notified} number${notified > 1 ? 's' : ''}.` : '.'}`);
               } catch (e) {
                 console.error('Error adding task:', e);
                 alert('❌ Failed to add task. Please try again.');
@@ -5702,7 +5756,12 @@ const ClientPortal = () => {
                           <input type="checkbox" checked={taskNotifySms} onChange={(e) => setTaskNotifySms(e.target.checked)} className="w-4 h-4 text-blue-600" />
                           <span className="text-sm text-gray-700">
                             📱 Text {selectedClient.firstName} about this task
-                            {!selectedClient.phoneNumber && <span className="text-red-500 font-medium"> (no phone number on file)</span>}
+                            {(() => {
+                              const recipientCount = getClientSmsRecipients(selectedClient).length;
+                              if (recipientCount === 0) return <span className="text-red-500 font-medium"> (no phone number on file)</span>;
+                              if (recipientCount > 1) return <span className="text-gray-500"> and {recipientCount - 1} other recipient{recipientCount > 2 ? 's' : ''} on the account</span>;
+                              return null;
+                            })()}
                           </span>
                         </label>
 
@@ -6572,7 +6631,14 @@ const ClientPortal = () => {
                           />
                           <div>
                             <p className="text-sm font-medium text-gray-800">{user.companyName}</p>
-                            <p className="text-xs text-gray-500">{user.firstName} {user.lastName} · {user.phoneNumber}</p>
+                            <p className="text-xs text-gray-500">
+                              {user.firstName} {user.lastName} · {user.phoneNumber}
+                              {(user.additionalSmsRecipients || []).length > 0 && (
+                                <span className="ml-1 text-green-700 font-medium">
+                                  +{user.additionalSmsRecipients.length} more
+                                </span>
+                              )}
+                            </p>
                           </div>
                         </label>
                       ))}
@@ -7737,6 +7803,74 @@ const ClientPortal = () => {
                         {selectedUser.receiveDailyTexts ? 'Enabled' : 'Disabled'}
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                {/* Text Message Recipients */}
+                <div className="bg-green-50 rounded-lg p-4">
+                  <h3 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-green-600" />
+                    Text Message Recipients
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Every text we send {selectedUser.companyName} from the portal goes to all of these numbers.
+                  </p>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">
+                          {selectedUser.firstName} {selectedUser.lastName || ''}
+                          <span className="ml-2 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Primary</span>
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {selectedUser.phoneNumber || <span className="text-red-500 font-medium">No phone number on file</span>}
+                        </p>
+                      </div>
+                    </div>
+
+                    {(selectedUser.additionalSmsRecipients || []).map(recipient => (
+                      <div key={recipient.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{recipient.name || 'Additional recipient'}</p>
+                          <p className="text-xs text-gray-500">{recipient.phoneNumber}</p>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveSmsRecipient(selectedUser, recipient.id)}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+
+                    {(selectedUser.additionalSmsRecipients || []).length === 0 && (
+                      <p className="text-sm text-gray-500">No additional recipients yet.</p>
+                    )}
+                  </div>
+
+                  <div className="grid sm:grid-cols-[1fr_1fr_auto] gap-2">
+                    <input
+                      type="text"
+                      value={newRecipientName}
+                      onChange={(e) => setNewRecipientName(e.target.value)}
+                      placeholder="Name (optional)"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm"
+                    />
+                    <input
+                      type="tel"
+                      value={newRecipientPhone}
+                      onChange={(e) => setNewRecipientPhone(e.target.value)}
+                      placeholder="(555) 555-5555"
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm"
+                    />
+                    <button
+                      onClick={() => handleAddSmsRecipient(selectedUser)}
+                      disabled={savingRecipient || !newRecipientPhone.trim()}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-sm font-medium flex items-center justify-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" />{savingRecipient ? 'Adding...' : 'Add'}
+                    </button>
                   </div>
                 </div>
 

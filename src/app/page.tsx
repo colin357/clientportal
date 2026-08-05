@@ -4,7 +4,7 @@ import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, Che
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 import AiAssistant from '@/components/AiAssistant';
-import { formatPhoneE164, getClientSmsRecipients } from '@/lib/smsRecipients';
+import { formatPhoneE164, formatPhoneDisplay, getClientPhoneNumbers, getClientSmsRecipients } from '@/lib/smsRecipients';
 
 // Firebase imports - Make sure to install: npm install firebase
 import { initializeApp, getApps } from 'firebase/app';
@@ -4635,6 +4635,20 @@ const ClientPortal = () => {
       }
     };
 
+    // Opt an already-known number (team member, onboarding form) into the
+    // client's texts by copying it into the additional recipients list.
+    const handleAddLinkedNumberToTexts = async (client, entry) => {
+      try {
+        await saveAdditionalRecipients(client, [
+          ...(client.additionalSmsRecipients || []),
+          { id: Date.now().toString(), name: entry.name, phoneNumber: entry.phoneNumber },
+        ]);
+      } catch (e) {
+        console.error('Error adding text recipient:', e);
+        alert('❌ Failed to add recipient. Please try again.');
+      }
+    };
+
     const handleRemoveSmsRecipient = async (client, recipientId) => {
       try {
         await saveAdditionalRecipients(
@@ -7806,46 +7820,60 @@ const ClientPortal = () => {
                   </div>
                 </div>
 
-                {/* Text Message Recipients */}
+                {/* Phone Numbers / Text Message Recipients */}
+                {(() => {
+                  const teamMembers = users.filter(u => u.parentClientId === selectedUser.id);
+                  const linkedNumbers = getClientPhoneNumbers(selectedUser, teamMembers);
+                  const textedCount = linkedNumbers.filter(n => n.receivesTexts).length;
+
+                  return (
                 <div className="bg-green-50 rounded-lg p-4">
                   <h3 className="font-semibold text-gray-800 mb-1 flex items-center gap-2">
                     <MessageSquare className="w-5 h-5 text-green-600" />
-                    Text Message Recipients
+                    Phone Numbers
+                    <span className="text-xs font-medium text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
+                      {linkedNumbers.length} on file · {textedCount} texted
+                    </span>
                   </h3>
                   <p className="text-sm text-gray-600 mb-3">
-                    Every text we send {selectedUser.companyName} from the portal goes to all of these numbers.
+                    Every number linked to {selectedUser.companyName}. The ones marked <span className="font-medium text-green-700">Gets texts</span> receive every text we send this client from the portal.
                   </p>
 
                   <div className="space-y-2 mb-4">
-                    <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">
-                          {selectedUser.firstName} {selectedUser.lastName || ''}
-                          <span className="ml-2 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Primary</span>
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {selectedUser.phoneNumber || <span className="text-red-500 font-medium">No phone number on file</span>}
-                        </p>
-                      </div>
-                    </div>
-
-                    {(selectedUser.additionalSmsRecipients || []).map(recipient => (
-                      <div key={recipient.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">{recipient.name || 'Additional recipient'}</p>
-                          <p className="text-xs text-gray-500">{recipient.phoneNumber}</p>
+                    {linkedNumbers.map(entry => (
+                      <div key={`${entry.source}_${entry.phoneNumber}`} className="flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 flex flex-wrap items-center gap-2">
+                            {entry.name}
+                            <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">{entry.sourceLabel}</span>
+                            {entry.receivesTexts ? (
+                              <span className="text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Gets texts</span>
+                            ) : (
+                              <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">No texts</span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500">{entry.display}</p>
                         </div>
-                        <button
-                          onClick={() => handleRemoveSmsRecipient(selectedUser, recipient.id)}
-                          className="text-red-600 hover:text-red-800 text-sm"
-                        >
-                          Remove
-                        </button>
+                        {entry.source === 'additional' ? (
+                          <button
+                            onClick={() => handleRemoveSmsRecipient(selectedUser, entry.recipientId)}
+                            className="text-red-600 hover:text-red-800 text-sm whitespace-nowrap"
+                          >
+                            Remove
+                          </button>
+                        ) : !entry.receivesTexts ? (
+                          <button
+                            onClick={() => handleAddLinkedNumberToTexts(selectedUser, entry)}
+                            className="text-green-700 hover:text-green-900 text-sm font-medium whitespace-nowrap"
+                          >
+                            Add to texts
+                          </button>
+                        ) : null}
                       </div>
                     ))}
 
-                    {(selectedUser.additionalSmsRecipients || []).length === 0 && (
-                      <p className="text-sm text-gray-500">No additional recipients yet.</p>
+                    {linkedNumbers.length === 0 && (
+                      <p className="text-sm text-red-500 font-medium">No phone numbers on file for this client.</p>
                     )}
                   </div>
 
@@ -7873,6 +7901,8 @@ const ClientPortal = () => {
                     </button>
                   </div>
                 </div>
+                  );
+                })()}
 
                 {/* Onboarding Answers */}
                 {selectedUser.onboardingAnswers && (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getClientSmsNumbers } from '@/lib/smsRecipients';
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,7 +43,8 @@ export async function POST(request: NextRequest) {
     // Process each user with pending content
     for (const [userId, userContent] of userContentMap.entries()) {
       const user = users.find((u: any) => u.id === userId);
-      if (!user || !user.phoneNumber) {
+      // Texts go to the client plus any additional recipients on their account
+      if (!user || getClientSmsNumbers(user).length === 0) {
         console.log(`⏭️ Skipping user ${userId} - no phone number`);
         continue;
       }

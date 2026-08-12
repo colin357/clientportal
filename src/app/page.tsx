@@ -2268,6 +2268,8 @@ const ClientPortal = () => {
                           videoLink: videoUrl,
                           description: headerVideoDescription,
                           status: 'pending',
+                          submittedById: currentUser.id,
+                          submittedByName: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
                           submittedAt: new Date().toISOString(),
                           uploadedAt: new Date().toISOString(),
                           fileName
@@ -2884,6 +2886,8 @@ const ClientPortal = () => {
                                           videoLink: finalVideoLink,
                                           description: `Video for: ${item.title}`,
                                           status: 'pending',
+                                          submittedById: currentUser.id,
+                                          submittedByName: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
                                           submittedAt: new Date().toISOString(),
                                           fileName: file ? file.name : null
                                         };
@@ -3889,6 +3893,8 @@ const ClientPortal = () => {
                           videoLink: finalVideoLink,
                           description: videoDescription || 'No description provided',
                           status: 'pending',
+                          submittedById: currentUser.id,
+                          submittedByName: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
                           submittedAt: new Date().toISOString(),
                           fileName: selectedVideoFile ? selectedVideoFile.name : null
                         };
@@ -6564,11 +6570,20 @@ const ClientPortal = () => {
                     })
                     .map(video => {
                     const client = users.find(u => u.id === video.clientId);
+                    const submitter = video.submittedById ? users.find(u => u.id === video.submittedById) : null;
+                    const contactName = (
+                      video.submittedByName ||
+                      `${submitter?.firstName || ''} ${submitter?.lastName || ''}`.trim() ||
+                      `${client?.firstName || ''} ${client?.lastName || ''}`.trim()
+                    );
                     return (
                       <div key={video.id} className="border border-gray-200 rounded-lg p-4">
                         <div className="flex justify-between items-start mb-2">
                           <div>
-                            <p className="font-semibold text-gray-800">{client?.companyName}</p>
+                            <p className="font-semibold text-gray-800">
+                              {client?.companyName || 'Unknown Company'}
+                              {contactName && <span className="ml-2 font-normal text-gray-500">— {contactName}</span>}
+                            </p>
                             {video.contentTitle && (
                               <p className="text-sm text-purple-600">For: {video.contentTitle}</p>
                             )}

@@ -396,6 +396,9 @@ const ONBOARDING_MULTI_OPTIONS = {
   specialties: ['First-Time Buyers', 'Luxury Homes', 'Investment Properties', 'Commercial', 'VA Loans', 'FHA Loans', 'Refinancing', 'New Construction', 'Relocation', 'Downsizing'],
 };
 
+// Unisex sizing — one shared scale for everyone, no separate men's/women's cut.
+const TSHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
+
 const RATING_FIELDS = [
   { key: 'socialPresenceRating', label: 'Your current social media presence' },
   { key: 'contentSystemRating', label: 'How consistently you post content today' },
@@ -486,6 +489,7 @@ function OnboardingFormView({ currentUser, onSubmit, onOpenReferral, uploadFile,
     phoneNumber: currentUser.phoneNumber || '',
     birthday: '',
     shippingAddress: '',
+    tshirtSize: '',
     instagram: '',
     industry: [],
     industryOther: '',
@@ -614,6 +618,22 @@ function OnboardingFormView({ currentUser, onSubmit, onOpenReferral, uploadFile,
             <label className={labelClass}>📍 Shipping Address</label>
             <p className={hintClass}>Best address in case we ever send you something. 👀</p>
             <input type="text" value={form.shippingAddress} onChange={(e) => set('shippingAddress', e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>👕 T-Shirt Size</label>
+            <p className={hintClass}>Unisex sizing — so any swag we send actually fits.</p>
+            <div className="flex flex-wrap gap-2">
+              {TSHIRT_SIZES.map(size => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => set('tshirtSize', form.tshirtSize === size ? '' : size)}
+                  className={`px-3.5 py-2 rounded-full border text-sm font-medium transition ${form.tshirtSize === size ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-400'}`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
           </div>
           <div>
             <label className={labelClass}>📸 Headshot</label>

@@ -75,6 +75,101 @@ try {
 }
 
 // ---------------------------------------------------------------------------
+// Media helpers (a submission can be one video or a whole batch of photos)
+// ---------------------------------------------------------------------------
+const MEDIA_ACCEPT = 'image/*,video/*';
+
+const isImageMedia = (item: any) => {
+  const type = item?.contentType || item?.type || '';
+  if (type) return type.startsWith('image/');
+  const name = item?.fileName || item?.name || '';
+  return /\.(jpe?g|png|gif|webp|heic|heif|bmp|avif|tiff?)$/i.test(name);
+};
+
+// Submissions used to hold a single `videoLink`. New ones carry a `media`
+// array, so normalize both shapes into one list of { url, fileName, contentType }.
+const getSubmissionMedia = (submission: any) => {
+  if (Array.isArray(submission?.media) && submission.media.length > 0) return submission.media;
+  if (submission?.videoLink) {
+    return [{
+      url: submission.videoLink,
+      fileName: submission.fileName || '',
+      contentType: submission.mediaType === 'photo' ? 'image/*' : ''
+    }];
+  }
+  return [];
+};
+
+const summarizeMediaType = (media: any[]) => {
+  const photos = media.filter(isImageMedia).length;
+  const videos = media.length - photos;
+  if (photos && videos) return 'mixed';
+  if (photos) return 'photo';
+  return 'video';
+};
+
+const describeMedia = (media: any[]) => {
+  const photos = media.filter(isImageMedia).length;
+  const videos = media.length - photos;
+  const parts = [];
+  if (photos) parts.push(`${photos} photo${photos === 1 ? '' : 's'}`);
+  if (videos) parts.push(`${videos} video${videos === 1 ? '' : 's'}`);
+  return parts.join(' + ');
+};
+
+const formatFileSize = (bytes: number) => `${((bytes || 0) / 1024 / 1024).toFixed(2)} MB`;
+
+// A pasted link becomes a single media entry; guess photo vs video from its extension
+const makeLinkMedia = (url: string) => ({
+  url,
+  fileName: '',
+  contentType: /\.(jpe?g|png|gif|webp|heic|heif|bmp|avif|tiff?)(\?|$)/i.test(url) ? 'image/*' : ''
+});
+
+// "3 photos + 1 video selected · 24.10 MB"
+const describeSelection = (files: File[]) =>
+  `${describeMedia(files)} selected · ${formatFileSize(files.reduce((sum, f) => sum + (f.size || 0), 0))}`;
+
+// Merge newly picked files into the current selection, skipping duplicates.
+const mergeFileSelection = (existing: File[], picked: any): File[] => {
+  const merged = [...existing];
+  Array.from<File>(picked || []).forEach(file => {
+    if (!merged.some(f => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified)) {
+      merged.push(file);
+    }
+  });
+  return merged;
+};
+
+// Thumbnail strip for a submission's files - photos preview, videos show a tile
+function MediaGallery({ media, className = '' }: { media: any[]; className?: string }) {
+  if (!media || media.length === 0) return null;
+  return (
+    <div className={`flex flex-wrap gap-2 ${className}`}>
+      {media.map((m: any, idx: number) => (
+        <a
+          key={`${m.url}-${idx}`}
+          href={m.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={m.fileName || `File ${idx + 1}`}
+          className="block w-20 h-20 rounded-lg border border-gray-200 overflow-hidden bg-gray-50 hover:border-blue-400 transition-colors"
+        >
+          {isImageMedia(m) ? (
+            <img src={m.url} alt={m.fileName || `Photo ${idx + 1}`} className="w-full h-full object-cover" />
+          ) : (
+            <span className="w-full h-full flex flex-col items-center justify-center gap-1 px-1 text-center text-[10px] text-gray-500">
+              <Video className="w-5 h-5 text-purple-500" />
+              <span className="truncate w-full">{m.fileName || 'Video'}</span>
+            </span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Client Tasks
 // ---------------------------------------------------------------------------
 
@@ -1370,6 +1465,31 @@ const ClientPortal = () => {
     });
   };
 
+  // Uploads a batch of files one after another, reporting combined progress (0-100)
+  const uploadFilesToStorage = async (files: any, path: string, onProgress?: (progress: number) => void) => {
+    const list = Array.from<File>(files || []);
+    if (list.length === 0) return [];
+
+    const totalBytes = list.reduce((sum, f) => sum + (f.size || 0), 0) || 1;
+    const transferred = list.map(() => 0);
+    const report = () => {
+      if (onProgress) onProgress((transferred.reduce((a, b) => a + b, 0) / totalBytes) * 100);
+    };
+
+    const uploaded: any[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const file = list[i];
+      const url = await uploadFileToStorage(file, path, (progress) => {
+        transferred[i] = ((progress || 0) / 100) * (file.size || 0);
+        report();
+      });
+      transferred[i] = file.size || 0;
+      report();
+      uploaded.push({ url, fileName: file.name, size: file.size || 0, contentType: file.type || '' });
+    }
+    return uploaded;
+  };
+
   const handleVideoUpload = async (contentId, file) => {
     const existingItem = content.find(c => c.id === contentId);
     if (!existingItem) {
@@ -1718,13 +1838,13 @@ const ClientPortal = () => {
     const [userVideos, setUserVideos] = useState([]);
     const [uploadingVideo, setUploadingVideo] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [selectedVideoFile, setSelectedVideoFile] = useState(null);
+    const [selectedMediaFiles, setSelectedMediaFiles] = useState<File[]>([]);
     const [uploadingHeadshot, setUploadingHeadshot] = useState(false);
     const [headshotProgress, setHeadshotProgress] = useState(0);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [logoProgress, setLogoProgress] = useState(0);
     const [contentVideoUploads, setContentVideoUploads] = useState({}); // Track uploads per content item
-    const [contentVideoFiles, setContentVideoFiles] = useState({}); // Track selected files per content item
+    const [contentVideoFiles, setContentVideoFiles] = useState({}); // Track selected files (arrays) per content item
     const [contentVideoLinks, setContentVideoLinks] = useState({}); // Track video links per content item
     const [aiContentType, setAiContentType] = useState('social');
     const [aiPurpose, setAiPurpose] = useState('');
@@ -1736,7 +1856,7 @@ const ClientPortal = () => {
     const [showHeaderVideoModal, setShowHeaderVideoModal] = useState(false);
     const [headerVideoAttachType, setHeaderVideoAttachType] = useState('standalone'); // 'standalone' or 'content'
     const [headerVideoContentId, setHeaderVideoContentId] = useState('');
-    const [headerVideoFile, setHeaderVideoFile] = useState(null);
+    const [headerMediaFiles, setHeaderMediaFiles] = useState<File[]>([]);
     const [headerVideoLink, setHeaderVideoLink] = useState('');
     const [headerVideoDescription, setHeaderVideoDescription] = useState('');
     const [headerVideoUploading, setHeaderVideoUploading] = useState(false);
@@ -2147,8 +2267,8 @@ const ClientPortal = () => {
                   onClick={() => setShowHeaderVideoModal(true)}
                   className="bg-zinc-900 text-white px-4 py-2 rounded-xl hover:bg-zinc-800 flex items-center gap-2 text-sm font-medium transition"
                 >
-                  <Video className="w-4 h-4" />
-                  <span className="hidden sm:inline">Upload Video</span>
+                  <Upload className="w-4 h-4" />
+                  <span className="hidden sm:inline">Upload Media</span>
                 </button>
               </div>
             </div>
@@ -2160,14 +2280,14 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold flex items-center gap-2">
-                  <Video className="w-5 h-5 text-purple-600" />
-                  Upload Video
+                  <Upload className="w-5 h-5 text-purple-600" />
+                  Upload Photos or Video
                 </h2>
                 <button onClick={() => {
                   setShowHeaderVideoModal(false);
                   setHeaderVideoAttachType('standalone');
                   setHeaderVideoContentId('');
-                  setHeaderVideoFile(null);
+                  setHeaderMediaFiles([]);
                   setHeaderVideoLink('');
                   setHeaderVideoDescription('');
                 }} className="text-gray-500 hover:text-gray-700">
@@ -2177,12 +2297,12 @@ const ClientPortal = () => {
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">Is this video for a content idea?</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">Is this for a content idea?</label>
                   <div className="space-y-2">
                     <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition">
                       <input type="radio" name="videoAttach" value="standalone" checked={headerVideoAttachType === 'standalone'} onChange={() => setHeaderVideoAttachType('standalone')} className="w-4 h-4 text-purple-600" />
                       <div>
-                        <p className="font-medium text-gray-800">Standalone Video</p>
+                        <p className="font-medium text-gray-800">Standalone Upload</p>
                         <p className="text-xs text-gray-500">Not attached to any content idea</p>
                       </div>
                     </label>
@@ -2190,7 +2310,7 @@ const ClientPortal = () => {
                       <input type="radio" name="videoAttach" value="content" checked={headerVideoAttachType === 'content'} onChange={() => setHeaderVideoAttachType('content')} className="w-4 h-4 text-purple-600" />
                       <div>
                         <p className="font-medium text-gray-800">Attach to Content Idea</p>
-                        <p className="text-xs text-gray-500">Link this video to a specific content piece</p>
+                        <p className="text-xs text-gray-500">Link this upload to a specific content piece</p>
                       </div>
                     </label>
                   </div>
@@ -2210,18 +2330,60 @@ const ClientPortal = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-                  <textarea value={headerVideoDescription} onChange={(e) => setHeaderVideoDescription(e.target.value)} placeholder="Describe the video..." rows={2} className="w-full px-4 py-2 border rounded-lg resize-none" />
+                  <textarea value={headerVideoDescription} onChange={(e) => setHeaderVideoDescription(e.target.value)} placeholder="Describe the photos or video..." rows={2} className="w-full px-4 py-2 border rounded-lg resize-none" />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Method</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Photos or Video</label>
                   <div className="space-y-3">
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-purple-400 transition-colors">
-                      <input type="file" accept="video/*" onChange={(e) => { if (e.target.files[0]) setHeaderVideoFile(e.target.files[0]); }} className="text-sm" />
-                      {headerVideoFile && <p className="text-xs text-gray-500 mt-1">Selected: {headerVideoFile.name}</p>}
+                      <input
+                        type="file"
+                        accept={MEDIA_ACCEPT}
+                        multiple
+                        disabled={headerVideoUploading}
+                        onChange={(e) => {
+                          setHeaderMediaFiles(prev => mergeFileSelection(prev, e.target.files));
+                          e.target.value = '';
+                        }}
+                        className="text-sm"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">Pick one video, or select several photos at once to send a whole collection.</p>
                     </div>
+                    {headerMediaFiles.length > 0 && (
+                      <div className="border rounded-lg divide-y">
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                          <p className="text-xs font-medium text-gray-700">{describeSelection(headerMediaFiles)}</p>
+                          <button
+                            type="button"
+                            onClick={() => setHeaderMediaFiles([])}
+                            disabled={headerVideoUploading}
+                            className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto">
+                          {headerMediaFiles.map((file, idx) => (
+                            <div key={`${file.name}-${file.size}-${idx}`} className="flex items-center gap-2 px-3 py-2">
+                              <span className="text-xs text-gray-700 truncate flex-1">{file.name}</span>
+                              <span className="text-xs text-gray-400 flex-shrink-0">{formatFileSize(file.size)}</span>
+                              <button
+                                type="button"
+                                onClick={() => setHeaderMediaFiles(prev => prev.filter((_, i) => i !== idx))}
+                                disabled={headerVideoUploading}
+                                className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+                                title="Remove"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="text-center text-sm text-gray-400">or</div>
-                    <input type="text" value={headerVideoLink} onChange={(e) => setHeaderVideoLink(e.target.value)} placeholder="Paste video link (Google Drive, Dropbox, etc.)" className="w-full px-4 py-2 border rounded-lg" />
+                    <input type="text" value={headerVideoLink} onChange={(e) => setHeaderVideoLink(e.target.value)} placeholder="Paste a link (Google Drive, Dropbox, etc.)" className="w-full px-4 py-2 border rounded-lg" />
                   </div>
                 </div>
 
@@ -2233,65 +2395,75 @@ const ClientPortal = () => {
 
                 <div className="flex gap-3 pt-2">
                   <button
-                    disabled={headerVideoUploading || (!headerVideoFile && !headerVideoLink)}
+                    disabled={headerVideoUploading || (headerMediaFiles.length === 0 && !headerVideoLink)}
                     onClick={async () => {
                       if (headerVideoAttachType === 'content' && !headerVideoContentId) {
-                        alert('Please select a content idea to attach this video to.');
+                        alert('Please select a content idea to attach this upload to.');
                         return;
                       }
 
                       setHeaderVideoUploading(true);
                       try {
-                        let videoUrl = headerVideoLink;
-                        let fileName = '';
+                        let media: any[] = [];
 
-                        if (headerVideoFile) {
+                        if (headerMediaFiles.length > 0) {
                           if (!storage) {
                             alert('Storage not configured. Please use a link instead.');
                             setHeaderVideoUploading(false);
                             return;
                           }
-                          videoUrl = await uploadFileToStorage(
-                            headerVideoFile,
+                          media = await uploadFilesToStorage(
+                            headerMediaFiles,
                             'videos',
                             (progress) => setHeaderVideoProgress(Math.round(progress))
                           );
-                          fileName = headerVideoFile.name;
                         }
 
+                        if (media.length === 0 && headerVideoLink) {
+                          media = [makeLinkMedia(headerVideoLink)];
+                        }
+
+                        const mediaType = summarizeMediaType(media);
+                        const mediaSummary = describeMedia(media);
                         const contentItem = headerVideoContentId ? clientContent.find(c => c.id === headerVideoContentId) : null;
                         const videoDoc = {
                           id: Date.now().toString(),
                           clientId: effectiveClientId,
                           contentId: headerVideoContentId || '',
                           contentTitle: contentItem?.title || '',
-                          videoLink: videoUrl,
+                          videoLink: media[0]?.url || '',
+                          media,
+                          fileCount: media.length,
+                          mediaType,
                           description: headerVideoDescription,
                           status: 'pending',
                           submittedById: currentUser.id,
                           submittedByName: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
                           submittedAt: new Date().toISOString(),
                           uploadedAt: new Date().toISOString(),
-                          fileName
+                          fileName: headerMediaFiles[0]?.name || ''
                         };
 
                         if (db) await setDoc(doc(db, 'videos', videoDoc.id), videoDoc);
 
-                        await sendSMS('+17867882699', `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
-                        await sendSMS('+12678976117', `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName})${contentItem ? ` for content: "${contentItem.title}"` : ''}`);
+                        const smsMessage = `📸 New media submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) — ${mediaSummary}${contentItem ? ` for content: "${contentItem.title}"` : ''}`;
+                        await sendSMS('+17867882699', smsMessage);
+                        await sendSMS('+12678976117', smsMessage);
 
                         await loadUserVideos();
-                        alert('Video uploaded successfully!');
+                        alert(mediaType === 'photo' && media.length > 1
+                          ? `${media.length} photos uploaded successfully!`
+                          : 'Upload successful!');
                         setShowHeaderVideoModal(false);
                         setHeaderVideoAttachType('standalone');
                         setHeaderVideoContentId('');
-                        setHeaderVideoFile(null);
+                        setHeaderMediaFiles([]);
                         setHeaderVideoLink('');
                         setHeaderVideoDescription('');
                       } catch (error) {
-                        console.error('Error uploading video:', error);
+                        console.error('Error uploading media:', error);
                         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                        alert(`Failed to upload video: ${errorMessage}`);
+                        alert(`Failed to upload: ${errorMessage}`);
                       } finally {
                         setHeaderVideoUploading(false);
                         setHeaderVideoProgress(0);
@@ -2299,13 +2471,15 @@ const ClientPortal = () => {
                     }}
                     className="flex-1 bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
                   >
-                    {headerVideoUploading ? `Uploading... ${headerVideoProgress}%` : 'Upload Video'}
+                    {headerVideoUploading
+                      ? `Uploading${headerMediaFiles.length > 1 ? ` ${headerMediaFiles.length} files` : ''}... ${headerVideoProgress}%`
+                      : headerMediaFiles.length > 1 ? `Upload ${headerMediaFiles.length} Files` : 'Upload'}
                   </button>
                   <button onClick={() => {
                     setShowHeaderVideoModal(false);
                     setHeaderVideoAttachType('standalone');
                     setHeaderVideoContentId('');
-                    setHeaderVideoFile(null);
+                    setHeaderMediaFiles([]);
                     setHeaderVideoLink('');
                     setHeaderVideoDescription('');
                   }} className="flex-1 bg-gray-200 py-3 rounded-lg hover:bg-gray-300">Cancel</button>
@@ -2735,6 +2909,7 @@ const ClientPortal = () => {
                       const linkedVideo = userVideos.find(v => v.contentId === item.id);
                       const isUploading = contentVideoUploads[item.id]?.uploading || false;
                       const uploadProgress = contentVideoUploads[item.id]?.progress || 0;
+                      const selectedFiles = contentVideoFiles[item.id] || [];
 
                       return (
                         <div key={item.id} className="bg-gradient-to-br from-blue-50 to-white rounded-lg p-5 border-2 border-blue-200 shadow-sm">
@@ -2761,15 +2936,18 @@ const ClientPortal = () => {
                           <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex items-center gap-2 mb-3">
                               <Video className="w-5 h-5 text-purple-600" />
-                              <h5 className="font-medium text-gray-800">Upload Video for This Content</h5>
+                              <h5 className="font-medium text-gray-800">Upload Photos or Video for This Content</h5>
                             </div>
 
                             {linkedVideo ? (
                               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                                 <div className="flex items-start justify-between">
                                   <div className="flex-1">
-                                    <p className="text-sm font-medium text-green-800 mb-1">Video Submitted</p>
+                                    <p className="text-sm font-medium text-green-800 mb-1">
+                                      {describeMedia(getSubmissionMedia(linkedVideo)) || 'Media'} Submitted
+                                    </p>
                                     <p className="text-xs text-green-600 mb-2">{linkedVideo.description}</p>
+                                    <MediaGallery media={getSubmissionMedia(linkedVideo)} className="mb-2" />
                                     <div className="flex items-center gap-2">
                                       <span className={`px-2 py-1 rounded text-xs font-medium ${
                                         linkedVideo.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
@@ -2793,21 +2971,55 @@ const ClientPortal = () => {
                               <div className="space-y-3">
                                 {/* File Upload */}
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Upload Video File</label>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Upload Photos or Video</label>
                                   <input
                                     type="file"
-                                    accept="video/*"
+                                    accept={MEDIA_ACCEPT}
+                                    multiple
                                     onChange={(e) => {
-                                      const file = e.target.files[0];
-                                      setContentVideoFiles(prev => ({ ...prev, [item.id]: file }));
+                                      setContentVideoFiles(prev => ({
+                                        ...prev,
+                                        [item.id]: mergeFileSelection(prev[item.id] || [], e.target.files)
+                                      }));
+                                      e.target.value = '';
                                     }}
                                     className="w-full text-sm"
                                     disabled={isUploading}
                                   />
-                                  {contentVideoFiles[item.id] && (
-                                    <p className="text-xs text-gray-600 mt-1">
-                                      {contentVideoFiles[item.id].name} ({(contentVideoFiles[item.id].size / 1024 / 1024).toFixed(2)} MB)
-                                    </p>
+                                  {selectedFiles.length > 0 && (
+                                    <div className="border rounded-lg divide-y mt-2 bg-white">
+                                      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50">
+                                        <p className="text-xs font-medium text-gray-700">{describeSelection(selectedFiles)}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => setContentVideoFiles(prev => ({ ...prev, [item.id]: [] }))}
+                                          disabled={isUploading}
+                                          className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
+                                        >
+                                          Clear all
+                                        </button>
+                                      </div>
+                                      <div className="max-h-32 overflow-y-auto">
+                                        {selectedFiles.map((file, idx) => (
+                                          <div key={`${file.name}-${file.size}-${idx}`} className="flex items-center gap-2 px-3 py-1.5">
+                                            <span className="text-xs text-gray-700 truncate flex-1">{file.name}</span>
+                                            <span className="text-xs text-gray-400 flex-shrink-0">{formatFileSize(file.size)}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setContentVideoFiles(prev => ({
+                                                ...prev,
+                                                [item.id]: (prev[item.id] || []).filter((_, i) => i !== idx)
+                                              }))}
+                                              disabled={isUploading}
+                                              className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+                                              title="Remove"
+                                            >
+                                              <X className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
 
@@ -2820,7 +3032,7 @@ const ClientPortal = () => {
 
                                 {/* Link Input */}
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Video Link</label>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">Link</label>
                                   <input
                                     type="text"
                                     value={contentVideoLinks[item.id] || ''}
@@ -2846,29 +3058,29 @@ const ClientPortal = () => {
                                 {/* Submit Button */}
                                 <button
                                   onClick={async () => {
-                                    const file = contentVideoFiles[item.id];
+                                    const files = contentVideoFiles[item.id] || [];
                                     const link = contentVideoLinks[item.id];
 
-                                    if (!file && !link?.trim()) {
-                                      alert(`${currentUser.firstName}, please upload a video file or provide a link`);
+                                    if (files.length === 0 && !link?.trim()) {
+                                      alert(`${currentUser.firstName}, please add photos or a video file, or provide a link`);
                                       return;
                                     }
 
                                     setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: true, progress: 0 } }));
 
                                     try {
-                                      let finalVideoLink = link;
+                                      let media: any[] = [];
 
-                                      // Upload file if selected
-                                      if (file) {
+                                      // Upload files if any were selected
+                                      if (files.length > 0) {
                                         if (!storage) {
                                           alert(`❌ ${currentUser.firstName}, Firebase Storage is not configured. Please use a link instead.`);
                                           setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
                                           return;
                                         }
 
-                                        finalVideoLink = await uploadFileToStorage(
-                                          file,
+                                        media = await uploadFilesToStorage(
+                                          files,
                                           'videos',
                                           (progress) => setContentVideoUploads(prev => ({
                                             ...prev,
@@ -2877,23 +3089,32 @@ const ClientPortal = () => {
                                         );
                                       }
 
-                                      if (finalVideoLink && finalVideoLink.trim()) {
+                                      if (media.length === 0 && link?.trim()) {
+                                        media = [makeLinkMedia(link.trim())];
+                                      }
+
+                                      if (media.length > 0) {
+                                        const mediaType = summarizeMediaType(media);
+                                        const mediaSummary = describeMedia(media);
                                         const newVideo = {
                                           id: Date.now().toString(),
                                           clientId: effectiveClientId,
                                           contentId: item.id, // Link to the content item
                                           contentTitle: item.title, // Store content title for reference
-                                          videoLink: finalVideoLink,
-                                          description: `Video for: ${item.title}`,
+                                          videoLink: media[0].url,
+                                          media,
+                                          fileCount: media.length,
+                                          mediaType,
+                                          description: `${mediaType === 'photo' ? 'Photos' : 'Video'} for: ${item.title}`,
                                           status: 'pending',
                                           submittedById: currentUser.id,
                                           submittedByName: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
                                           submittedAt: new Date().toISOString(),
-                                          fileName: file ? file.name : null
+                                          fileName: files[0]?.name || null
                                         };
 
                                         if (!db) {
-                                          alert(`⚠️ ${currentUser.firstName}, cloud storage not configured. Video not saved.`);
+                                          alert(`⚠️ ${currentUser.firstName}, cloud storage not configured. Upload not saved.`);
                                           setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
                                           return;
                                         }
@@ -2901,33 +3122,30 @@ const ClientPortal = () => {
                                         await setDoc(doc(db, 'videos', newVideo.id), newVideo);
 
                                         // Send SMS notification
-                                        await sendSMS(
-                                          '+17867882699',
-                                          `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
-                                        );
-                                        await sendSMS(
-                                          '+12678976117',
-                                          `📹 New video submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) for "${item.title}". Check the admin portal!`
-                                        );
+                                        const smsMessage = `📸 New media submitted by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) — ${mediaSummary} for "${item.title}". Check the admin portal!`;
+                                        await sendSMS('+17867882699', smsMessage);
+                                        await sendSMS('+12678976117', smsMessage);
 
                                         // Clear form
-                                        setContentVideoFiles(prev => ({ ...prev, [item.id]: null }));
+                                        setContentVideoFiles(prev => ({ ...prev, [item.id]: [] }));
                                         setContentVideoLinks(prev => ({ ...prev, [item.id]: '' }));
                                         await loadUserVideos();
-                                        alert(`✅ ${currentUser.firstName}, your video was submitted successfully!`);
+                                        alert(`✅ ${currentUser.firstName}, your ${mediaSummary} ${media.length === 1 ? 'was' : 'were'} submitted successfully!`);
                                       }
                                     } catch (error) {
-                                      console.error('❌ Error submitting video:', error);
-                                      alert(`❌ ${currentUser.firstName}, there was an error submitting your video. Please try again.`);
+                                      console.error('❌ Error submitting media:', error);
+                                      alert(`❌ ${currentUser.firstName}, there was an error submitting your files. Please try again.`);
                                     } finally {
                                       setContentVideoUploads(prev => ({ ...prev, [item.id]: { uploading: false, progress: 0 } }));
                                     }
                                   }}
-                                  disabled={(!contentVideoFiles[item.id] && !contentVideoLinks[item.id]?.trim()) || isUploading}
+                                  disabled={(selectedFiles.length === 0 && !contentVideoLinks[item.id]?.trim()) || isUploading}
                                   className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium flex items-center justify-center gap-2"
                                 >
                                   <Upload className="w-4 h-4" />
-                                  {isUploading ? 'Uploading...' : 'Submit Video for Editing'}
+                                  {isUploading
+                                    ? `Uploading${selectedFiles.length > 1 ? ` ${selectedFiles.length} files` : ''}...`
+                                    : selectedFiles.length > 1 ? `Submit ${selectedFiles.length} Files for Editing` : 'Submit for Editing'}
                                 </button>
                               </div>
                             )}
@@ -3792,29 +4010,58 @@ const ClientPortal = () => {
               <div className="border-t pt-8 mt-8">
                 <div className="flex items-center gap-3 mb-4">
                   <Video className="w-6 h-6 text-purple-600" />
-                  <h4 className="font-semibold">Upload Videos</h4>
+                  <h4 className="font-semibold">Upload Photos & Videos</h4>
                 </div>
-                <p className="text-sm text-gray-600 mb-6">Upload videos for editing without attaching them to specific content</p>
+                <p className="text-sm text-gray-600 mb-6">Send us a video or a batch of photos for editing, without attaching them to specific content</p>
 
                 <div className="grid md:grid-cols-2 gap-6 mb-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload Video File</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Upload Photos or Video</label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 hover:border-purple-400 transition-colors">
                       <input
                         type="file"
-                        accept="video/*"
+                        accept={MEDIA_ACCEPT}
+                        multiple
                         onChange={(e) => {
-                          const file = e.target.files[0];
-                          setSelectedVideoFile(file || null);
+                          setSelectedMediaFiles(prev => mergeFileSelection(prev, e.target.files));
+                          e.target.value = '';
                         }}
                         className="text-sm"
                         disabled={uploadingVideo}
                       />
+                      <p className="text-xs text-gray-500 mt-2">Select as many photos as you like — they'll be submitted together.</p>
                     </div>
-                    {selectedVideoFile && (
-                      <p className="text-xs text-gray-600 mt-2">
-                        {selectedVideoFile.name} ({(selectedVideoFile.size / 1024 / 1024).toFixed(2)} MB)
-                      </p>
+                    {selectedMediaFiles.length > 0 && (
+                      <div className="border rounded-lg divide-y mt-2">
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                          <p className="text-xs font-medium text-gray-700">{describeSelection(selectedMediaFiles)}</p>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMediaFiles([])}
+                            disabled={uploadingVideo}
+                            className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto">
+                          {selectedMediaFiles.map((file, idx) => (
+                            <div key={`${file.name}-${file.size}-${idx}`} className="flex items-center gap-2 px-3 py-2">
+                              <span className="text-xs text-gray-700 truncate flex-1">{file.name}</span>
+                              <span className="text-xs text-gray-400 flex-shrink-0">{formatFileSize(file.size)}</span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMediaFiles(prev => prev.filter((_, i) => i !== idx))}
+                                disabled={uploadingVideo}
+                                className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+                                title="Remove"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
                     {/* OR divider */}
@@ -3835,11 +4082,11 @@ const ClientPortal = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Video Description</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
                     <textarea
                       value={videoDescription}
                       onChange={(e) => setVideoDescription(e.target.value)}
-                      placeholder="Describe your video or what you'd like done with it..."
+                      placeholder="Describe your photos or video, or what you'd like done with them..."
                       className="w-full px-4 py-2 border rounded outline-none focus:ring-2 focus:ring-purple-500 h-32"
                       disabled={uploadingVideo}
                     />
@@ -3860,8 +4107,8 @@ const ClientPortal = () => {
 
                 <button
                   onClick={async () => {
-                    if (!selectedVideoFile && !videoLink?.trim()) {
-                      alert(`${currentUser.firstName}, please upload a video file or provide a link`);
+                    if (selectedMediaFiles.length === 0 && !videoLink?.trim()) {
+                      alert(`${currentUser.firstName}, please add photos or a video file, or provide a link`);
                       return;
                     }
 
@@ -3869,38 +4116,47 @@ const ClientPortal = () => {
                     setUploadProgress(0);
 
                     try {
-                      let finalVideoLink = videoLink;
+                      let media: any[] = [];
 
-                      // Upload file if selected
-                      if (selectedVideoFile) {
+                      // Upload files if any were selected
+                      if (selectedMediaFiles.length > 0) {
                         if (!storage) {
                           alert(`❌ ${currentUser.firstName}, Firebase Storage is not configured. Please use a link instead.`);
                           setUploadingVideo(false);
                           return;
                         }
 
-                        finalVideoLink = await uploadFileToStorage(
-                          selectedVideoFile,
+                        media = await uploadFilesToStorage(
+                          selectedMediaFiles,
                           'videos',
                           (progress) => setUploadProgress(progress)
                         );
                       }
 
-                      if (finalVideoLink && finalVideoLink.trim()) {
+                      if (media.length === 0 && videoLink?.trim()) {
+                        media = [makeLinkMedia(videoLink.trim())];
+                      }
+
+                      if (media.length > 0) {
+                        const mediaType = summarizeMediaType(media);
+                        const mediaSummary = describeMedia(media);
                         const newVideo = {
                           id: Date.now().toString(),
                           clientId: effectiveClientId,
-                          videoLink: finalVideoLink,
+                          videoLink: media[0].url,
+                          media,
+                          fileCount: media.length,
+                          mediaType,
                           description: videoDescription || 'No description provided',
                           status: 'pending',
                           submittedById: currentUser.id,
                           submittedByName: `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim(),
                           submittedAt: new Date().toISOString(),
-                          fileName: selectedVideoFile ? selectedVideoFile.name : null
+                          fileName: selectedMediaFiles[0]?.name || null
                         };
 
                         if (!db) {
-                          alert(`⚠️ ${currentUser.firstName}, cloud storage not configured. Video not saved.`);
+                          alert(`⚠️ ${currentUser.firstName}, cloud storage not configured. Upload not saved.`);
                           setUploadingVideo(false);
                           return;
                         }
@@ -3908,41 +4164,38 @@ const ClientPortal = () => {
                         await setDoc(doc(db, 'videos', newVideo.id), newVideo);
 
                         // Send SMS notification
-                        await sendSMS(
-                          '+17867882699',
-                          `New video uploaded by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
-                        );
-                        await sendSMS(
-                          '+12678976117',
-                          `New video uploaded by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}). Description: ${videoDescription || 'None'}. Check the admin portal!`
-                        );
+                        const smsMessage = `New media uploaded by ${currentUser.firstName} ${currentUser.lastName} (${currentUser.companyName}) — ${mediaSummary}. Description: ${videoDescription || 'None'}. Check the admin portal!`;
+                        await sendSMS('+17867882699', smsMessage);
+                        await sendSMS('+12678976117', smsMessage);
 
                         // Clear form
-                        setSelectedVideoFile(null);
+                        setSelectedMediaFiles([]);
                         setVideoLink('');
                         setVideoDescription('');
                         await loadUserVideos();
-                        alert(`✅ ${currentUser.firstName}, your video was submitted successfully!`);
+                        alert(`✅ ${currentUser.firstName}, your ${mediaSummary} ${media.length === 1 ? 'was' : 'were'} submitted successfully!`);
                       }
                     } catch (error) {
-                      console.error('Error submitting video:', error);
-                      alert(`❌ ${currentUser.firstName}, there was an error submitting your video. Please try again.`);
+                      console.error('Error submitting media:', error);
+                      alert(`❌ ${currentUser.firstName}, there was an error submitting your files. Please try again.`);
                     } finally {
                       setUploadingVideo(false);
                       setUploadProgress(0);
                     }
                   }}
-                  disabled={(!selectedVideoFile && !videoLink?.trim()) || uploadingVideo}
+                  disabled={(selectedMediaFiles.length === 0 && !videoLink?.trim()) || uploadingVideo}
                   className="bg-purple-600 text-white px-6 py-3 rounded hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <Upload className="w-5 h-5" />
-                  {uploadingVideo ? 'Uploading...' : 'Submit Video for Editing'}
+                  {uploadingVideo
+                    ? `Uploading${selectedMediaFiles.length > 1 ? ` ${selectedMediaFiles.length} files` : ''}...`
+                    : selectedMediaFiles.length > 1 ? `Submit ${selectedMediaFiles.length} Files for Editing` : 'Submit for Editing'}
                 </button>
 
                 {/* Previously Uploaded Videos */}
                 {userVideos.filter(v => !v.contentId).length > 0 && (
                   <div className="mt-8 border-t pt-6">
-                    <h5 className="font-medium text-gray-800 mb-4">Your Uploaded Videos</h5>
+                    <h5 className="font-medium text-gray-800 mb-4">Your Uploads</h5>
                     <div className="space-y-3">
                       {userVideos.filter(v => !v.contentId).map(video => (
                         <div key={video.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
@@ -3950,8 +4203,9 @@ const ClientPortal = () => {
                             <p className="text-sm font-medium text-gray-800">{video.description}</p>
                             <p className="text-xs text-gray-500 mt-1">
                               Submitted {new Date(video.submittedAt).toLocaleDateString()}
-                              {video.fileName && ` • ${video.fileName}`}
+                              {describeMedia(getSubmissionMedia(video)) && ` • ${describeMedia(getSubmissionMedia(video))}`}
                             </p>
+                            <MediaGallery media={getSubmissionMedia(video)} className="mt-2" />
                           </div>
                           <div className="flex items-center gap-3">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -4226,7 +4480,7 @@ const ClientPortal = () => {
       event: any;
       contentItem: any;
     }>({ isOpen: false, event: null, contentItem: null });
-    const [adminVideoFile, setAdminVideoFile] = useState<File | null>(null);
+    const [adminMediaFiles, setAdminMediaFiles] = useState<File[]>([]);
     const [adminVideoLink, setAdminVideoLink] = useState('');
     const [adminVideoUploading, setAdminVideoUploading] = useState(false);
     const [adminVideoProgress, setAdminVideoProgress] = useState(0);
@@ -4963,7 +5217,7 @@ const ClientPortal = () => {
                   : tabId === 'projects' ? projects.filter(p => p.status === 'in_progress').length
                   : tabId === 'videos' ? videos.filter(v => v.status !== 'completed').length
                   : 0;
-                const label = { today: 'Today', clients: 'Clients', tasks: 'Tasks', calendar: 'Calendar', projects: 'Projects', videos: 'Videos', sms: 'SMS', more: 'More' }[tabId];
+                const label = { today: 'Today', clients: 'Clients', tasks: 'Tasks', calendar: 'Calendar', projects: 'Projects', videos: 'Media', sms: 'SMS', more: 'More' }[tabId];
                 return (
                   <button
                     key={tabId}
@@ -6553,13 +6807,13 @@ const ClientPortal = () => {
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <div className="flex items-center gap-2 mb-5">
                 <Video className="w-5 h-5 text-purple-600" />
-                <h3 className="text-base font-semibold text-gray-800">Video Production Queue</h3>
+                <h3 className="text-base font-semibold text-gray-800">Media Production Queue</h3>
                 <span className="bg-purple-100 text-purple-700 text-xs font-bold px-2 py-0.5 rounded-full">{videos.filter(v => v.status !== 'completed').length} pending</span>
               </div>
               {videos.length === 0 ? (
                 <div className="text-center py-12">
                   <Video className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-                  <p className="text-gray-500">No videos submitted yet</p>
+                  <p className="text-gray-500">No media submitted yet</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -6569,6 +6823,7 @@ const ClientPortal = () => {
                       return (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
                     })
                     .map(video => {
+                    const submissionMedia = getSubmissionMedia(video);
                     const client = users.find(u => u.id === video.clientId);
                     const submitter = video.submittedById ? users.find(u => u.id === video.submittedById) : null;
                     const contactName = (
@@ -6596,9 +6851,28 @@ const ClientPortal = () => {
                           }`}>{video.status}</span>
                         </div>
                         {video.description && <p className="text-sm text-gray-600 mb-3">{video.description}</p>}
-                        <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1 mb-3">
-                          <FileText className="w-3.5 h-3.5" />View Raw Video
-                        </a>
+                        {submissionMedia.length > 0 && (
+                          <div className="mb-3">
+                            <p className="text-xs font-medium text-gray-500 mb-2">
+                              {describeMedia(submissionMedia) || 'Raw file'} submitted
+                            </p>
+                            <MediaGallery media={submissionMedia} className="mb-2" />
+                            <div className="flex flex-wrap gap-x-4 gap-y-1">
+                              {submissionMedia.map((m, idx) => (
+                                <a
+                                  key={`${m.url}-${idx}`}
+                                  href={m.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline text-sm flex items-center gap-1"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  {m.fileName || (submissionMedia.length > 1 ? `File ${idx + 1}` : 'View raw file')}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <button onClick={() => updateVideoStatus(video.id, 'in-progress')} className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">Mark In Progress</button>
                           <button onClick={() => {
@@ -7166,11 +7440,11 @@ const ClientPortal = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Attach Video to Content</h2>
+                <h2 className="text-xl font-bold">Attach Media to Content</h2>
                 <button
                   onClick={() => {
                     setAttachVideoModal({ isOpen: false, event: null, contentItem: null });
-                    setAdminVideoFile(null);
+                    setAdminMediaFiles([]);
                     setAdminVideoLink('');
                   }}
                   className="text-gray-500 hover:text-gray-700"
@@ -7194,20 +7468,53 @@ const ClientPortal = () => {
               <div className="space-y-4">
                 {/* File Upload Option */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Video File</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Upload Photos or Video</label>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
                     <input
                       type="file"
-                      accept="video/*"
-                      onChange={(e) => setAdminVideoFile(e.target.files?.[0] || null)}
+                      accept={MEDIA_ACCEPT}
+                      multiple
+                      disabled={adminVideoUploading}
+                      onChange={(e) => {
+                        setAdminMediaFiles(prev => mergeFileSelection(prev, e.target.files));
+                        e.target.value = '';
+                      }}
                       className="w-full text-sm"
                     />
-                    {adminVideoFile && (
-                      <p className="text-sm text-gray-600 mt-2">
-                        Selected: {adminVideoFile.name} ({(adminVideoFile.size / 1024 / 1024).toFixed(2)} MB)
-                      </p>
-                    )}
+                    <p className="text-xs text-gray-500 mt-2">Attach one video or a batch of photos.</p>
                   </div>
+                  {adminMediaFiles.length > 0 && (
+                    <div className="border rounded-lg divide-y mt-2">
+                      <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                        <p className="text-xs font-medium text-gray-700">{describeSelection(adminMediaFiles)}</p>
+                        <button
+                          type="button"
+                          onClick={() => setAdminMediaFiles([])}
+                          disabled={adminVideoUploading}
+                          className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto">
+                        {adminMediaFiles.map((file, idx) => (
+                          <div key={`${file.name}-${file.size}-${idx}`} className="flex items-center gap-2 px-3 py-2">
+                            <span className="text-xs text-gray-700 truncate flex-1">{file.name}</span>
+                            <span className="text-xs text-gray-400 flex-shrink-0">{formatFileSize(file.size)}</span>
+                            <button
+                              type="button"
+                              onClick={() => setAdminMediaFiles(prev => prev.filter((_, i) => i !== idx))}
+                              disabled={adminVideoUploading}
+                              className="text-gray-400 hover:text-red-600 disabled:opacity-50"
+                              title="Remove"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* OR divider */}
@@ -7219,12 +7526,12 @@ const ClientPortal = () => {
 
                 {/* Link Option */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Video Link</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Media Link</label>
                   <input
                     type="text"
                     value={adminVideoLink}
                     onChange={(e) => setAdminVideoLink(e.target.value)}
-                    placeholder="Google Drive, Dropbox, or direct video link"
+                    placeholder="Google Drive, Dropbox, or direct media link"
                     className="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -7244,8 +7551,8 @@ const ClientPortal = () => {
                 {/* Submit Button */}
                 <button
                   onClick={async () => {
-                    if (!adminVideoFile && !adminVideoLink.trim()) {
-                      alert('Please upload a video file or provide a link');
+                    if (adminMediaFiles.length === 0 && !adminVideoLink.trim()) {
+                      alert('Please add photos or a video file, or provide a link');
                       return;
                     }
 
@@ -7253,34 +7560,42 @@ const ClientPortal = () => {
                     setAdminVideoProgress(0);
 
                     try {
-                      let finalVideoLink = adminVideoLink;
+                      let media: any[] = [];
 
-                      // If a file is selected, upload it to Firebase Storage
-                      if (adminVideoFile) {
+                      // If files are selected, upload them to Firebase Storage
+                      if (adminMediaFiles.length > 0) {
                         if (!storage) {
                           alert('❌ Firebase Storage is not configured.');
                           setAdminVideoUploading(false);
                           return;
                         }
 
-                        finalVideoLink = await uploadFileToStorage(
-                          adminVideoFile,
+                        media = await uploadFilesToStorage(
+                          adminMediaFiles,
                           'videos',
                           (progress) => setAdminVideoProgress(progress)
                         );
                       }
 
-                      if (finalVideoLink && finalVideoLink.trim()) {
+                      if (media.length === 0 && adminVideoLink.trim()) {
+                        media = [makeLinkMedia(adminVideoLink.trim())];
+                      }
+
+                      if (media.length > 0) {
+                        const mediaType = summarizeMediaType(media);
                         const newVideo = {
                           id: Date.now().toString(),
                           clientId: attachVideoModal.event.clientId,
                           contentId: attachVideoModal.event.contentId,
                           contentTitle: attachVideoModal.event.title,
-                          videoLink: finalVideoLink,
-                          description: `Video for: ${attachVideoModal.event.title}`,
+                          videoLink: media[0].url,
+                          media,
+                          fileCount: media.length,
+                          mediaType,
+                          description: `${mediaType === 'photo' ? 'Photos' : 'Video'} for: ${attachVideoModal.event.title}`,
                           status: 'pending',
                           submittedAt: new Date().toISOString(),
-                          fileName: adminVideoFile ? adminVideoFile.name : null,
+                          fileName: adminMediaFiles[0]?.name || null,
                           uploadedByAdmin: true
                         };
 
@@ -7293,34 +7608,34 @@ const ClientPortal = () => {
                         await setDoc(doc(db, 'videos', newVideo.id), newVideo);
 
                         // Log admin activity
-                        await logAdminActivity('video_attached', `Attached video to "${attachVideoModal.event.title}"`, {
+                        await logAdminActivity('video_attached', `Attached ${describeMedia(media) || 'media'} to "${attachVideoModal.event.title}"`, {
                           contentId: attachVideoModal.event.contentId,
                           clientId: attachVideoModal.event.clientId
                         });
 
                         // Reset and close modal
-                        setAdminVideoFile(null);
+                        setAdminMediaFiles([]);
                         setAdminVideoLink('');
                         setAttachVideoModal({ isOpen: false, event: null, contentItem: null });
-                        alert('Video attached successfully!');
+                        alert(`${describeMedia(media) || 'Media'} attached successfully!`);
                       }
                     } catch (error) {
-                      console.error('❌ Error attaching video:', error);
-                      alert('Error attaching video. Please try again.');
+                      console.error('❌ Error attaching media:', error);
+                      alert('Error attaching media. Please try again.');
                     } finally {
                       setAdminVideoUploading(false);
                       setAdminVideoProgress(0);
                     }
                   }}
-                  disabled={(!adminVideoFile && !adminVideoLink.trim()) || adminVideoUploading}
+                  disabled={(adminMediaFiles.length === 0 && !adminVideoLink.trim()) || adminVideoUploading}
                   className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {adminVideoUploading ? (
-                    <>Uploading...</>
+                    <>Uploading{adminMediaFiles.length > 1 ? ` ${adminMediaFiles.length} files` : ''}...</>
                   ) : (
                     <>
                       <Upload className="w-4 h-4" />
-                      Attach Video
+                      {adminMediaFiles.length > 1 ? `Attach ${adminMediaFiles.length} Files` : 'Attach Media'}
                     </>
                   )}
                 </button>

@@ -498,6 +498,118 @@ const RATING_FIELDS = [
   { key: 'leadFollowUpRating', label: 'Your lead follow-up / CRM system' },
 ];
 
+// Every question on the onboarding form, in the order it is asked, so the
+// admin client details panel can show all of them without drifting from the
+// form. `type` drives formatting: 'list' for multi-selects, 'rating' for the
+// 1-5 scales, 'image' for uploads, and text for everything else.
+const ONBOARDING_SECTIONS = [
+  {
+    emoji: '💼',
+    title: 'Their Details',
+    fields: [
+      { key: 'companyName', label: 'Company Name' },
+      { key: 'contactName', label: 'Contact Name' },
+      { key: 'email', label: 'Email Address' },
+      { key: 'phoneNumber', label: 'Phone Number' },
+      { key: 'birthday', label: 'Birthday' },
+      { key: 'instagram', label: 'Instagram' },
+      { key: 'shippingAddress', label: 'Shipping Address' },
+      { key: 'headshot', label: 'Headshot', type: 'image' },
+    ],
+  },
+  {
+    emoji: '📈',
+    title: 'Their Business',
+    fields: [
+      { key: 'industry', label: 'What They Do', type: 'list' },
+      { key: 'industryOther', label: 'Anything Else About What They Do' },
+      { key: 'primaryMarkets', label: 'Primary Markets' },
+      { key: 'pricePoint', label: 'Average Price Point or Loan Size' },
+      { key: 'teamMembers', label: 'Team Size' },
+    ],
+  },
+  {
+    emoji: '🎨',
+    title: 'Brand & Audience',
+    fields: [
+      { key: 'targetAudience', label: 'Target Audience', type: 'list' },
+      { key: 'brandVoice', label: 'Brand Voice', type: 'list' },
+      { key: 'specialties', label: 'Specialties', type: 'list' },
+      { key: 'identity', label: 'Identity' },
+      { key: 'clientPainPoints', label: 'Client Pain Points' },
+      { key: 'topicsToAvoid', label: 'Topics to Avoid' },
+      { key: 'styleInspirations', label: 'Style Inspirations' },
+    ],
+  },
+  {
+    emoji: '🎯',
+    title: 'Goals & Vision',
+    fields: [
+      { key: 'vision', label: 'Vision' },
+      { key: 'objectives', label: 'Objectives' },
+      { key: 'roadblocks', label: 'Roadblocks' },
+      { key: 'dislikes', label: 'Dislikes' },
+      { key: 'successMetrics', label: 'Success' },
+      { key: 'win', label: 'Biggest Win' },
+      { key: 'excitement', label: 'Excitement' },
+    ],
+  },
+  {
+    emoji: '⚙️',
+    title: 'Systems Check',
+    fields: [
+      ...RATING_FIELDS.map(f => ({ key: f.key, label: f.label, type: 'rating' })),
+      { key: 'ratingNotes', label: 'Notes On Their Ratings' },
+    ],
+  },
+  {
+    emoji: '🔍',
+    title: 'About Us',
+    fields: [
+      { key: 'marketingSource', label: 'What Made Them Join Own It Social' },
+      { key: 'differentiator', label: 'Differentiator' },
+      { key: 'pastResources', label: 'Past Resources' },
+      { key: 'anythingElse', label: 'Anything Else' },
+    ],
+  },
+];
+
+const ONBOARDING_KNOWN_KEYS = new Set(ONBOARDING_SECTIONS.flatMap(s => s.fields.map(f => f.key)));
+
+// Turn a saved answer into something printable. Returns '' when the client
+// left the question blank so the caller can show "Not provided".
+function formatOnboardingAnswer(value) {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.filter(v => v !== null && v !== undefined && String(v).trim()).join(', ');
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .filter(([, v]) => v !== null && v !== undefined && String(v).trim())
+      .map(([k, v]) => `${k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).trim()}: ${v}`)
+      .join(' · ');
+  }
+  return String(value).trim();
+}
+
+// Answers saved by older versions of the form (and the legacy `otherInputs`
+// bag) so nothing a client typed goes missing from the admin view.
+function extraOnboardingAnswers(answers) {
+  if (!answers) return [];
+  const extras = [];
+  Object.entries(answers).forEach(([key, value]) => {
+    if (ONBOARDING_KNOWN_KEYS.has(key)) return;
+    if (key === 'otherInputs' && value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.entries(value).forEach(([k, v]) => {
+        const formatted = formatOnboardingAnswer(v);
+        if (formatted) extras.push({ key: `otherInputs.${k}`, label: k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).trim(), value: formatted });
+      });
+      return;
+    }
+    const formatted = formatOnboardingAnswer(value);
+    if (formatted) extras.push({ key, label: key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).trim(), value: formatted });
+  });
+  return extras;
+}
+
 // Hoisted to module level so React keeps a stable component type across
 // re-renders — defining these inside the form would remount inputs (and drop
 // focus) on every keystroke.
@@ -8056,69 +8168,70 @@ const ClientPortal = () => {
                   );
                 })()}
 
-                {/* Onboarding Answers */}
-                {selectedUser.onboardingAnswers && (
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <FileText className="w-5 h-5" />
-                      Onboarding Answers
-                    </h3>
-                    <div className="space-y-3 text-sm">
-                      <div>
-                        <span className="text-gray-600 font-medium">Industry:</span>
-                        <p className="text-gray-800 mt-1">
-                          {Array.isArray(selectedUser.onboardingAnswers.industry)
-                            ? selectedUser.onboardingAnswers.industry.join(', ')
-                            : selectedUser.onboardingAnswers.industry || 'Not provided'}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 font-medium">Target Audience:</span>
-                        <p className="text-gray-800 mt-1">
-                          {Array.isArray(selectedUser.onboardingAnswers.targetAudience)
-                            ? selectedUser.onboardingAnswers.targetAudience.join(', ')
-                            : selectedUser.onboardingAnswers.targetAudience || 'Not provided'}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 font-medium">Brand Voice:</span>
-                        <p className="text-gray-800 mt-1">
-                          {Array.isArray(selectedUser.onboardingAnswers.brandVoice)
-                            ? selectedUser.onboardingAnswers.brandVoice.join(', ')
-                            : selectedUser.onboardingAnswers.brandVoice || 'Not provided'}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 font-medium">Specialties:</span>
-                        <p className="text-gray-800 mt-1">
-                          {Array.isArray(selectedUser.onboardingAnswers.specialties)
-                            ? selectedUser.onboardingAnswers.specialties.join(', ')
-                            : selectedUser.onboardingAnswers.specialties || 'Not provided'}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 font-medium">Client Pain Points:</span>
-                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.clientPainPoints || 'Not provided'}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600 font-medium">Topics to Avoid:</span>
-                        <p className="text-gray-800 mt-1">{selectedUser.onboardingAnswers.topicsToAvoid || 'Not provided'}</p>
-                      </div>
-                      {selectedUser.onboardingAnswers.otherInputs && Object.keys(selectedUser.onboardingAnswers.otherInputs).some(k => selectedUser.onboardingAnswers.otherInputs[k]) && (
-                        <div>
-                          <span className="text-gray-600 font-medium">Additional Details:</span>
-                          {Object.entries(selectedUser.onboardingAnswers.otherInputs).map(([key, value]) =>
-                            value ? (
-                              <p key={key} className="text-gray-800 mt-1">
-                                <span className="capitalize">{key}:</span> {value}
-                              </p>
-                            ) : null
-                          )}
+                {/* Onboarding Answers — every question on the form, answered or not */}
+                {selectedUser.onboardingAnswers && (() => {
+                  const answers = selectedUser.onboardingAnswers;
+                  const extras = extraOnboardingAnswers(answers);
+
+                  const renderValue = (field) => {
+                    const raw = answers[field.key];
+                    const text = formatOnboardingAnswer(raw);
+                    if (!text) return <p className="text-gray-400 italic mt-1">Not provided</p>;
+                    if (field.type === 'rating') return <p className="text-gray-800 mt-1">{text} / 5</p>;
+                    if (field.type === 'image') {
+                      return (
+                        <div className="mt-1">
+                          <img src={text} alt="Headshot" className="w-16 h-16 object-cover rounded-full border border-gray-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          <a href={text} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs break-all">{text}</a>
                         </div>
-                      )}
+                      );
+                    }
+                    return <p className="text-gray-800 mt-1 whitespace-pre-wrap break-words">{text}</p>;
+                  };
+
+                  return (
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-800 mb-3 flex flex-wrap items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        Onboarding Answers
+                        {selectedUser.onboardingFormCompletedAt && (
+                          <span className="text-xs font-medium text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
+                            Submitted {new Date(selectedUser.onboardingFormCompletedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </h3>
+                      <div className="space-y-4 text-sm">
+                        {ONBOARDING_SECTIONS.map(section => (
+                          <div key={section.title} className="bg-white rounded-lg border border-blue-100 p-3">
+                            <h4 className="font-semibold text-gray-700 mb-2">{section.emoji} {section.title}</h4>
+                            <div className="grid md:grid-cols-2 gap-x-6 gap-y-3">
+                              {section.fields.map(field => (
+                                <div key={field.key}>
+                                  <span className="text-gray-600 font-medium">{field.label}:</span>
+                                  {renderValue(field)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+
+                        {extras.length > 0 && (
+                          <div className="bg-white rounded-lg border border-blue-100 p-3">
+                            <h4 className="font-semibold text-gray-700 mb-2">📌 Additional Details</h4>
+                            <div className="grid md:grid-cols-2 gap-x-6 gap-y-3">
+                              {extras.map(extra => (
+                                <div key={extra.key}>
+                                  <span className="text-gray-600 font-medium">{extra.label}:</span>
+                                  <p className="text-gray-800 mt-1 whitespace-pre-wrap break-words">{extra.value}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Social Media Logins */}
                 {selectedUser.socialLogins && Object.keys(selectedUser.socialLogins).some(k => selectedUser.socialLogins[k]) && (

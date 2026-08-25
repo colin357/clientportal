@@ -1822,8 +1822,6 @@ const ClientPortal = () => {
     const [expandedContentType, setExpandedContentType] = useState(null); // For content review sections
     const [editedAnswers, setEditedAnswers] = useState(currentUser.onboardingAnswers || {});
     const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
-    const [isGeneratingInitialContent, setIsGeneratingInitialContent] = useState(false);
-    const [generationTakingLong, setGenerationTakingLong] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [showEventModal, setShowEventModal] = useState(false);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -1863,8 +1861,6 @@ const ClientPortal = () => {
     const [headerVideoProgress, setHeaderVideoProgress] = useState(0);
 
     useEffect(() => {
-      generatePersonalizedContent();
-
       // Set up real-time listener for videos
       if (!db) {
         console.warn('⚠️ Firestore not available - skipping videos sync');
@@ -1882,112 +1878,6 @@ const ClientPortal = () => {
 
       return () => unsubVideos();
     }, [effectiveClientId]);
-
-    // Track when content generation is taking too long (show skip option after 90 seconds)
-    useEffect(() => {
-      if (!isGeneratingInitialContent) {
-        setGenerationTakingLong(false);
-        return;
-      }
-
-      const timeout = setTimeout(() => {
-        setGenerationTakingLong(true);
-      }, 90000); // 90 seconds
-
-      return () => clearTimeout(timeout);
-    }, [isGeneratingInitialContent]);
-
-    const generatePersonalizedContent = async () => {
-      // Only generate content if this is the first time (account creation)
-      const lastGenerated = currentUser.lastContentGeneration;
-
-      if (lastGenerated) {
-        console.log('⏭️ Skipping content generation - already generated on:', lastGenerated);
-        return;
-      }
-
-      // Check if user already has content (handles case where generation succeeded but user field wasn't updated)
-      if (clientContent.length > 0) {
-        console.log('⏭️ Skipping content generation - user already has', clientContent.length, 'content items');
-        return;
-      }
-
-      if (!currentUser.onboardingAnswers) {
-        console.log('⏭️ Skipping content generation - no onboarding answers');
-        return;
-      }
-
-
-      try {
-        setIsGeneratingInitialContent(true);
-        console.log('🤖 Generating initial personalized content (15 total: 5 social, 5 blog, 5 email)...');
-
-        // Get content history for this user
-        const userHistory = content
-          .filter(c => c.clientId === effectiveClientId)
-          .map(c => ({ title: c.title, description: c.description }));
-
-        const response = await fetch('/api/generate-personalized-content', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user: currentUser,
-            onboardingAnswers: currentUser.onboardingAnswers,
-            contentHistory: userHistory,
-            adminNotes: currentUser.adminNotes || ''
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to generate content');
-        }
-
-        const data = await response.json();
-
-        // IMPORTANT: Limit to EXACTLY 5 of each type (15 total pieces)
-        // Even if API returns more, we only take 5 of each
-        const socialPosts = data.contentPieces.filter(p => p.type === 'social').slice(0, 5);
-        const blogPosts = data.contentPieces.filter(p => p.type === 'blog').slice(0, 5);
-        const emailCampaigns = data.contentPieces.filter(p => p.type === 'email').slice(0, 5);
-        const limitedPieces = [...socialPosts, ...blogPosts, ...emailCampaigns];
-
-        console.log(`📊 Content breakdown: ${socialPosts.length} social, ${blogPosts.length} blog, ${emailCampaigns.length} email = ${limitedPieces.length} total`);
-
-        const nowTimestamp = new Date().toISOString();
-        const newContent = limitedPieces.map(piece => ({
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          clientId: effectiveClientId,
-          type: piece.type || 'content-idea',
-          title: piece.title || 'Generated Content',
-          description: piece.description || 'AI-generated personalized content',
-          content: piece.content || '',
-          status: 'pending',
-          createdAt: nowTimestamp,
-          firstNotificationSentAt: nowTimestamp, // Track when first notification was sent (content creation)
-          reminders: [] // Initialize empty reminders array
-        }));
-
-        // Save only the new content items - let real-time sync update state
-        const saved = await saveContentItems(newContent);
-        if (!saved) {
-          console.error('❌ Failed to save generated content');
-          throw new Error('Failed to save generated content');
-        }
-
-        // Mark that content has been generated - this prevents future auto-generation
-        const todayString = new Date().toISOString();
-        const updatedUser = { ...currentUser, lastContentGeneration: todayString };
-        setCurrentUser(updatedUser);
-        await saveUsers(users.map(u => u.id === currentUser.id ? updatedUser : u));
-        saveSession(updatedUser, 'dashboard');
-
-        console.log(`✅ Generated ${newContent.length} personalized content pieces (${socialPosts.length} social, ${blogPosts.length} blog, ${emailCampaigns.length} email)`);
-      } catch (error) {
-        console.error('❌ Error generating personalized content:', error);
-      } finally {
-        setIsGeneratingInitialContent(false);
-      }
-    };
 
     const loadUserVideos = async () => {
       if (!db) {
@@ -2056,74 +1946,6 @@ const ClientPortal = () => {
       const today = new Date();
       return date.toDateString() === today.toDateString();
     };
-
-    // Show loading screen while generating initial content
-    if (isGeneratingInitialContent) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-indigo-100 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-2xl p-12 max-w-2xl w-full text-center">
-            <div className="mb-8">
-              <Sparkles className="w-20 h-20 text-purple-600 mx-auto mb-4 animate-pulse" />
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">Creating Your Personalized Content</h2>
-              <p className="text-lg text-gray-600 mb-6">
-                Our AI is crafting custom content ideas tailored specifically for your business...
-              </p>
-            </div>
-
-            <div className="space-y-4 mb-8">
-              <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold">1</span>
-                </div>
-                <div className="text-left">
-                  <p className="font-semibold text-gray-800">Analyzing Your Business</p>
-                  <p className="text-sm text-gray-600">Understanding your industry and target audience</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 p-4 bg-purple-50 rounded-lg">
-                <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold">2</span>
-                </div>
-                <div className="text-left">
-                  <p className="font-semibold text-gray-800">Generating Content Ideas</p>
-                  <p className="text-sm text-gray-600">Creating social posts, blogs, and email campaigns</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 p-4 bg-green-50 rounded-lg">
-                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white font-bold">3</span>
-                </div>
-                <div className="text-left">
-                  <p className="font-semibold text-gray-800">Personalizing Your Portal</p>
-                  <p className="text-sm text-gray-600">Setting up your customized dashboard</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-4">
-              <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 h-2 rounded-full animate-pulse" style={{ width: '70%' }}></div>
-            </div>
-
-            {generationTakingLong ? (
-              <div className="space-y-3">
-                <p className="text-sm text-amber-600 font-medium">This is taking longer than expected...</p>
-                <p className="text-sm text-gray-500">You can skip for now and we'll continue in the background, or wait a bit longer.</p>
-                <button
-                  onClick={() => setIsGeneratingInitialContent(false)}
-                  className="mt-2 px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Skip for now
-                </button>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">This usually takes 1-2 minutes. Please don't close this window.</p>
-            )}
-          </div>
-        </div>
-      );
-    }
 
     const myTasks = clientTasks
       .filter(t => t.clientId === effectiveClientId)

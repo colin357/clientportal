@@ -21,6 +21,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // The generator is gated on onboarding: a brand new signup has no brand
+    // profile on file yet, so refuse rather than burn a call on generic output.
+    if (!user?.onboarded && !onboardingAnswers) {
+      return NextResponse.json(
+        { error: 'Complete your onboarding form to unlock the AI Content Generator.' },
+        { status: 403 }
+      );
+    }
+
     // Check for API key
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {

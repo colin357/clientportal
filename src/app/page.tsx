@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown, Home, Gift, LogOut, Menu, Circle, CheckCircle2, ArrowRight, ExternalLink, ListChecks, LayoutGrid, List, ChevronsLeft, ChevronsRight, ClipboardList, FolderKanban, Pencil, Flag, AlertCircle, BarChart3, Target, Lock } from 'lucide-react';
+import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, ChevronLeft, EyeOff, Share2, Users, Sparkles, UserPlus, Settings, Calendar, Video, Download, Wand2, CheckSquare, Square, Plus, Trash2, ListTodo, MessageSquare, Repeat, Bell, BellOff, PlusCircle, LayoutDashboard, ChevronDown, Home, Gift, LogOut, Menu, Circle, CheckCircle2, ArrowRight, ExternalLink, ListChecks, LayoutGrid, List, ChevronsLeft, ChevronsRight, ClipboardList, FolderKanban, Pencil, Flag, AlertCircle, BarChart3, Target } from 'lucide-react';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 import AiAssistant from '@/components/AiAssistant';
@@ -1813,14 +1813,6 @@ const ClientPortal = () => {
     // Team members should see content for their parent client
     const effectiveClientId = currentUser.parentClientId || currentUser.id;
     const clientContent = content.filter(c => c.clientId === effectiveClientId);
-    // The AI Content Generator stays locked until the client finishes their
-    // onboarding form. A brand new signup has no brand voice, audience or
-    // specialties on file yet, so anything it generated would be generic.
-    // Team members inherit the lock state from the account they belong to.
-    const accountOwner = currentUser.parentClientId
-      ? (users.find(u => u.id === effectiveClientId) || currentUser)
-      : currentUser;
-    const aiGeneratorUnlocked = !!(accountOwner.onboarded || accountOwner.onboardingAnswers);
     const [selectedContent, setSelectedContent] = useState(null);
     const [feedback, setFeedback] = useState('');
     const [teamEmail, setTeamEmail] = useState('');
@@ -2146,10 +2138,6 @@ const ClientPortal = () => {
       if (task.link?.type === 'onboarding-form') {
         setShowOnboardingForm(true);
       } else if (task.link?.type === 'page' && task.link.page) {
-        if (task.link.page === 'ai-generator' && !aiGeneratorUnlocked) {
-          setShowOnboardingForm(true);
-          return;
-        }
         setActivePage(task.link.page);
       }
     };
@@ -2162,7 +2150,7 @@ const ClientPortal = () => {
       { id: 'calendar', label: 'Calendar', icon: Calendar },
       { id: 'crm', label: 'CRM', icon: Users },
       { id: 'ai', label: 'AI Optimization', icon: Sparkles },
-      { id: 'ai-generator', label: 'AI Generator', icon: Wand2, locked: !aiGeneratorUnlocked },
+      { id: 'ai-generator', label: 'AI Generator', icon: Wand2 },
       { id: 'settings', label: 'Settings', icon: Settings },
     ];
 
@@ -2222,17 +2210,13 @@ const ClientPortal = () => {
                 <button
                   key={item.id}
                   id={`nav-${item.id}`}
-                  onClick={() => { if (item.locked) return; setActivePage(item.id); setMobileNavOpen(false); }}
-                  disabled={item.locked}
-                  title={item.locked ? `${item.label} unlocks after you complete your onboarding form` : item.label}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${sidebarCollapsed ? 'lg:justify-center' : ''} ${item.locked ? 'text-zinc-300 cursor-not-allowed' : active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'}`}
+                  onClick={() => { setActivePage(item.id); setMobileNavOpen(false); }}
+                  title={item.label}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${sidebarCollapsed ? 'lg:justify-center' : ''} ${active ? 'bg-zinc-900 text-white shadow-sm' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'}`}
                 >
                   <Icon className="w-[18px] h-[18px] flex-shrink-0" />
                   {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
-                  {!sidebarCollapsed && item.locked && (
-                    <Lock className="ml-auto w-[14px] h-[14px] flex-shrink-0" />
-                  )}
-                  {!sidebarCollapsed && !item.locked && item.badge > 0 && (
+                  {!sidebarCollapsed && item.badge > 0 && (
                     <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full ${active ? 'bg-white text-zinc-900' : 'bg-red-500 text-white'}`}>{item.badge}</span>
                   )}
                 </button>
@@ -3249,35 +3233,7 @@ const ClientPortal = () => {
             </div>
           )}
 
-          {activePage === 'ai-generator' && !aiGeneratorUnlocked && (
-            <div className="bg-white rounded-lg shadow p-8">
-              <div className="max-w-xl mx-auto text-center py-6">
-                <div className="w-14 h-14 bg-purple-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                  <Lock className="w-7 h-7 text-purple-600" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-800 mb-2">AI Generator is locked</h3>
-                <p className="text-gray-600 mb-6">
-                  {currentUser.firstName}, we need to know your brand before we can write like you.
-                  Complete your onboarding form and the AI Content Generator unlocks right away.
-                </p>
-                {currentUser.parentClientId ? (
-                  <p className="text-sm text-gray-500">
-                    Ask your account owner to finish the onboarding form to unlock this for your team.
-                  </p>
-                ) : (
-                  <button
-                    onClick={() => setShowOnboardingForm(true)}
-                    className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-semibold inline-flex items-center gap-2"
-                  >
-                    <ClipboardList className="w-5 h-5" />
-                    Complete Your Onboarding Form
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activePage === 'ai-generator' && aiGeneratorUnlocked && (
+          {activePage === 'ai-generator' && (
             <div className="bg-white rounded-lg shadow p-8">
               <div className="flex items-center gap-3 mb-6">
                 <Wand2 className="w-8 h-8 text-purple-600" />

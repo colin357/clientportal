@@ -131,6 +131,9 @@ const describeSelection = (files: File[]) =>
   `${describeMedia(files)} selected · ${formatFileSize(files.reduce((sum, f) => sum + (f.size || 0), 0))}`;
 
 // Merge newly picked files into the current selection, skipping duplicates.
+// Callers must snapshot the input's FileList (Array.from) before clearing the
+// input - a live FileList read inside a state updater runs after the clear and
+// comes back empty.
 const mergeFileSelection = (existing: File[], picked: any): File[] => {
   const merged = [...existing];
   Array.from<File>(picked || []).forEach(file => {
@@ -2277,7 +2280,8 @@ const ClientPortal = () => {
                         multiple
                         disabled={headerVideoUploading}
                         onChange={(e) => {
-                          setHeaderMediaFiles(prev => mergeFileSelection(prev, e.target.files));
+                          const picked = Array.from(e.target.files || []);
+                          setHeaderMediaFiles(prev => mergeFileSelection(prev, picked));
                           e.target.value = '';
                         }}
                         className="text-sm"
@@ -2911,9 +2915,10 @@ const ClientPortal = () => {
                                     accept={MEDIA_ACCEPT}
                                     multiple
                                     onChange={(e) => {
+                                      const picked = Array.from(e.target.files || []);
                                       setContentVideoFiles(prev => ({
                                         ...prev,
-                                        [item.id]: mergeFileSelection(prev[item.id] || [], e.target.files)
+                                        [item.id]: mergeFileSelection(prev[item.id] || [], picked)
                                       }));
                                       e.target.value = '';
                                     }}
@@ -3957,7 +3962,8 @@ const ClientPortal = () => {
                         accept={MEDIA_ACCEPT}
                         multiple
                         onChange={(e) => {
-                          setSelectedMediaFiles(prev => mergeFileSelection(prev, e.target.files));
+                          const picked = Array.from(e.target.files || []);
+                          setSelectedMediaFiles(prev => mergeFileSelection(prev, picked));
                           e.target.value = '';
                         }}
                         className="text-sm"
@@ -7410,7 +7416,8 @@ const ClientPortal = () => {
                       multiple
                       disabled={adminVideoUploading}
                       onChange={(e) => {
-                        setAdminMediaFiles(prev => mergeFileSelection(prev, e.target.files));
+                        const picked = Array.from(e.target.files || []);
+                        setAdminMediaFiles(prev => mergeFileSelection(prev, picked));
                         e.target.value = '';
                       }}
                       className="w-full text-sm"

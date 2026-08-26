@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Anyone can read (public headshots, logos, client media)
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+
+    // Profile headshots
+    match /headshots/{allPaths=**} {
+      allow write: if request.resource.size < 25 * 1024 * 1024; // 25MB
+    }
+
+    // Company logos
+    match /logos/{allPaths=**} {
+      allow write: if request.resource.size < 25 * 1024 * 1024; // 25MB
+    }
+
+    // Client media submissions - videos AND photo batches.
+    // No contentType check: files arrive with a missing or wrong MIME type
+    // (iPhone .MOV, Files/Drive picks) and photos share this folder.
+    match /videos/{allPaths=**} {
+      allow write: if request.resource.size < 4000 * 1024 * 1024; // 4000MB
+    }
+
+    // Media attached to scheduled posts
+    match /schedule-media/{allPaths=**} {
+      allow write: if request.resource.size < 4000 * 1024 * 1024; // 4000MB
+    }
+  }
+}

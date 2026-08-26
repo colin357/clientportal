@@ -1,31 +1,31 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow anyone to read files (for public images like headshots, logos)
+    // Anyone can read (public headshots, logos, client media)
     match /{allPaths=**} {
       allow read: if true;
     }
 
-    // Allow uploads to headshots folder
-    match /headshots/{fileName} {
-      allow write: if request.resource.size < 5 * 1024 * 1024 // 5MB limit
-                   && request.resource.contentType.matches('image/.*');
+    // Profile headshots
+    match /headshots/{allPaths=**} {
+      allow write: if request.resource.size < 25 * 1024 * 1024; // 25MB
     }
 
-    // Allow uploads to logos folder
-    match /logos/{fileName} {
-      allow write: if request.resource.size < 5 * 1024 * 1024 // 5MB limit
-                   && request.resource.contentType.matches('image/.*');
+    // Company logos
+    match /logos/{allPaths=**} {
+      allow write: if request.resource.size < 25 * 1024 * 1024; // 25MB
     }
 
-    // Allow uploads to videos folder (client media submissions: videos and photo batches)
-    match /videos/{fileName} {
-      allow write: if request.resource.size < 500 * 1024 * 1024; // 500MB limit
+    // Client media submissions - videos AND photo batches.
+    // No contentType check: files arrive with a missing or wrong MIME type
+    // (iPhone .MOV, Files/Drive picks) and photos share this folder.
+    match /videos/{allPaths=**} {
+      allow write: if request.resource.size < 4000 * 1024 * 1024; // 4000MB
     }
 
-    // Allow uploads to schedule-media folder (images and videos for scheduled posts)
-    match /schedule-media/{fileName} {
-      allow write: if request.resource.size < 500 * 1024 * 1024; // 500MB limit
+    // Media attached to scheduled posts
+    match /schedule-media/{allPaths=**} {
+      allow write: if request.resource.size < 4000 * 1024 * 1024; // 4000MB
     }
   }
 }

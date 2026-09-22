@@ -2498,8 +2498,9 @@ const ClientPortal = () => {
             });
 
             // Calculate metrics (social + blog posts only)
-            const contentIdeasTotal = thisMonthContent.filter(c => c.type === 'social' || c.type === 'blog').length;
-            const contentIdeasApproved = thisMonthContent.filter(c => (c.type === 'social' || c.type === 'blog') && c.status === 'approved').length;
+            const isContentIdea = (c) => c.type === 'content-idea' || c.type === 'social' || c.type === 'blog';
+            const contentIdeasTotal = thisMonthContent.filter(isContentIdea).length;
+            const contentIdeasApproved = thisMonthContent.filter(c => isContentIdea(c) && c.status === 'approved').length;
 
             const videosTotal = userVideos.filter(v => {
               const uploadedDate = new Date(v.uploadedAt);
@@ -2692,7 +2693,15 @@ const ClientPortal = () => {
                   .filter(c => c.status === 'pending')
                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+                const knownTypes = ['content-idea', 'social', 'email', 'blog', 'landing-page'];
                 const contentTypes = [
+                  {
+                    type: 'content-idea',
+                    label: 'Content Ideas',
+                    icon: Sparkles,
+                    color: 'amber',
+                    items: pendingContent.filter(c => c.type === 'content-idea')
+                  },
                   {
                     type: 'social',
                     label: 'Social Media Posts',
@@ -2720,6 +2729,13 @@ const ClientPortal = () => {
                     icon: Layout,
                     color: 'indigo',
                     items: pendingContent.filter(c => c.type === 'landing-page')
+                  },
+                  {
+                    type: 'other',
+                    label: 'Other Content',
+                    icon: FileText,
+                    color: 'gray',
+                    items: pendingContent.filter(c => !knownTypes.includes(c.type))
                   }
                 ];
 
@@ -2765,10 +2781,22 @@ const ClientPortal = () => {
                           badge: 'bg-indigo-100 text-indigo-800',
                           border: 'border-indigo-200',
                           button: 'bg-indigo-600 hover:bg-indigo-700'
+                        },
+                        amber: {
+                          icon: 'text-amber-600',
+                          badge: 'bg-amber-100 text-amber-800',
+                          border: 'border-amber-200',
+                          button: 'bg-amber-600 hover:bg-amber-700'
+                        },
+                        gray: {
+                          icon: 'text-gray-600',
+                          badge: 'bg-gray-100 text-gray-800',
+                          border: 'border-gray-200',
+                          button: 'bg-gray-700 hover:bg-gray-800'
                         }
                       };
 
-                      const classes = colorClasses[color];
+                      const classes = colorClasses[color as keyof typeof colorClasses];
 
                       return (
                         <div key={type} className="bg-white rounded-lg shadow overflow-hidden">

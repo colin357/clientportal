@@ -223,3 +223,7 @@ export { Toggle } from "./toggle";
 
 // Toggle Group
 export { ToggleGroup, ToggleGroupItem } from "./toggle-group";
+
+// Rich Text
+export { RichTextEditor } from "./rich-text-editor";
+export { RichTextDisplay } from "./rich-text-display";

@@ -11,7 +11,8 @@
 //          either a title or a contentId pointing at an existing content item
 //          (title/description/type are then copied from that item).
 // PATCH  — update an event by id: { "id": "...", ...fieldsToChange }
-//          (e.g. move it: { "id": "...", "date": "2026-08-01" })
+//          (e.g. move it: { "id": "...", "date": "2026-08-01" }, or attach a
+//          preview: { "id": "...", "mediaUrl": "https://drive.google.com/..." })
 // DELETE — remove an event: ?id=... or body { "id": "..." }
 //
 // Event fields (matching the portal UI's calendarEvents documents):
@@ -20,6 +21,10 @@
 //   description (optional)
 //   type        (optional, e.g. "social", "blog", "email"; default "social")
 //   contentId   (optional link to a document in the content collection)
+//   mediaUrl    (optional preview link shown to the client: a Google Drive
+//                link, or a direct image/video URL. If omitted and the linked
+//                content item has a fileLink, that link is used.)
+//   mediaType   (optional "image" | "video"; guessed from mediaUrl if omitted)
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -42,6 +47,12 @@ import {
   resolveClientFromQuery,
   uniqueId,
 } from '@/lib/portalApi';
+import { guessMediaType } from '@/lib/driveLinks';
+
+function normalizeMediaType(value: unknown): 'image' | 'video' | '' {
+  const type = asString(value).toLowerCase();
+  return type === 'image' || type === 'video' ? type : '';
+}
 
 export async function GET(request: NextRequest) {
   const unauthorized = checkApiKey(request);
@@ -182,7 +193,12 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      const event = {
+      const mediaUrl = asString(raw.mediaUrl) || asString(contentItem?.fileLink);
+      const mediaType = mediaUrl
+        ? normalizeMediaType(raw.mediaType) || guessMediaType(mediaUrl)
+        : '';
+
+      const event: Record<string, any> = {
         id: asString(raw.id) || uniqueId(index),
         clientId: client.id,
         title,
@@ -192,6 +208,10 @@ export async function POST(request: NextRequest) {
         contentId: contentId || null,
         createdAt,
       };
+      if (mediaUrl) {
+        event.mediaUrl = mediaUrl;
+        event.mediaType = mediaType;
+      }
 
       try {
         await setDoc(doc(db, 'calendarEvents', event.id), event);
@@ -203,6 +223,7 @@ export async function POST(request: NextRequest) {
           clientName: client.companyName,
           title,
           date,
+          mediaUrl: mediaUrl || undefined,
         });
       } catch (e: any) {
         console.error(`portal/calendar: failed to save event #${index}`, e);
@@ -270,6 +291,20 @@ export async function PATCH(request: NextRequest) {
   }
   if (body.description !== undefined) updates.description = asString(body.description);
   if (body.type !== undefined) updates.type = asString(body.type);
+  if (body.mediaUrl !== undefined) {
+    // null or "" clears the media, like the admin UI's remove button.
+    const mediaUrl = asString(body.mediaUrl);
+    updates.mediaUrl = mediaUrl || null;
+    updates.mediaType = mediaUrl
+      ? normalizeMediaType(body.mediaType) || guessMediaType(mediaUrl)
+      : null;
+  } else if (body.mediaType !== undefined) {
+    const mediaType = normalizeMediaType(body.mediaType);
+    if (!mediaType) {
+      return NextResponse.json({ error: '"mediaType" must be "image" or "video".' }, { status: 400 });
+    }
+    updates.mediaType = mediaType;
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No updatable fields provided.' }, { status: 400 });

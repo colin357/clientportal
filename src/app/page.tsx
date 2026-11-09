@@ -4,6 +4,8 @@ import { Upload, FileText, Mail, Layout, Check, X, Clock, Eye, ChevronRight, Che
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { RichTextDisplay } from '@/components/ui/rich-text-display';
 import AiAssistant from '@/components/AiAssistant';
+import EventMediaPreview from '@/components/EventMediaPreview';
+import { guessMediaType } from '@/lib/driveLinks';
 import { formatPhoneE164, formatPhoneDisplay, getClientPhoneNumbers, getClientSmsRecipients } from '@/lib/smsRecipients';
 
 // Firebase imports - Make sure to install: npm install firebase
@@ -3601,25 +3603,22 @@ const ClientPortal = () => {
                     </p>
                   </div>
 
-                  {/* Media preview */}
-                  {selectedEvent.mediaUrl && selectedEvent.mediaType === 'image' && (
-                    <div>
-                      <p className="text-sm text-gray-500 font-medium mb-1">Media</p>
-                      <img
-                        src={selectedEvent.mediaUrl}
-                        alt="Post media"
-                        className="w-full max-h-64 object-cover rounded-lg border cursor-zoom-in hover:opacity-90 transition-opacity"
-                        onClick={(e) => { e.stopPropagation(); setLightboxUrl(selectedEvent.mediaUrl); }}
-                      />
-                      <p className="text-xs text-gray-400 mt-1 text-center">Click image to view full size</p>
-                    </div>
-                  )}
-                  {selectedEvent.mediaUrl && selectedEvent.mediaType === 'video' && (
-                    <div>
-                      <p className="text-sm text-gray-500 font-medium mb-1">Media</p>
-                      <video src={selectedEvent.mediaUrl} className="w-full max-h-64 rounded-lg border" controls />
-                    </div>
-                  )}
+                  {/* Media preview: the event's own media, or the linked content item's file link */}
+                  {(() => {
+                    const linkedItem = selectedEvent.contentId ? clientContent.find(c => c.id === selectedEvent.contentId) : null;
+                    const mediaUrl = selectedEvent.mediaUrl || linkedItem?.fileLink;
+                    if (!mediaUrl) return null;
+                    return (
+                      <div>
+                        <p className="text-sm text-gray-500 font-medium mb-1">Preview</p>
+                        <EventMediaPreview
+                          url={mediaUrl}
+                          type={selectedEvent.mediaUrl ? selectedEvent.mediaType : guessMediaType(mediaUrl)}
+                          onImageClick={(url) => setLightboxUrl(url)}
+                        />
+                      </div>
+                    );
+                  })()}
 
                   <div>
                     <p className="text-sm text-gray-500 font-medium mb-1">Description</p>
@@ -7733,21 +7732,13 @@ const ClientPortal = () => {
                           const url = e.target.value;
                           setScheduleMediaUrl(url);
                           if (!url) { setScheduleMediaType(''); return; }
-                          const lower = url.toLowerCase();
-                          if (lower.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/)) setScheduleMediaType('video');
-                          else setScheduleMediaType('image');
+                          setScheduleMediaType(guessMediaType(url));
                         }}
                         className="w-full px-3 py-2 border rounded text-sm"
                       />
-                      {scheduleMediaUrl && scheduleMediaType === 'image' && (
+                      {scheduleMediaUrl && (
                         <div className="relative">
-                          <img src={scheduleMediaUrl} alt="Preview" className="w-full max-h-40 object-cover rounded border" />
-                          <button onClick={() => { setScheduleMediaUrl(''); setScheduleMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>
-                        </div>
-                      )}
-                      {scheduleMediaUrl && scheduleMediaType === 'video' && (
-                        <div className="relative">
-                          <video src={scheduleMediaUrl} className="w-full max-h-40 rounded border" controls />
+                          <EventMediaPreview url={scheduleMediaUrl} type={scheduleMediaType} maxHeightClass="max-h-40" />
                           <button onClick={() => { setScheduleMediaUrl(''); setScheduleMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>
                         </div>
                       )}
@@ -7991,22 +7982,14 @@ const ClientPortal = () => {
                     const url = e.target.value;
                     setEditMediaUrl(url);
                     if (!url) { setEditMediaType(''); return; }
-                    const lower = url.toLowerCase();
-                    if (lower.match(/\.(mp4|mov|webm|avi|mkv)(\?|$)/)) setEditMediaType('video');
-                    else setEditMediaType('image');
+                    setEditMediaType(guessMediaType(url));
                   }}
                   className="w-full px-3 py-2 border rounded text-sm"
                 />
 
-                {editMediaUrl && editMediaType === 'image' && (
+                {editMediaUrl && (
                   <div className="relative">
-                    <img src={editMediaUrl} alt="Preview" className="w-full max-h-48 object-cover rounded-lg border" />
-                    <button onClick={() => { setEditMediaUrl(''); setEditMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">×</button>
-                  </div>
-                )}
-                {editMediaUrl && editMediaType === 'video' && (
-                  <div className="relative">
-                    <video src={editMediaUrl} className="w-full max-h-48 rounded-lg border" controls />
+                    <EventMediaPreview url={editMediaUrl} type={editMediaType} maxHeightClass="max-h-48" />
                     <button onClick={() => { setEditMediaUrl(''); setEditMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">×</button>
                   </div>
                 )}

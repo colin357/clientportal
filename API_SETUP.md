@@ -111,8 +111,9 @@ curl -s -X POST https://your-portal.com/api/portal/calendar \
 
 - **Standalone event:** provide `title` (plus optional `description`, `type` — default `"social"`).
 - **Schedule existing content:** provide `contentId` and a `date`; title, description, type, and client are copied from the content item (matching the UI's drag-to-calendar behavior).
+- **Preview media:** add `mediaUrl` (a Google Drive share link, or a direct image/video URL) and optionally `mediaType` (`image` | `video`, guessed from the URL if omitted). When `mediaUrl` is omitted and the linked content item has a `fileLink`, that link is used. Clients see Drive links in Drive's embedded player when they open the post on their calendar, so the Drive file must be shared "anyone with the link can view".
 
-**Move / edit — `PATCH`**: `{ "id": "EVENT_ID", "date": "2026-07-30" }` (also `title`, `description`, `type`).
+**Move / edit — `PATCH`**: `{ "id": "EVENT_ID", "date": "2026-07-30" }` (also `title`, `description`, `type`, `mediaUrl`, `mediaType`; send `"mediaUrl": null` to remove the media).
 
 **Unschedule — `DELETE`** with `?id=EVENT_ID` or a `{"id": "..."}` body.
 

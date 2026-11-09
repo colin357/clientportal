@@ -42,3 +42,28 @@ export function guessMediaType(url?: string | null): 'image' | 'video' | '' {
   if (isDriveLink(url)) return 'video';
   return 'image';
 }
+
+/**
+ * Direct image URL for a Drive file, usable as an <img> src (the file must be
+ * shared "anyone with the link"). Used for carousel slides so they can be
+ * swiped like a post instead of each loading Drive's full viewer.
+ */
+export function getDriveImageUrl(url?: string | null, width = 1080): string | null {
+  const id = getDriveFileId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${width}` : null;
+}
+
+/** Cleans a list of media links: strings only, trimmed, empties and duplicates dropped. */
+export function cleanMediaUrls(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const url = item.trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}

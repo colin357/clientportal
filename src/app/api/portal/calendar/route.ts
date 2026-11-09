@@ -25,6 +25,9 @@
 //                link, or a direct image/video URL. If omitted and the linked
 //                content item has a fileLink, that link is used.)
 //   mediaType   (optional "image" | "video"; guessed from mediaUrl if omitted)
+//   mediaUrls   (optional list of links, one per carousel slide, in order. The
+//                client sees them as a swipeable carousel. mediaUrl defaults
+//                to the first slide.)
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -47,7 +50,7 @@ import {
   resolveClientFromQuery,
   uniqueId,
 } from '@/lib/portalApi';
-import { guessMediaType } from '@/lib/driveLinks';
+import { cleanMediaUrls, guessMediaType } from '@/lib/driveLinks';
 
 function normalizeMediaType(value: unknown): 'image' | 'video' | '' {
   const type = asString(value).toLowerCase();
@@ -193,9 +196,10 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      const mediaUrl = asString(raw.mediaUrl) || asString(contentItem?.fileLink);
+      const mediaUrls = cleanMediaUrls(raw.mediaUrls);
+      const mediaUrl = asString(raw.mediaUrl) || mediaUrls[0] || asString(contentItem?.fileLink);
       const mediaType = mediaUrl
-        ? normalizeMediaType(raw.mediaType) || guessMediaType(mediaUrl)
+        ? normalizeMediaType(raw.mediaType) || (mediaUrls.length > 1 ? 'image' : guessMediaType(mediaUrl))
         : '';
 
       const event: Record<string, any> = {
@@ -212,6 +216,7 @@ export async function POST(request: NextRequest) {
         event.mediaUrl = mediaUrl;
         event.mediaType = mediaType;
       }
+      if (mediaUrls.length > 1) event.mediaUrls = mediaUrls;
 
       try {
         await setDoc(doc(db, 'calendarEvents', event.id), event);
@@ -224,6 +229,7 @@ export async function POST(request: NextRequest) {
           title,
           date,
           mediaUrl: mediaUrl || undefined,
+          slides: mediaUrls.length > 1 ? mediaUrls.length : undefined,
         });
       } catch (e: any) {
         console.error(`portal/calendar: failed to save event #${index}`, e);
@@ -291,6 +297,21 @@ export async function PATCH(request: NextRequest) {
   }
   if (body.description !== undefined) updates.description = asString(body.description);
   if (body.type !== undefined) updates.type = asString(body.type);
+  if (body.mediaUrls !== undefined) {
+    // A carousel's slides in order; null or [] clears them.
+    if (body.mediaUrls !== null && !Array.isArray(body.mediaUrls)) {
+      return NextResponse.json({ error: '"mediaUrls" must be a list of links.' }, { status: 400 });
+    }
+    const mediaUrls = cleanMediaUrls(body.mediaUrls);
+    updates.mediaUrls = mediaUrls.length > 1 ? mediaUrls : null;
+    if (body.mediaUrl === undefined) {
+      const mediaUrl = mediaUrls[0] || '';
+      updates.mediaUrl = mediaUrl || null;
+      updates.mediaType = mediaUrl
+        ? normalizeMediaType(body.mediaType) || (mediaUrls.length > 1 ? 'image' : guessMediaType(mediaUrl))
+        : null;
+    }
+  }
   if (body.mediaUrl !== undefined) {
     // null or "" clears the media, like the admin UI's remove button.
     const mediaUrl = asString(body.mediaUrl);
@@ -298,7 +319,9 @@ export async function PATCH(request: NextRequest) {
     updates.mediaType = mediaUrl
       ? normalizeMediaType(body.mediaType) || guessMediaType(mediaUrl)
       : null;
-  } else if (body.mediaType !== undefined) {
+    // A new single link (or none) replaces an earlier carousel, unless slides were sent too.
+    if (body.mediaUrls === undefined) updates.mediaUrls = null;
+  } else if (body.mediaUrls === undefined && body.mediaType !== undefined) {
     const mediaType = normalizeMediaType(body.mediaType);
     if (!mediaType) {
       return NextResponse.json({ error: '"mediaType" must be "image" or "video".' }, { status: 400 });

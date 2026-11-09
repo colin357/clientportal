@@ -3613,6 +3613,7 @@ const ClientPortal = () => {
                         <p className="text-sm text-gray-500 font-medium mb-1">Preview</p>
                         <EventMediaPreview
                           url={mediaUrl}
+                          urls={selectedEvent.mediaUrls}
                           type={selectedEvent.mediaUrl ? selectedEvent.mediaType : guessMediaType(mediaUrl)}
                           onImageClick={(url) => setLightboxUrl(url)}
                         />
@@ -7989,7 +7990,12 @@ const ClientPortal = () => {
 
                 {editMediaUrl && (
                   <div className="relative">
-                    <EventMediaPreview url={editMediaUrl} type={editMediaType} maxHeightClass="max-h-48" />
+                    <EventMediaPreview
+                      url={editMediaUrl}
+                      type={editMediaType}
+                      urls={editMediaUrl === editingEvent.mediaUrl ? editingEvent.mediaUrls : null}
+                      maxHeightClass="max-h-48"
+                    />
                     <button onClick={() => { setEditMediaUrl(''); setEditMediaType(''); }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">×</button>
                   </div>
                 )}
@@ -7998,11 +8004,14 @@ const ClientPortal = () => {
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={async () => {
-                    const updated = { ...editingEvent, mediaUrl: editMediaUrl || null, mediaType: editMediaType || null };
+                    // Changing or removing the link replaces a carousel's slide list.
+                    const mediaUrls = editMediaUrl && editMediaUrl === editingEvent.mediaUrl ? (editingEvent.mediaUrls || null) : null;
+                    const updated = { ...editingEvent, mediaUrl: editMediaUrl || null, mediaType: editMediaType || null, mediaUrls };
                     if (db) {
                       await updateDoc(doc(db, 'calendarEvents', editingEvent.id), {
                         mediaUrl: editMediaUrl || null,
-                        mediaType: editMediaType || null
+                        mediaType: editMediaType || null,
+                        mediaUrls
                       });
                     } else {
                       await saveCalendarEvents(calendarEvents.map(ev => ev.id === editingEvent.id ? updated : ev));

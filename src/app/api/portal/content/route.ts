@@ -7,13 +7,17 @@
 //           ?type=social|blog|email|content-idea  — by type
 // PATCH — update a content item by id: { "id": "...", ...fieldsToChange }
 //         (title, content, description, status, type, fileLink)
+// DELETE — remove a content item: ?id=... or body { "id": "..." }
+//          Calendar events linked to it (contentId) are kept and listed in
+//          the response as linkedEvents; delete them with
+//          DELETE /api/portal/calendar if they should go too.
 //
 // To CREATE content ideas, use the existing POST /api/bulk-add-content-ideas
 // endpoint — it supports flat and grouped-by-client bodies.
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import {
   asString,
   checkApiKey,
@@ -102,4 +106,40 @@ export async function PATCH(request: NextRequest) {
   await setDoc(ref, updated);
 
   return NextResponse.json({ success: true, content: updated });
+}
+
+export async function DELETE(request: NextRequest) {
+  const unauthorized = checkApiKey(request);
+  if (unauthorized) return unauthorized;
+
+  const dbResult = requireDb();
+  if ('error' in dbResult) return dbResult.error;
+  const { db } = dbResult;
+
+  let id = asString(request.nextUrl.searchParams.get('id'));
+  if (!id) {
+    try {
+      const body = await request.json();
+      id = asString(body?.id);
+    } catch {
+      // no body — fall through to the missing-id error
+    }
+  }
+  if (!id) {
+    return NextResponse.json({ error: 'Missing content "id".' }, { status: 400 });
+  }
+
+  const ref = doc(db, 'content', id);
+  const existing = await getDoc(ref);
+  if (!existing.exists()) {
+    return NextResponse.json({ error: `Content item "${id}" not found.` }, { status: 404 });
+  }
+
+  const events = await getDocs(collection(db, 'calendarEvents'));
+  const linkedEvents = events.docs
+    .filter((d) => d.data().contentId === id)
+    .map((d) => ({ id: d.id, date: d.data().date || null }));
+
+  await deleteDoc(ref);
+  return NextResponse.json({ success: true, deleted: id, linkedEvents });
 }
